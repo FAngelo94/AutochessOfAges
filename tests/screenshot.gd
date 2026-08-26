@@ -14,6 +14,10 @@ var _menu: Control = null
 var _output_dir := "user://"
 var _waiting_portraits := false
 var _wait_ticks := 0
+## Aprire la guida e vedere il suggerimento del negozio marca entrambi come
+## visti sul profilo reale: senza ripristinarlo, chi lancia lo strumento non
+## vedrebbe più quei suggerimenti nella prossima partita vera.
+var _saved_tips := PackedStringArray()
 
 
 func _initialize() -> void:
@@ -41,25 +45,31 @@ func _process(_delta: float) -> bool:
 		1:
 			_menu = (load("res://ui/menu.tscn") as PackedScene).instantiate()
 			root.add_child(_menu)
+			_saved_tips = root.get_node("/root/Profile").seen_tips.duplicate()
 		6:
 			_save("menu.png")
+			# La guida non mostra modelli 3D: non serve attendere i ritratti.
+			_menu._on_guide_pressed()
+		7:
+			_save("guida.png")
+			_menu._guide_panel.visible = false
 			_menu._on_collection_pressed()
 			_waiting_portraits = true
-		10:
+		11:
 			_save("collezione.png")
 			root.remove_child(_menu)
 			_menu.queue_free()
 			_main = (load("res://ui/main.tscn") as PackedScene).instantiate()
 			root.add_child(_main)
-		11:
-			_waiting_portraits = true
 		12:
+			_waiting_portraits = true
+		13:
 			# Una squadra piena rende la schermata rappresentativa: comprarla a
 			# caso darebbe uno scatto di un tabellone quasi vuoto.
 			var player: Player = _main.player()
 			player.level = 6
 			player.gold = 42
-			var line_up := ["legionarius", "sagittarius", "centurio", "vestal", "equites", "ballista"]
+			var line_up := ["legionarius", "sagittarius", "centurio", "velites", "equites", "ballistarius"]
 			var column := 0
 			for unit_id in line_up:
 				var unit := player.grant_unit(unit_id, 2 if column % 2 == 0 else 1)
@@ -68,16 +78,23 @@ func _process(_delta: float) -> bool:
 				var columns := int(GameData.balance()["match"]["board_columns"])
 				player.move_to_board(unit, Vector2i(column % columns, 0 if column % 2 == 0 else 3))
 				column += 1
-			player.grant_unit("caesar")
+			player.grant_unit("cataphractus")
 			player.grant_unit("arminius", 2)
 			_main._refresh()
-		22:
-			_save("preparazione.png")
 		23:
+			# Il suggerimento del negozio è ancora in coda da _start_new_match():
+			# questa schermata verifica che la bolla non copra COMBATTI né la
+			# fila del negozio.
+			_save("preparazione.png")
+			_main._tips.dismiss()
+		24:
 			_main._on_fight_pressed()
-		55:
-			_save("battaglia.png")
 		56:
+			_save("battaglia.png")
+		57:
+			var profile := root.get_node("/root/Profile")
+			profile.seen_tips = _saved_tips
+			profile.save_profile()
 			print("schermate salvate in %s" % _output_dir)
 			quit(0)
 

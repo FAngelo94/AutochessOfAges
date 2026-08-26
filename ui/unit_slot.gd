@@ -32,6 +32,13 @@ var _fallback: Label
 var _badge: Label
 var _badge_mode: int = Badge.NONE
 
+## Il tooltip nativo di Godot si piazza dov'è comodo a lui, spesso sotto il
+## dito — illeggibile su touch. Il testo si tiene qui e si disegna da soli con
+## _show_hover_card, sempre sopra il puntatore; tooltip_text resta vuoto così
+## il popup di sistema non compare mai.
+var _hover_text: String = ""
+var _hover_card: PanelContainer = null
+
 ## L'autoload si prende dall'albero e non per nome globale: gli script
 ## compilati da riga di comando non lo vedrebbero. In _init il nodo non è
 ## ancora nell'albero, quindi si risolve in _ready.
@@ -71,6 +78,9 @@ func _init() -> void:
 	_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_badge)
 
+	mouse_entered.connect(_on_mouse_entered)
+	mouse_exited.connect(_on_mouse_exited)
+
 
 func _ready() -> void:
 	_portraits = get_node("/root/Portraits")
@@ -87,6 +97,8 @@ func _ready() -> void:
 func show_empty(fill: Color, border: Color) -> void:
 	unit_id = ""
 	tooltip_text = ""
+	_hover_text = ""
+	_hide_hover_card()
 	_portrait.visible = false
 	_portrait.texture = null
 	_fallback.text = ""
@@ -100,7 +112,8 @@ func show_unit(def: UnitDef, star: int, badge_mode: int, fill: Color, border: Co
 		border_width: int = 2, tooltip: String = "") -> void:
 	unit_id = def.id
 	_badge_mode = badge_mode
-	tooltip_text = tooltip if tooltip != "" else def.display_name
+	tooltip_text = ""
+	_hover_text = tooltip if tooltip != "" else def.display_name
 
 	_apply_style(fill, border, border_width)
 	_apply_portrait(def)
@@ -197,3 +210,77 @@ static func _short_name(display_name: String) -> String:
 		return display_name
 	var first := display_name.split(" ")[0]
 	return first if first.length() <= 12 else first.left(11) + "."
+
+
+func _on_mouse_entered() -> void:
+	_show_hover_card()
+
+
+func _on_mouse_exited() -> void:
+	_hide_hover_card()
+
+
+## La carta va fuori dal clipping di questa casella (clip_contents = true) e
+## sopra ogni altra cosa, quindi non è figlia sua: si appende alla radice
+## dell'albero e si posiziona con top_level, che la rende indipendente dal
+## layout e dal clip del genitore che la ospita.
+func _show_hover_card() -> void:
+	_hide_hover_card()
+	if _hover_text == "":
+		return
+	var tree := get_tree()
+	if tree == null or tree.root == null:
+		return
+
+	var card := PanelContainer.new()
+	card.top_level = true
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_theme_stylebox_override("panel", Style.box(Style.PLATE_DARK, Style.PLATE, 1, 8))
+
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 10 if side == "left" or side == "right" else 8)
+	card.add_child(margin)
+
+	var label := Label.new()
+	label.text = _hover_text
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", Color(0.92, 0.92, 0.95))
+	margin.add_child(label)
+
+	tree.root.add_child(card)
+	_hover_card = card
+	card.size = card.get_combined_minimum_size()
+	_position_hover_card()
+
+
+func _hide_hover_card() -> void:
+	if _hover_card != null and is_instance_valid(_hover_card):
+		_hover_card.queue_free()
+	_hover_card = null
+
+
+## Sempre sopra il puntatore, mai fuori schermo: se non c'entra sopra (righe in
+## cima allo schermo, come il negozio o la prima fila del campo) scende sotto.
+func _position_hover_card() -> void:
+	if _hover_card == null:
+		return
+	var viewport := get_viewport()
+	if viewport == null:
+		return
+	var screen := viewport.get_visible_rect().size
+	var pointer := get_global_mouse_position()
+	var card_size := _hover_card.size
+
+	const GAP := 10.0
+	var y := pointer.y - GAP - card_size.y
+	if y < 0.0:
+		y = pointer.y + GAP
+
+	var x := pointer.x - card_size.x * 0.5
+	x = clampf(x, 0.0, maxf(0.0, screen.x - card_size.x))
+
+	_hover_card.global_position = Vector2(x, y)

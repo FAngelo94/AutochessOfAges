@@ -20,6 +20,9 @@ func _init(target: Player, rng: SimRNG) -> void:
 	player = target
 	_rng = rng
 	favourite_origin = String(_rng.pick(GameData.origin_ids()))
+	# L'eroe del bot pesca dallo stesso stream forkato: non riordinare queste
+	# righe, altrimenti ogni seed esistente assegna eroi diversi ai bot.
+	player.hero_id = String(_rng.pick(GameData.hero_ids()))
 	# Chi tiene 50 gioca l'economia, chi tiene 10 spinge sul livello.
 	economy_floor = [10, 30, 50][_rng.randi_range_ex(0, 3)]
 	aggression = _rng.randf_ex()

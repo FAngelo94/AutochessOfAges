@@ -1,0 +1,23 @@
+{
+  "_comment": "Eroi: bonus economici opzionali scelti prima della partita. Non sono unità, non entrano nel pool condiviso; 'origin' sceglie solo la palette del modello 3D.",
+  "heroes": [
+    {
+      "id": "cesare",
+      "name": "Cesare",
+      "origin": "roman",
+      "ability_type": "gold_on_loss",
+      "ability_params": { "min": 3, "max": 6 },
+      "ability_text": "Dopo aver perso un round, guadagna 3-6 oro casuali.",
+      "lore": "Console e generale, non conosce sconfitta che non sappia trasformare in vantaggio."
+    },
+    {
+      "id": "vercingetorige",
+      "name": "Vercingetorige",
+      "origin": "gaul",
+      "ability_type": "gold_on_merge",
+      "ability_params": { "gold_per_merge": 1 },
+      "ability_text": "Ogni volta che due unità si fondono in un potenziamento, guadagna 1 oro.",
+      "lore": "Il capo che unì le tribù galliche sa che l'unione è la vera ricchezza."
+    }
+  ]
+}

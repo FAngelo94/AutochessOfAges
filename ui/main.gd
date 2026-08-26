@@ -44,19 +44,30 @@ var _bench_buttons: Array[UnitSlot] = []
 
 var _store: Node
 var _profile: Node
-var _store_panel: StorePanel
 var _combat_overlay: Control
 var _combat_controls: Control
 var _info_sheet: Panel
-var _synergy_detail: Panel
+var _synergy_detail: Control
+var _synergy_detail_backdrop: ColorRect
 var _synergy_detail_title: Label
 var _synergy_detail_description: Label
 var _synergy_detail_tiers: VBoxContainer
 var _combat_view: CombatView
+var _tips: TipBubble
 var _combat_title: Label
+var _combat_top_bar: HBoxContainer
+var _combat_top_name: Label
+var _combat_top_hp: Label
+var _combat_top_synergy_row: HBoxContainer
+var _combat_bottom_bar: HBoxContainer
+var _combat_bottom_hp: Label
+var _combat_bottom_synergy_row: HBoxContainer
 var _combat_outcome: Label
 var _continue_button: Button
 var _exit_confirm: ConfirmationDialog
+var _spectate_overlay: Panel
+var _spectate_view: CombatView
+var _spectate_title: Label
 ## Risultati del round in attesa: vengono raccontati solo a fine replay, per
 ## non svelare l'esito mentre la battaglia è ancora in corso.
 var _pending_results: Array = []
@@ -87,6 +98,14 @@ func _requested_seed() -> int:
 		if argument.begins_with("--seed="):
 			return int(argument.trim_prefix("--seed="))
 	return 0
+
+
+## Disattiva i suggerimenti one-shot: utile per gli screenshot e per chi
+## vuole giocare senza interruzioni.
+##
+##   godot --path . -- --no-tips
+func _tips_requested() -> bool:
+	return "--no-tips" not in OS.get_cmdline_user_args()
 
 
 # --------------------------------------------------------------------------
@@ -163,27 +182,34 @@ func _build_ui() -> void:
 	body.add_child(_spacer(6))
 	body.add_child(_section_title("NEGOZIO"))
 
-	_shop_row = HBoxContainer.new()
-	_shop_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_shop_row.add_theme_constant_override("separation", 6)
-	body.add_child(_shop_row)
+	# Aggiorna ed esperienza affiancano la riga del negozio invece di stare
+	# sotto: due pulsanti icona ai lati, con il costo nel tooltip invece che
+	# scritto per esteso — libera spazio orizzontale per le caselle del
+	# negozio, che sono ciò che si guarda per primo.
+	var shop_row_wrap := HBoxContainer.new()
+	shop_row_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	shop_row_wrap.add_theme_constant_override("separation", 6)
+	body.add_child(shop_row_wrap)
 
-	var shop_actions := HBoxContainer.new()
-	shop_actions.add_theme_constant_override("separation", 10)
-	body.add_child(shop_actions)
-
-	# Sui pulsanti del negozio il prezzo va sotto il verbo e non dentro la stessa
-	# riga: in portrait "Compra esperienza (4 oro)" su una riga sola verrebbe
-	# troncato, ed è proprio il numero a sparire per primo.
-	var reroll := _shop_action(
-		"Aggiorna", "%d oro" % int(GameData.balance()["economy"]["reroll_cost"]))
-	reroll.pressed.connect(_on_reroll_pressed)
-	shop_actions.add_child(reroll)
-
-	var buy_xp := _shop_action(
-		"Esperienza", "%d oro" % int(GameData.balance()["economy"]["buy_xp_cost"]))
+	var buy_xp := _shop_icon_button(
+		"📈", "Esperienza", int(GameData.balance()["economy"]["buy_xp_cost"]))
 	buy_xp.pressed.connect(_on_buy_xp_pressed)
-	shop_actions.add_child(buy_xp)
+	shop_row_wrap.add_child(buy_xp)
+
+	_shop_row = HBoxContainer.new()
+	_shop_row.add_theme_constant_override("separation", 6)
+	shop_row_wrap.add_child(_shop_row)
+
+	var reroll := _shop_icon_button(
+		"🔄", "Aggiorna", int(GameData.balance()["economy"]["reroll_cost"]))
+	reroll.pressed.connect(_on_reroll_pressed)
+	shop_row_wrap.add_child(reroll)
+
+	# Nel flusso del layout, non come overlay ancorato: quando compare, spinge
+	# la barra dei comandi verso il basso invece di coprire COMBATTI.
+	_tips = TipBubble.new()
+	_tips.enabled = _tips_requested()
+	root.add_child(_tips)
 
 	root.add_child(_build_action_bar())
 
@@ -191,10 +217,8 @@ func _build_ui() -> void:
 	# l'ordine di disegno, e la battaglia deve poter coprire tutto il resto.
 	_build_info_sheet()
 
-	_store_panel = StorePanel.new()
-	add_child(_store_panel)
-
 	_build_combat_overlay()
+	_build_spectate_overlay()
 
 
 ## Barra di stato: round, vita, oro, livello. Sono i quattro numeri su cui si
@@ -249,15 +273,17 @@ func _chip(row: HBoxContainer, icon: String, tint: Color) -> Label:
 	return value
 
 
-## Pulsante del negozio con il prezzo accanto all'azione. Su una riga sola e
-## non su due: il testo dei Button in Godot 4 non va a capo sugli "\n" se
-## l'autowrap è spento, e il risultato sarebbe le due parti attaccate.
-func _shop_action(title: String, price: String) -> Button:
+## Pulsante icona ai lati della riga del negozio (aggiorna, esperienza): solo
+## il glifo, come i pulsanti della barra d'azione — il costo resta consultabile
+## nel tooltip invece di occupare spazio in riga. Il costo compare comunque
+## anche scritto sul pulsante — con l'icona della moneta al posto della
+## parola "oro" — così non serve tenere premuto per scoprirlo.
+func _shop_icon_button(icon: String, action_label: String, cost: int) -> Button:
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(0, 56)
-	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button.text = "%s · %s" % [title, price]
-	button.add_theme_font_size_override("font_size", 17)
+	button.text = "%s  %d⛁" % [icon, cost]
+	button.tooltip_text = "%s · %d⛁" % [action_label, cost]
+	button.custom_minimum_size = Vector2(84, 56)
+	button.add_theme_font_size_override("font_size", 20)
 	Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 14, 4)
 	return button
 
@@ -280,7 +306,6 @@ func _build_action_bar() -> Control:
 	_sell_button.disabled = true
 	_sell_button.pressed.connect(_on_sell_pressed)
 
-	_bar_button(minor, "🛒", Style.PLATE).pressed.connect(func() -> void: _store_panel.open())
 	_bar_button(minor, "ⓘ", Style.PLATE).pressed.connect(func() -> void: _info_sheet.visible = true)
 	_bar_button(minor, "☰", Style.PLATE).pressed.connect(_on_menu_button_pressed)
 
@@ -355,9 +380,16 @@ func _build_info_sheet() -> void:
 func _build_combat_overlay() -> void:
 	_combat_overlay = Panel.new()
 	_combat_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_combat_overlay.add_theme_stylebox_override("panel", Style.box(Style.INK, Style.INK, 0, 0))
+	# Il pannello resta trasparente: il fondale è lo sfondo crepuscolare qui
+	# sotto, non più il nero piatto di prima.
+	_combat_overlay.add_theme_stylebox_override("panel", Style.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 0))
 	_combat_overlay.visible = false
 	add_child(_combat_overlay)
+
+	# Crepuscolo di battaglia: più scuro e più freddo del cielo del menu, con
+	# un accenno di rosso in basso, così lo schermo segnala "si combatte" anche
+	# prima di leggere una riga di testo.
+	_combat_overlay.add_child(Style.backdrop(Color(0.02, 0.03, 0.07), Color(0.17, 0.05, 0.09)))
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -370,6 +402,8 @@ func _build_combat_overlay() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 	margin.add_child(box)
+
+	box.add_child(_build_combat_top_bar())
 
 	_combat_title = Label.new()
 	_combat_title.add_theme_font_size_override("font_size", 24)
@@ -385,6 +419,8 @@ func _build_combat_overlay() -> void:
 	_combat_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_combat_view.playback_finished.connect(_on_playback_finished)
 	box.add_child(_combat_view)
+
+	box.add_child(_build_combat_bottom_bar())
 
 	_combat_outcome = Label.new()
 	_combat_outcome.add_theme_font_size_override("font_size", 26)
@@ -433,6 +469,170 @@ func _build_combat_overlay() -> void:
 	_combat_controls = controls
 
 
+## Riga in alto: chi si sta affrontando in questo round, la sua vita e le sue
+## sinergie attive — le stesse informazioni che in fase di preparazione si
+## leggono aprendo la classifica avversari, qui a colpo d'occhio mentre si
+## guarda la battaglia.
+func _build_combat_top_bar() -> Control:
+	_combat_top_bar = HBoxContainer.new()
+	_combat_top_bar.add_theme_constant_override("separation", 8)
+
+	_combat_top_name = Label.new()
+	_combat_top_name.add_theme_font_size_override("font_size", 15)
+	_combat_top_name.add_theme_color_override("font_color", Style.TEXT_DIM)
+	_combat_top_name.clip_text = true
+	_combat_top_bar.add_child(_combat_top_name)
+
+	_combat_top_hp = Label.new()
+	_combat_top_hp.add_theme_font_size_override("font_size", 15)
+	_combat_top_hp.add_theme_color_override("font_color", Color(0.92, 0.45, 0.42))
+	_combat_top_bar.add_child(_combat_top_hp)
+
+	_combat_top_synergy_row = HBoxContainer.new()
+	_combat_top_synergy_row.add_theme_constant_override("separation", 4)
+	_combat_top_synergy_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_combat_top_bar.add_child(_combat_top_synergy_row)
+
+	return _combat_top_bar
+
+
+## Riga in basso: le stesse informazioni ma per la propria squadra — la vita
+## che si sta rischiando in questo round e le sinergie che la stanno
+## sostenendo, senza dover uscire dalla battaglia per ricordarsele.
+func _build_combat_bottom_bar() -> Control:
+	_combat_bottom_bar = HBoxContainer.new()
+	_combat_bottom_bar.add_theme_constant_override("separation", 8)
+
+	var label := Label.new()
+	label.text = "Tu"
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", Style.TEXT_DIM)
+	_combat_bottom_bar.add_child(label)
+
+	_combat_bottom_hp = Label.new()
+	_combat_bottom_hp.add_theme_font_size_override("font_size", 15)
+	_combat_bottom_hp.add_theme_color_override("font_color", Color(0.5, 0.85, 0.5))
+	_combat_bottom_bar.add_child(_combat_bottom_hp)
+
+	_combat_bottom_synergy_row = HBoxContainer.new()
+	_combat_bottom_synergy_row.add_theme_constant_override("separation", 4)
+	_combat_bottom_synergy_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_combat_bottom_bar.add_child(_combat_bottom_synergy_row)
+
+	return _combat_bottom_bar
+
+
+## Ripopola le due barre a ogni round: chiamata da _show_combat() con lo
+## stesso dizionario "own" restituito da resolve_round(). Un round fantasma
+## (own["opponent"] == null) nasconde la barra dell'avversario invece di
+## leggere campi che non esistono.
+func _refresh_combat_info(own: Dictionary) -> void:
+	var opponent: Player = own.get("opponent")
+	if opponent == null:
+		_combat_top_bar.visible = false
+	else:
+		_combat_top_bar.visible = true
+		_combat_top_name.text = opponent.display_name
+		_combat_top_hp.text = "❤ %d" % opponent.hp
+		_refresh_combat_synergy_row(_combat_top_synergy_row, opponent.board_units())
+
+	_combat_bottom_hp.text = "❤ %d" % player().hp
+	_refresh_combat_synergy_row(_combat_bottom_synergy_row, player().board_units())
+
+
+func _refresh_combat_synergy_row(row: HBoxContainer, units: Array) -> void:
+	for child in row.get_children():
+		child.queue_free()
+	for synergy_row in TraitResolver.summary(units):
+		if bool(synergy_row["active"]):
+			row.add_child(_combat_chip(synergy_row))
+
+
+## Versione compatta e non interattiva di _synergy_chip(), per le barre della
+## schermata di battaglia: qui serve solo leggere a colpo d'occhio, non aprire
+## il dettaglio — e il riquadro non ha spazio per pulsanti a grandezza piena.
+func _combat_chip(row: Dictionary) -> Control:
+	var panel := PanelContainer.new()
+	var tint: Color = Style.origin_color(String(row["id"])) if bool(row["is_origin"]) else Style.BLUE
+	panel.add_theme_stylebox_override("panel", Style.plate(tint.darkened(0.55), tint, 8, 3))
+
+	var label := Label.new()
+	label.text = "● %s" % row["name"]
+	label.add_theme_font_size_override("font_size", 13)
+	label.add_theme_color_override("font_color", tint.lightened(0.35))
+	panel.add_child(label)
+
+	return panel
+
+
+## Overlay per rivedere solo lo schieramento iniziale dell'ultimo combattimento
+## di un avversario: niente pulsanti di velocità o "continua", perché non c'è
+## una battaglia da riprodurre né un round da concludere — è solo un'occhiata
+## a come si è schierato, per copiare o correggere la propria formazione.
+## Un CombatView separato da quello della propria battaglia: condividere lo
+## stesso avrebbe richiesto salvare e ripristinare lo stato del round in corso
+## ogni volta che si apre e si chiude, per un semplice sguardo a un tabellone.
+func _build_spectate_overlay() -> void:
+	_spectate_overlay = Panel.new()
+	_spectate_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_spectate_overlay.add_theme_stylebox_override("panel", Style.box(Style.INK, Style.INK, 0, 0))
+	_spectate_overlay.visible = false
+	add_child(_spectate_overlay)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 38)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	_spectate_overlay.add_child(margin)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	margin.add_child(box)
+
+	_spectate_title = Label.new()
+	_spectate_title.add_theme_font_size_override("font_size", 24)
+	_spectate_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_spectate_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_spectate_title)
+
+	_spectate_view = CombatView.new()
+	_spectate_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_spectate_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(_spectate_view)
+
+	var close := Button.new()
+	close.text = "Chiudi"
+	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	close.add_theme_font_size_override("font_size", 24)
+	Style.apply_plate(close, Style.PLATE, Style.PLATE_DARK, 16, 5)
+	close.pressed.connect(func() -> void: _spectate_overlay.visible = false)
+	box.add_child(close)
+
+
+## Mostra lo schieramento iniziale dell'ultimo combattimento di `pl`, fermo
+## (nessuna chiamata a play()): l'utente ha chiesto di vedere dove ha piazzato
+## le unità, non di rivedere la battaglia intera. Se l'avversario non ha
+## ancora combattuto in questa partita, o il suo ultimo round è stato un
+## fantasma senza schieramento, il tocco non fa nulla: non c'è niente da
+## mostrare.
+func _open_spectate(pl: Player) -> void:
+	var result := {}
+	for entry in match_state.last_results():
+		if entry["player"] == pl:
+			result = entry
+			break
+	if result.is_empty() or bool(result.get("ghost", false)) or result["combat"].is_empty():
+		return
+
+	var opponent: Player = result.get("opponent")
+	_spectate_title.text = "Ultimo schieramento — %s" % pl.display_name
+	_spectate_view.set_hero_portraits(pl.hero_id, opponent.hero_id if opponent != null else "")
+	_spectate_view.load_combat(result["combat"], int(result.get("team", 0)))
+	_spectate_overlay.visible = true
+
+
 ## Riquadro accanto allo schieramento con gli avversari ordinati per vita
 ## rimasta: dice a colpo d'occhio chi è messo peggio, senza dover aprire il
 ## foglio delle sinergie per controllare i piazzamenti.
@@ -449,6 +649,8 @@ func _build_ranking_panel() -> Control:
 	title.text = "AVVERSARI"
 	title.add_theme_font_size_override("font_size", 15)
 	title.add_theme_color_override("font_color", Style.GOLD.darkened(0.2))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_child(title)
 
 	_ranking_list = VBoxContainer.new()
@@ -474,20 +676,33 @@ func _refresh_ranking() -> void:
 	opponents.sort_custom(func(a: Player, b: Player) -> bool: return a.hp > b.hp)
 
 	for pl in opponents:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
+		# La riga è un pulsante piatto: tocca per rivedere l'ultimo schieramento
+		# di quell'avversario. I figli ignorano il mouse, così il clic arriva
+		# sempre al pulsante che li contiene (come in UnitSlot).
+		var row := Button.new()
+		row.flat = true
+		row.custom_minimum_size = Vector2(0, Style.TOUCH_MIN * 0.4)
+		row.pressed.connect(_open_spectate.bind(pl))
 		_ranking_list.add_child(row)
+
+		var inner := HBoxContainer.new()
+		inner.add_theme_constant_override("separation", 6)
+		inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(inner)
 
 		var name_label := Label.new()
 		name_label.text = pl.display_name
 		name_label.add_theme_font_size_override("font_size", 15)
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_label.clip_text = true
-		row.add_child(name_label)
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(name_label)
 
 		var hp_label := Label.new()
 		hp_label.add_theme_font_size_override("font_size", 15)
-		row.add_child(hp_label)
+		hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(hp_label)
 
 		if pl.eliminated or pl.hp <= 0:
 			hp_label.text = "☠"
@@ -534,8 +749,13 @@ func _refresh_synergies() -> void:
 		_synergy_row.add_child(label)
 		return
 
+	var any_active := false
 	for row in rows:
 		_synergy_row.add_child(_synergy_chip(row))
+		if bool(row["active"]):
+			any_active = true
+	if any_active:
+		_tips.queue_tip("synergy")
 
 
 func _synergy_chip(row: Dictionary) -> Button:
@@ -562,39 +782,64 @@ func _synergy_chip(row: Dictionary) -> Button:
 ## Pannello di dettaglio di una singola sinergia: tutte le soglie con il
 ## relativo bonus, quella raggiunta evidenziata in oro. Costruito una sola
 ## volta e ripopolato a ogni apertura, come il foglio informazioni.
+##
+## A differenza del foglio informazioni e della battaglia, questo è un
+## dettaglio breve: un modale piccolo e centrato, non un pannello a schermo
+## intero, con uno sfondo attenuato dietro (gemello, non genitore — così
+## resta un semplice rettangolo da mostrare/nascondere insieme al modale,
+## senza dover gestire il centraggio anche al suo interno).
 func _build_synergy_detail() -> void:
-	_synergy_detail = Panel.new()
+	_synergy_detail_backdrop = ColorRect.new()
+	_synergy_detail_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_synergy_detail_backdrop.color = Color(0, 0, 0, 0.55)
+	_synergy_detail_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_synergy_detail_backdrop.visible = false
+	add_child(_synergy_detail_backdrop)
+
+	# Un CenterContainer a tutto schermo, trasparente e che ignora il mouse
+	# fuori dal figlio, tiene il modale in mezzo qualunque sia la sua altezza
+	# di contenuto — senza dover calcolare offset a mano come per i pannelli
+	# a tutto schermo.
+	_synergy_detail = CenterContainer.new()
 	_synergy_detail.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_synergy_detail.add_theme_stylebox_override("panel", Style.box(Style.SKY_TOP, Style.SKY_TOP, 0, 0))
+	_synergy_detail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_synergy_detail.visible = false
 	add_child(_synergy_detail)
 
+	var dialog := PanelContainer.new()
+	dialog.custom_minimum_size = Vector2(420, 0)
+	dialog.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.GOLD_DEEP, 18, 6))
+	_synergy_detail.add_child(dialog)
+
 	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 20)
 	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_top", 38)
-	margin.add_theme_constant_override("margin_bottom", 18)
-	_synergy_detail.add_child(margin)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_bottom", 20)
+	dialog.add_child(margin)
 
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 12)
 	margin.add_child(column)
 
 	_synergy_detail_title = Label.new()
-	_synergy_detail_title.add_theme_font_size_override("font_size", 26)
+	_synergy_detail_title.add_theme_font_size_override("font_size", 24)
 	_synergy_detail_title.add_theme_color_override("font_color", Style.GOLD)
 	_synergy_detail_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_synergy_detail_title)
 
 	_synergy_detail_description = Label.new()
-	_synergy_detail_description.add_theme_font_size_override("font_size", 18)
+	_synergy_detail_description.add_theme_font_size_override("font_size", 16)
 	_synergy_detail_description.add_theme_color_override("font_color", Style.TEXT_DIM)
 	_synergy_detail_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_synergy_detail_description)
 
+	# Altezza limitata invece di SIZE_EXPAND_FILL: dentro un CenterContainer
+	# nessun genitore impone un'altezza massima, quindi senza un tetto la
+	# lista delle soglie spingerebbe il modale fuori dallo schermo su una
+	# sinergia con molti livelli.
 	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.custom_minimum_size = Vector2(0, 260)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	column.add_child(scroll)
 
@@ -608,8 +853,13 @@ func _build_synergy_detail() -> void:
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 24)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 16, 5)
-	close.pressed.connect(func() -> void: _synergy_detail.visible = false)
+	close.pressed.connect(_close_synergy_detail)
 	column.add_child(close)
+
+
+func _close_synergy_detail() -> void:
+	_synergy_detail.visible = false
+	_synergy_detail_backdrop.visible = false
 
 
 ## Popola e apre il dettaglio di una sinergia: tutte le soglie definite in
@@ -651,6 +901,7 @@ func _open_synergy_detail(trait_id: String) -> void:
 		effect_text.add_theme_font_size_override("font_size", 17)
 		inner.add_child(effect_text)
 
+	_synergy_detail_backdrop.visible = true
 	_synergy_detail.visible = true
 
 
@@ -676,11 +927,13 @@ func _spacer(height: int) -> Control:
 func _start_new_match() -> void:
 	_combat_view.pause()
 	_combat_overlay.visible = false
+	_spectate_overlay.visible = false
 	_pending_results = []
 	_fight_button.text = "COMBATTI"
 	selected = null
 
 	match_state = MatchState.new(_requested_seed(), 1)
+	match_state.human_player().hero_id = _profile.effective_hero()
 	brains.clear()
 	var brain_rng := SimRNG.new(match_state.seed_value ^ 0x5EED)
 	for p in match_state.players:
@@ -691,6 +944,7 @@ func _start_new_match() -> void:
 	_log("Civiltà disponibili: %s" % ", ".join(_store.playable_origins()))
 	match_state.start_round()
 	_refresh()
+	_tips.queue_tip("shop")
 
 
 func _on_fight_pressed() -> void:
@@ -729,11 +983,13 @@ func _show_combat(own: Dictionary) -> void:
 	_combat_title.text = "Round %s — contro %s" % [
 		_previous_round_label(), opponent.display_name if opponent != null else "nessuno",
 	]
+	_refresh_combat_info(own)
 	_combat_outcome.text = ""
 	_continue_button.visible = false
 	_combat_controls.visible = true
 
 	_combat_view.speed = float(_profile.combat_speed)
+	_combat_view.set_hero_portraits(player().hero_id, opponent.hero_id if opponent != null else "")
 	_combat_view.load_combat(own["combat"], int(own.get("team", 0)))
 	_combat_overlay.visible = true
 	_combat_view.play()
@@ -758,13 +1014,16 @@ func _on_playback_finished() -> void:
 		return
 
 	if bool(own["won"]):
-		_combat_outcome.text = "Vittoria"
+		_combat_outcome.text = "Vittoria — %d danni all'avversario" % int(own["damage_dealt"])
 		_combat_outcome.add_theme_color_override("font_color", Color(0.5, 0.85, 0.5))
 	else:
 		_combat_outcome.text = "Sconfitta — %d danni alla tua vita" % int(own["damage"])
 		_combat_outcome.add_theme_color_override("font_color", Color(0.9, 0.45, 0.45))
 	_continue_button.visible = true
 	_combat_controls.visible = false
+	_tips.queue_tip("combat")
+	if own.get("opponent") != null and not bool(own.get("ghost", false)):
+		_combat_view.show_result_beam(bool(own["won"]), int(own["damage_dealt"] if bool(own["won"]) else own["damage"]))
 
 
 func _on_continue_pressed() -> void:
@@ -786,6 +1045,11 @@ func _conclude_round(results: Array) -> void:
 		_fight_button.text = "NUOVA PARTITA"
 		_profile.record_match(player().placement)
 	else:
+		# round_index è già stato fatto avanzare da resolve_round(): stage 1,
+		# round 2 è il primo round che il giocatore sta per affrontare dopo
+		# aver visto un round intero di economia in azione.
+		if match_state.stage == 1 and match_state.round_index == 2:
+			_tips.queue_tip("economy")
 		match_state.start_round()
 	_refresh()
 
@@ -823,7 +1087,7 @@ func _report(results: Array) -> void:
 		var opponent: Player = result["opponent"]
 		var opponent_name: String = opponent.display_name if opponent != null else "nessuno"
 		if bool(result["won"]):
-			_log("  [color=#7fd67f]Vittoria[/color] contro %s" % opponent_name)
+			_log("  [color=#7fd67f]Vittoria[/color] contro %s (−%d vita avversario)" % [opponent_name, int(result["damage_dealt"])])
 		else:
 			_log("  [color=#e07070]Sconfitta[/color] contro %s (−%d vita)" % [opponent_name, int(result["damage"])])
 		var combat: Dictionary = result["combat"]
@@ -872,6 +1136,7 @@ func _on_shop_slot_pressed(slot: int) -> void:
 		return
 	var bought := p.buy(slot)
 	_log("Comprato %s." % bought)
+	_tips.queue_tip("bench")
 	_refresh()
 
 
@@ -901,6 +1166,8 @@ func _on_bench_slot_pressed(slot: int) -> void:
 		selected = null
 	else:
 		selected = occupant
+		if selected != null:
+			_tips.queue_tip("board")
 	_refresh()
 
 
@@ -930,6 +1197,11 @@ func _refresh() -> void:
 	_refresh_bench()
 	_refresh_synergies()
 	_refresh_ranking()
+
+	for unit in p.board_units() + p.bench_units():
+		if unit.star >= 2:
+			_tips.queue_tip("star")
+			break
 
 
 ## Crea i controlli a numero fisso. Chiamata una sola volta, da _ready().

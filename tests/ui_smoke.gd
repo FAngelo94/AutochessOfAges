@@ -42,9 +42,24 @@ func _run(main: Control) -> void:
 	var profile := main.get_node("/root/Profile")
 	var saved_matches: int = profile.matches_played
 	var saved_best: int = profile.best_placement
+	# .duplicate(): PackedStringArray non fa copy-on-write in GDScript, una
+	# semplice assegnazione condividerebbe il buffer con profile.seen_tips.
+	var saved_tips: PackedStringArray = profile.seen_tips.duplicate()
 
 	check(main.match_state != null, "la partita viene creata all'avvio")
+
+	# Il suggerimento del negozio compare da solo alla prima partita; una volta
+	# verificato, si disattivano le bolle per il resto del test — qui si pilota
+	# l'interfaccia come chi ha fretta, e le bolle interferirebbero con quel
+	# percorso senza aggiungere altra copertura.
+	check(main._tips.is_showing(), "il suggerimento del negozio compare all'avvio")
+	main._tips.dismiss()
+	check(profile.has_seen_tip("shop"), "chiudere il suggerimento lo marca come visto")
+	main._tips.enabled = false
 	check(main.player() != null and not main.player().is_bot, "esiste un giocatore umano")
+	check(main.player().hero_id != "" and GameData.has_hero(main.player().hero_id),
+		"il giocatore umano ha sempre un eroe valido (selezione obbligatoria)",
+		main.player().hero_id)
 
 	var player: Player = main.player()
 	player.gold = 100
@@ -103,6 +118,9 @@ func _run(main: Control) -> void:
 			battles_watched += 1
 			check_once("la battaglia carica le unità nella vista",
 				not main._combat_view._units.is_empty())
+			check_once("la battaglia ha i nodi ritratto eroe agli angoli",
+				main._combat_view._self_hero_portrait != null
+				and main._combat_view._opponent_hero_portrait != null)
 			main._combat_view.skip_to_end()
 			check_once("a fine battaglia compare l'esito", main._combat_outcome.text != "")
 			check_once("a fine battaglia si può continuare", main._continue_button.visible)
@@ -122,8 +140,12 @@ func _run(main: Control) -> void:
 	main._on_fight_pressed()
 	check(main.match_state.phase == MatchState.Phase.PREPARATION, "si può iniziare una nuova partita")
 
-	_check_store_panel(main)
 	_check_unit_slots(main)
+
+	# Il test ha marcato "shop" come visto sul profilo vero: senza rimetterlo a
+	# posto, chi sviluppa non vedrebbe più quel suggerimento in una partita reale.
+	profile.seen_tips = saved_tips
+	profile.save_profile()
 
 	print("\n%d superati, %d falliti" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -155,42 +177,6 @@ func check(condition: bool, label: String, detail: String = "") -> void:
 		printerr("  FAIL %s%s" % [label, ("  -> " + detail) if detail != "" else ""])
 
 
-## Il negozio deve aprirsi, mostrare una riga per ogni contenuto in vendita e
-## riflettere subito ciò che è stato acquistato.
-##
-## L'autoload si recupera dall'albero invece di usare il nome globale: questo
-## script viene compilato prima che gli autoload siano registrati, e "Store"
-## non sarebbe ancora un identificatore noto.
-func _check_store_panel(main: Control) -> void:
-	var store := main.get_node("/root/Store")
-	var panel: StorePanel = main._store_panel
-	panel.open()
-	check(panel.visible, "il negozio si apre")
-	check(panel._rows.size() == Catalog.entitlement_ids().size(),
-		"c'è una riga per ogni contenuto in vendita",
-		"%d righe" % panel._rows.size())
-
-	var entitlement_id := "cosmetic_pack_legion"
-	var button: Button = panel._rows[entitlement_id]
-	check(not button.disabled, "un contenuto non posseduto è acquistabile")
-
-	store.purchase(entitlement_id)
-	check(store.has_entitlement(entitlement_id), "l'acquisto concede il contenuto")
-	check(button.disabled, "dopo l'acquisto il pulsante non è più premibile")
-	check(store.owns_cosmetic("roman_gold"), "il cosmetico risulta posseduto")
-
-	# La modalità 'shared' non deve mai togliere civiltà dalla partita: è la
-	# garanzia che l'acquisto non tocchi l'equilibrio competitivo.
-	check(store.playable_origins().size() == GameData.origin_ids().size(),
-		"in modalità condivisa tutte le civiltà restano giocabili")
-	check(store.selectable_origins().has("roman"), "la civiltà gratuita è sempre selezionabile")
-
-	# Non lasciare acquisti finti sul disco: il prossimo avvio ripartirebbe
-	# con contenuti già sbloccati e i test non sarebbero più ripetibili.
-	if store.backend is MockStore:
-		(store.backend as MockStore).clear()
-
-
 ## Le caselle mostrano il modello 3D dell'unità. Qui non c'è rendering (test
 ## headless), quindi si verifica soprattutto il ripiego: senza figura deve
 ## restare il nome, altrimenti una casella piena sarebbe indistinguibile da
@@ -212,7 +198,7 @@ func _check_unit_slots(main: Control) -> void:
 		check(slot.unit_id == offered.id, "la casella del negozio conosce la propria unità")
 		check(slot._fallback.visible and slot._fallback.text != "",
 			"senza ritratto la casella mostra il nome")
-		check(slot.tooltip_text.contains(offered.display_name),
+		check(slot._hover_text.contains(offered.display_name),
 			"il nome completo resta nel suggerimento")
 		check(slot._badge.text == "%d oro" % offered.cost,
 			"il negozio mostra il costo", slot._badge.text)

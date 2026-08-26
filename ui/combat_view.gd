@@ -35,9 +35,13 @@ const ENEMY_COLOR := Color(0.92, 0.42, 0.38)
 const ORIGIN_MARKS := {"roman": "R", "gaul": "G", "teuton": "T"}
 
 const BAR_SIZE := Vector2(58.0, 8.0)
+const RESULT_BEAM_DURATION := 0.55
 
 var speed: float = 1.0
 var is_playing: bool = false
+## true mentre il fascio di fine round sta animando: _process() in questo
+## stato non tocca gli eventi di riproduzione, che sono già tutti esauriti.
+var _result_animating: bool = false
 
 ## Squadra di chi guarda: viene sempre disegnata nella metà vicina alla camera,
 ## come nella schermata di preparazione. Senza questo, metà delle battaglie
@@ -59,19 +63,33 @@ var _floaters: Array[Dictionary] = []
 ## Linee d'attacco disegnate per un istante: {from_uid, to_uid, color, born}
 var _flashes: Array[Dictionary] = []
 
+## Fascio finale che collega i due ritratti eroe a fine round, e il numero di
+## vita persa che sale sopra il ritratto sconfitto. Sono in coordinate
+## schermo, non del mondo 3D: i ritratti sono agganciati agli angoli
+## dell'interfaccia, non a un'unità in campo, quindi non possono usare
+## _floaters/_flashes che proiettano da BattleBoard3D.
+var _hero_beam: Dictionary = {}
+var _hero_floater: Dictionary = {}
+## Orologio dedicato all'animazione di fine round: separato da _time, che
+## smette di avanzare quando la riproduzione finisce.
+var _result_time: float = 0.0
+
 var _font: Font
 var _board: BattleBoard3D
 var _viewport: SubViewport
+var _self_hero_portrait: TextureRect
+var _opponent_hero_portrait: TextureRect
+var _self_hero_id: String = ""
+var _opponent_hero_id: String = ""
 
 
 func _ready() -> void:
 	_font = ThemeDB.fallback_font
-	custom_minimum_size = Vector2(
-		_columns * (CELL.x + CELL_GAP),
-		_rows * (CELL.y + CELL_GAP) + 28.0
-	)
+	custom_minimum_size = _board_pixel_size()
 	_build_scene()
 	set_process(false)
+	if get_node("/root/Portraits").is_available():
+		get_node("/root/Portraits").portrait_ready.connect(_on_hero_portrait_ready)
 
 
 ## Il 3D vive in un SubViewport invece che nell'albero principale: la finestra
@@ -99,7 +117,96 @@ func _build_scene() -> void:
 	_board = BattleBoard3D.new()
 	_viewport.add_child(_board)
 
+	# Angoli fissi in coordinate schermo: avversario in alto a sinistra,
+	# giocatore in basso a destra. Indipendenti da _flip/viewer_team, che
+	# riguardano solo l'orientamento della board 3D, non la UI 2D sopra di essa.
+	_opponent_hero_portrait = _corner_hero_portrait()
+	add_child(_opponent_hero_portrait)
+	_self_hero_portrait = _corner_hero_portrait()
+	add_child(_self_hero_portrait)
+	_position_corner_portraits()
+
 	resized.connect(_on_resized)
+
+
+## Dimensione della board in pixel, la stessa formula usata per
+## custom_minimum_size.
+func _board_pixel_size() -> Vector2:
+	return Vector2(
+		_columns * (CELL.x + CELL_GAP),
+		_rows * (CELL.y + CELL_GAP) + 28.0
+	)
+
+
+func _corner_hero_portrait() -> TextureRect:
+	var rect := TextureRect.new()
+	rect.custom_minimum_size = Vector2(56, 56)
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return rect
+
+
+## Entrambi i ritratti restano ancorati in alto a sinistra (anchor 0,0,0,0) e
+## si posizionano con offset assoluti calcolati dalla dimensione della board:
+## un'ancora al 100% (in basso/a destra) sembra la scelta ovvia per il
+## ritratto del giocatore, ma CombatView è più grande della board disegnata —
+## si allunga con SIZE_EXPAND_FILL per riempire lo spazio verticale E
+## orizzontale che avanza nel layout — quindi quell'ancora lo piazzava fuori
+## dallo schermo, al fondo del controllo invece che al fondo della board.
+## Il fondo del controllo coincide sempre con l'origine locale (0,0), la
+## stessa da cui _draw() disegna la board: da lì, gli offset assoluti restano
+## corretti qualunque sia la dimensione reale del controllo.
+func _position_corner_portraits() -> void:
+	var board := _board_pixel_size()
+	_opponent_hero_portrait.position = Vector2(8.0, 8.0)
+	_opponent_hero_portrait.size = Vector2(56.0, 56.0)
+	_self_hero_portrait.position = Vector2(board.x - 64.0, board.y - 64.0)
+	_self_hero_portrait.size = Vector2(56.0, 56.0)
+
+
+## Ritratti degli eroi ai due angoli. `self_hero_id`/`opponent_hero_id` sono
+## metadati del Player, non della simulazione: CombatSim/MatchState non sanno
+## nulla di eroi, quindi chi chiama load_combat() passa qui i due id a parte.
+func set_hero_portraits(self_hero_id: String, opponent_hero_id: String) -> void:
+	_self_hero_id = self_hero_id
+	_opponent_hero_id = opponent_hero_id
+	var portraits := get_node("/root/Portraits")
+	_self_hero_portrait.texture = portraits.hero_texture_for(self_hero_id) if self_hero_id != "" else null
+	_opponent_hero_portrait.texture = portraits.hero_texture_for(opponent_hero_id) if opponent_hero_id != "" else null
+
+
+## Chiamato da ui/main.gd a battaglia conclusa (mai da _finish() stesso, per
+## restare fuori dalla vista di spettatore che non riproduce mai una
+## battaglia dal vivo): un breve fascio tra i due ritratti eroe, dal
+## vincitore verso lo sconfitto, con il numero di vita realmente persa in
+## questo round — lo stesso valore già raccontato in _combat_outcome.
+func show_result_beam(winner_is_viewer: bool, damage: int) -> void:
+	var source := _self_hero_portrait if winner_is_viewer else _opponent_hero_portrait
+	var target := _opponent_hero_portrait if winner_is_viewer else _self_hero_portrait
+
+	_result_time = 0.0
+	_hero_beam = {
+		"active": true,
+		"from": source.position + source.size * 0.5,
+		"to": target.position + target.size * 0.5,
+		"color": OWN_COLOR if winner_is_viewer else ENEMY_COLOR,
+	}
+	_hero_floater = {} if damage <= 0 else {
+		"text": "-%d" % damage,
+		"at": target.position + Vector2(target.size.x * 0.5, 0.0),
+	}
+
+	_result_animating = true
+	set_process(true)
+	queue_redraw()
+
+
+func _on_hero_portrait_ready(hero_id: String) -> void:
+	var portraits := get_node("/root/Portraits")
+	if hero_id == _self_hero_id:
+		_self_hero_portrait.texture = portraits.hero_texture_for(hero_id)
+	if hero_id == _opponent_hero_id:
+		_opponent_hero_portrait.texture = portraits.hero_texture_for(hero_id)
 
 
 func _on_resized() -> void:
@@ -122,6 +229,12 @@ func load_combat(combat: Dictionary, team: int = 0) -> void:
 	_time = 0.0
 	_floaters.clear()
 	_flashes.clear()
+	# Un round nuovo azzera anche l'eventuale fascio del round precedente:
+	# senza questo, saltare subito al round successivo lascerebbe un fascio
+	# animato a metà sopra la battaglia appena iniziata.
+	_result_animating = false
+	_hero_beam = {}
+	_hero_floater = {}
 
 	_board.configure(_columns, _rows, _flip, viewer_team)
 	_board.clear_units()
@@ -158,10 +271,8 @@ func load_combat(combat: Dictionary, team: int = 0) -> void:
 			int(entry["star"])
 		)
 
-	custom_minimum_size = Vector2(
-		_columns * (CELL.x + CELL_GAP),
-		_rows * (CELL.y + CELL_GAP) + 28.0
-	)
+	custom_minimum_size = _board_pixel_size()
+	_position_corner_portraits()
 	_sync_board()
 	queue_redraw()
 
@@ -188,6 +299,20 @@ func skip_to_end() -> void:
 
 
 func _process(delta: float) -> void:
+	# L'animazione del fascio di fine round riusa set_process() a riproduzione
+	# già ferma, ma non deve far ripartire la lettura degli eventi né
+	# richiamare _finish() una seconda volta: ha il suo orologio e la sua
+	# uscita.
+	if _result_animating:
+		_result_time += delta
+		if _result_time >= RESULT_BEAM_DURATION:
+			_result_animating = false
+			_hero_beam = {}
+			_hero_floater = {}
+			set_process(false)
+		queue_redraw()
+		return
+
 	_time += delta * speed
 
 	while _event_index < _events.size() and float(_events[_event_index]["t"]) <= _time:
@@ -375,6 +500,9 @@ func _draw() -> void:
 	for floater in _floaters:
 		_draw_floater(floater)
 	_draw_clock()
+	if _result_animating:
+		_draw_hero_beam()
+		_draw_hero_floater()
 
 
 ## Barra della salute e stato di un'unità, ancorate sopra la sua testa nel
@@ -433,6 +561,28 @@ func _draw_floater(floater: Dictionary) -> void:
 	var position := _board.project(floater["world"]) + Vector2(0, -38.0 * progress)
 	draw_string(_font, position, String(floater["text"]),
 		HORIZONTAL_ALIGNMENT_CENTER, 0, 20, color)
+
+
+## Fascio tra i due ritratti eroe, in coordinate schermo dirette: entrambi i
+## ritratti sono figli diretti di questo Control, quindi la loro `position`
+## è già nello spazio in cui _draw() lavora, senza passare da project().
+func _draw_hero_beam() -> void:
+	if not bool(_hero_beam.get("active", false)):
+		return
+	var progress: float = clampf(_result_time / RESULT_BEAM_DURATION, 0.0, 1.0)
+	var color: Color = _hero_beam["color"]
+	color.a = 1.0 - progress
+	draw_line(_hero_beam["from"], _hero_beam["to"], color, 5.0)
+
+
+func _draw_hero_floater() -> void:
+	if _hero_floater.is_empty():
+		return
+	var progress: float = clampf(_result_time / RESULT_BEAM_DURATION, 0.0, 1.0)
+	var color := Color(1.0, 0.85, 0.4, 1.0 - progress)
+	var position: Vector2 = _hero_floater["at"] + Vector2(0, -30.0 * progress)
+	draw_string(_font, position, String(_hero_floater["text"]),
+		HORIZONTAL_ALIGNMENT_CENTER, 0, 22, color)
 
 
 func _draw_clock() -> void:

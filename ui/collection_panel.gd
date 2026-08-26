@@ -358,4 +358,11 @@ func _show_detail(unit_id: String) -> void:
 			lines.append("  [color=#9aa]%d:[/color] %s" % [int(tier["count"]), String(tier.get("text", ""))])
 		lines.append("")
 
+	# Non tutte le unità hanno ancora una scheda storica: si aggiunge solo in
+	# fondo, dopo le informazioni di gioco, e solo se presente.
+	if not def.lore.is_empty():
+		lines.append("[b]Storia[/b]")
+		lines.append("[color=#ccc]%s[/color]" % def.lore)
+		lines.append("")
+
 	_detail.text = "\n".join(lines)

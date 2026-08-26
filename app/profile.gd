@@ -16,9 +16,15 @@ const SAVE_PATH := "user://profile.cfg"
 ## negozio durante la partita e non concede alcun vantaggio — il pool è
 ## condiviso da tutti, e un bonus legato a un acquisto romperebbe l'equità.
 var favourite_origin: String = ""
+## Eroe scelto dal giocatore. Vuoto finché non sceglie mai: usare
+## effective_hero() per leggere sempre un id valido (default Cesare).
+var favourite_hero: String = ""
 var combat_speed: float = 1.0
 var matches_played: int = 0
 var best_placement: int = 0
+## Id dei suggerimenti one-shot già mostrati (TipBubble). Una volta visto, un
+## suggerimento non ricompare più — a meno di reset_tips().
+var seen_tips: PackedStringArray = PackedStringArray()
 
 
 func _ready() -> void:
@@ -31,18 +37,24 @@ func load_profile() -> void:
 		# Primo avvio: nessun file, si resta sui valori predefiniti.
 		return
 	favourite_origin = String(config.get_value("preferences", "favourite_origin", ""))
+	favourite_hero = String(config.get_value("preferences", "favourite_hero", ""))
 	combat_speed = float(config.get_value("preferences", "combat_speed", 1.0))
 	matches_played = int(config.get_value("stats", "matches_played", 0))
 	best_placement = int(config.get_value("stats", "best_placement", 0))
+	# Assente nei profili salvati prima di questa funzionalità: il default
+	# vuoto fa sì che un profilo esistente continui a caricarsi senza errori.
+	seen_tips = PackedStringArray(config.get_value("tutorial", "seen_tips", PackedStringArray()))
 	changed.emit()
 
 
 func save_profile() -> void:
 	var config := ConfigFile.new()
 	config.set_value("preferences", "favourite_origin", favourite_origin)
+	config.set_value("preferences", "favourite_hero", favourite_hero)
 	config.set_value("preferences", "combat_speed", combat_speed)
 	config.set_value("stats", "matches_played", matches_played)
 	config.set_value("stats", "best_placement", best_placement)
+	config.set_value("tutorial", "seen_tips", seen_tips)
 	var error := config.save(SAVE_PATH)
 	if error != OK:
 		push_error("Profile: salvataggio fallito (%d)" % error)
@@ -52,6 +64,19 @@ func set_favourite_origin(origin_id: String) -> void:
 	favourite_origin = origin_id
 	save_profile()
 	changed.emit()
+
+
+func set_favourite_hero(hero_id: String) -> void:
+	favourite_hero = hero_id
+	save_profile()
+	changed.emit()
+
+
+## Eroe da usare in partita: la scelta salvata, o Cesare se non è mai stata
+## fatta. La selezione è obbligatoria per giocare, ma non blocca il primo
+## avvio con un default assente.
+func effective_hero() -> String:
+	return favourite_hero if favourite_hero != "" else GameData.DEFAULT_HERO_ID
 
 
 func set_combat_speed(speed: float) -> void:
@@ -76,3 +101,23 @@ func best_placement_text() -> String:
 	if best_placement == 1:
 		return "1° posto"
 	return "%d° posto" % best_placement
+
+
+func has_seen_tip(tip_id: String) -> bool:
+	return seen_tips.has(tip_id)
+
+
+func mark_tip_seen(tip_id: String) -> void:
+	if seen_tips.has(tip_id):
+		return
+	seen_tips.append(tip_id)
+	save_profile()
+	changed.emit()
+
+
+## Rimette in coda tutti i suggerimenti one-shot: usato dal pulsante "Rivedi i
+## suggerimenti" nella schermata Guida.
+func reset_tips() -> void:
+	seen_tips = PackedStringArray()
+	save_profile()
+	changed.emit()

@@ -84,18 +84,18 @@ static func build(unit_id: String, origin: String) -> Node3D:
 
 	match unit_id:
 		"legionarius": _build_legionarius(root, palette)
+		"velites": _build_velites(root, palette)
 		"centurio": _build_centurio(root, palette)
-		"caesar": _build_caesar(root, palette)
+		"cataphractus": _build_cataphractus(root, palette)
 		"sagittarius": _build_sagittarius(root, palette)
-		"ballista": _build_ballista(root, palette)
+		"ballistarius": _build_ballistarius(root, palette)
 		"equites": _build_equites(root, palette)
-		"vestal": _build_vestal(root, palette)
 		"clansman": _build_clansman(root, palette)
 		"gaul_hunter": _build_gaul_hunter(root, palette)
 		"gaul_druid": _build_gaul_druid(root, palette)
 		"chariot": _build_chariot(root, palette)
 		"gaul_champion": _build_gaul_champion(root, palette)
-		"vercingetorix": _build_vercingetorix(root, palette)
+		"solduros": _build_solduros(root, palette)
 		"gaul_slinger": _build_gaul_slinger(root, palette)
 		"teuton_spearman": _build_teuton_spearman(root, palette)
 		"teuton_skirmisher": _build_teuton_skirmisher(root, palette)
@@ -143,6 +143,68 @@ static func height_of(unit_id: String) -> float:
 		_: return 0.85
 
 
+## Modello di un eroe. Gli eroi non sono unità: non passano da GameData.unit(),
+## non hanno un file .glb dedicato e non ricadono mai sull'archetipo generico —
+## ogni eroe ha la propria figura, per restare riconoscibile nel ritratto
+## grande del menu e negli angoli della battaglia.
+static func build_hero(hero_id: String) -> Node3D:
+	var hdef := GameData.hero(hero_id)
+	var origin := hdef.origin if hdef != null else "roman"
+	var palette: Dictionary = PALETTES.get(origin, PALETTES["roman"])
+	var root := Node3D.new()
+	root.name = "Hero_%s" % hero_id
+
+	match hero_id:
+		"cesare": _build_cesare(root, palette)
+		"vercingetorige": _build_vercingetorige(root, palette)
+		_: _build_archetype(root, palette, "legionary")
+
+	return root
+
+
+## Gli eroi sono figure di comando: leggermente più alte degli archetipi
+## regolari, per distinguersi a colpo d'occhio nel ritratto e in battaglia.
+static func height_of_hero(_hero_id: String) -> float:
+	return 0.95
+
+
+# --------------------------------------------------------------------------
+# Figure eroi
+# --------------------------------------------------------------------------
+
+## Cesare: il generale romano. Scutum e gladio come il legionario, ma cresta
+## trasversale da comandante (come il centurione), corona d'alloro al posto
+## dello spallaccio dorato, e un mantello scarlatto da console che nessun'altra
+## figura romana porta.
+static func _build_cesare(root: Node3D, palette: Dictionary) -> void:
+	_humanoid(root, palette, {"tunic": palette["secondary"], "scale": 1.18})
+	_scutum(root, palette)
+	_gladius(root, palette)
+	_crest(root, palette, true)
+	_cloak(root, palette["primary"].darkened(0.1), 0.36, 0.46)
+	# Corona d'alloro: un anello dorato sulla calotta, distinto dallo spallaccio
+	# del centurione — qui il segno di comando sta sulla testa, non sulle spalle.
+	_add(root, _torus(0.075, 0.10), palette["secondary"],
+		_xf(Vector3(0, 0.79, 0), Vector3(90, 0, 0)))
+
+
+## Vercingetorige: il capo gallico. Stessa base del Solduros (torque, elmo
+## cornuto, spada lunga) ma senza vessillo — la sagoma resta pulita per non
+## confondersi col portastendardo — e con uno scudo ovale più grande e un
+## mantello del colore secondario della tribù, non del primario.
+static func _build_vercingetorige(root: Node3D, palette: Dictionary) -> void:
+	_humanoid(root, palette, {"tunic": palette["primary"], "scale": 1.2, "shoulders": 0.38})
+	_cloak(root, palette["secondary"].darkened(0.15), 0.38, 0.48)
+	_torque(root, palette)
+	_horns(root, palette["metal"], 0.70)
+	_long_sword(root, palette, 0.50)
+	var shield := _add(root, _cylinder(0.21, 0.05), palette["secondary"],
+		_xf(Vector3(-0.25, 0.42, 0.06), Vector3(90, 0, 0)))
+	shield.scale = Vector3(1.0, 1.0, 1.35)
+	_add(root, _sphere(0.055), palette["metal"],
+		_xf(Vector3(-0.30, 0.42, 0.06), Vector3.ZERO, Vector3(0.6, 1, 1)))
+
+
 # --------------------------------------------------------------------------
 # Figure romane
 # --------------------------------------------------------------------------
@@ -154,6 +216,29 @@ static func _build_legionarius(root: Node3D, palette: Dictionary) -> void:
 	_scutum(root, palette)
 	_gladius(root, palette)
 	_crest(root, palette, false)
+
+
+## Il velite è la versione leggera del legionario: niente scudo grande né
+## corazza, solo una parma piccola e due giavellotti pronti al lancio, con la
+## pelle di lupo sull'elmo che ne era il segno distintivo.
+static func _build_velites(root: Node3D, palette: Dictionary) -> void:
+	_humanoid(root, palette, {"tunic": palette["primary"], "helmet": false, "shoulders": 0.28})
+	# Pelle di lupo sul capo, al posto dell'elmo metallico.
+	var pelt: Color = palette["wood"]
+	pelt = pelt.lightened(0.15)
+	_add(root, _sphere(0.09), pelt,
+		_xf(Vector3(0, 0.68, -0.01), Vector3.ZERO, Vector3(1.0, 0.85, 1.0)))
+	for side in [-1.0, 1.0]:
+		_add(root, _cone(0.03, 0.08), pelt,
+			_xf(Vector3(side * 0.06, 0.77, -0.01), Vector3(0, 0, side * 16.0)))
+	# Parma: scudo piccolo e leggero, molto più contenuto dello scutum.
+	_round_shield(root, palette, Vector3(-0.18, 0.38, 0.06), 0.11, palette["secondary"])
+	# Due giavellotti leggeri, tenuti pronti al lancio sul fianco destro.
+	for i in 2:
+		_add(root, _cylinder(0.012, 0.40), palette["wood"],
+			_xf(Vector3(0.20 + i * 0.05, 0.42, 0.10 - i * 0.03), Vector3(70, 0, -8)))
+		_add(root, _cone(0.022, 0.07), palette["metal"],
+			_xf(Vector3(0.20 + i * 0.05, 0.62, 0.30 - i * 0.03), Vector3(70, 0, -8)))
 
 
 ## Il centurione si distingue dal legionario per la cresta trasversale — che
@@ -171,21 +256,30 @@ static func _build_centurio(root: Node3D, palette: Dictionary) -> void:
 		_xf(Vector3(0, 0.56, 0)))
 
 
-## Cesare è a cavallo e porta il mantello: dall'alto il mantello è una macchia
-## rossa larga che nessun'altra unità ha.
-static func _build_caesar(root: Node3D, palette: Dictionary) -> void:
+## Il catafratto è la cavalleria più pesante del gioco: armatura anche sul
+## cavallo, dove tutte le altre unità a cavallo lasciano il manto scoperto —
+## dall'alto è una sagoma piena di metallo, senza il manto colorato a vista.
+static func _build_cataphractus(root: Node3D, palette: Dictionary) -> void:
 	_horse(root, palette)
+	# Corazzatura del cavallo: piastre metalliche sovrapposte al manto, che
+	# coprono petto e fianchi dov'è nudo su ogni altro cavallo del gioco.
+	_add(root, _box(Vector3(0.29, 0.09, 0.30)), palette["metal"],
+		_xf(Vector3(0, 0.52, 0.10)))
+	_add(root, _box(Vector3(0.30, 0.07, 0.22)), palette["metal"],
+		_xf(Vector3(0, 0.46, -0.14)))
 	var rider := Node3D.new()
 	rider.position = Vector3(0, 0.52, -0.02)
 	root.add_child(rider)
-	_humanoid(rider, palette, {"tunic": palette["primary"], "scale": 0.82, "legs": false})
-	# Mantello: un trapezio appiattito che si apre dietro le spalle.
-	_add(rider, _prism(Vector3(0.46, 0.42, 0.05), 0.35), palette["primary"],
-		_xf(Vector3(0, 0.34, -0.14), Vector3(12, 0, 0)))
-	# Corona d'alloro.
-	_add(rider, _torus(0.075, 0.10), palette["secondary"],
-		_xf(Vector3(0, 0.60, 0)))
-	_gladius(rider, palette)
+	_humanoid(rider, palette, {"tunic": palette["metal"], "scale": 0.84, "legs": false})
+	# Corazza lamellare sul busto del cavaliere, sopra la tunica.
+	_add(rider, _box(Vector3(0.34, 0.20, 0.16)), palette["metal"],
+		_xf(Vector3(0, 0.41, 0.03)))
+	# Contus: la lancia lunga impugnata a due mani, ben oltre la portata
+	# dell'hasta dell'equite.
+	_add(rider, _cylinder(0.018, 0.86), palette["wood"],
+		_xf(Vector3(0.18, 0.36, 0.20), Vector3(80, 0, 0)))
+	_add(rider, _cone(0.038, 0.11), palette["metal"],
+		_xf(Vector3(0.18, 0.44, 0.61), Vector3(80, 0, 0)))
 
 
 ## L'arciere si legge dall'arco: un arco teso è l'unica curva ampia in tutto
@@ -204,9 +298,10 @@ static func _build_sagittarius(root: Node3D, palette: Dictionary) -> void:
 			_xf(Vector3(-0.17 + i * 0.03, 0.62, -0.13), Vector3(0, 0, 24)))
 
 
-## La balista è una macchina: larga, bassa, senza gambe. La sagoma a T con le
-## braccia aperte la distingue da qualunque fante anche a occhio nudo dall'alto.
-static func _build_ballista(root: Node3D, palette: Dictionary) -> void:
+## La balista dei balistari è una macchina: larga, bassa, senza gambe. La
+## sagoma a T con le braccia aperte la distingue da qualunque fante anche a
+## occhio nudo dall'alto.
+static func _build_ballistarius(root: Node3D, palette: Dictionary) -> void:
 	# Telaio e ruote.
 	_add(root, _box(Vector3(0.46, 0.10, 0.52)), palette["wood"],
 		_xf(Vector3(0, 0.16, 0)))
@@ -244,26 +339,6 @@ static func _build_equites(root: Node3D, palette: Dictionary) -> void:
 	# Parma: scudo ovale, schiacciato per leggersi dall'alto.
 	_add(rider, _cylinder(0.15, 0.04), palette["secondary"],
 		_xf(Vector3(-0.20, 0.30, 0.06), Vector3(0, 0, 90)))
-
-
-## La vestale non ha armi: veste lunga a campana e braciere acceso. Dall'alto è
-## un cerchio pieno con un punto luminoso, l'opposto di una sagoma armata.
-static func _build_vestal(root: Node3D, palette: Dictionary) -> void:
-	_add(root, _tapered(0.26, 0.11, 0.56), palette["cloth"],
-		_xf(Vector3(0, 0.28, 0)))
-	_add(root, _box(Vector3(0.24, 0.20, 0.17)), palette["cloth"],
-		_xf(Vector3(0, 0.62, 0)))
-	_add(root, _sphere(0.078), palette["skin"],
-		_xf(Vector3(0, 0.79, 0)))
-	# Velo.
-	_add(root, _tapered(0.11, 0.075, 0.16), palette["primary"],
-		_xf(Vector3(0, 0.80, -0.01)))
-	# Braciere del fuoco sacro, tenuto davanti.
-	_add(root, _tapered(0.10, 0.06, 0.09), palette["secondary"],
-		_xf(Vector3(0, 0.58, 0.22)))
-	var flame := _add(root, _cone(0.075, 0.18), Color(1.0, 0.62, 0.18),
-		_xf(Vector3(0, 0.70, 0.22)))
-	_make_emissive(flame, Color(1.0, 0.55, 0.15), 1.6)
 
 
 # --------------------------------------------------------------------------
@@ -381,27 +456,31 @@ static func _build_gaul_champion(root: Node3D, palette: Dictionary) -> void:
 		_xf(Vector3(0, 0.80, 0.12), Vector3(70, 0, 0)))
 
 
-## Vercingetorige, il capo a cavallo: mantello, elmo cornuto e l'insegna
-## piantata sulla sella — dall'alto è l'unica unità con un'asta che esce
-## verticale dalla sagoma.
-static func _build_vercingetorix(root: Node3D, palette: Dictionary) -> void:
-	_horse(root, palette)
-	var rider := Node3D.new()
-	rider.position = Vector3(0, 0.52, -0.02)
-	root.add_child(rider)
-	_humanoid(rider, palette, {"tunic": palette["primary"], "scale": 0.84, "legs": false})
+## Il Solduros è la guardia giurata del capo: un fante pesante, non un
+## cavaliere, perché il giuramento dei Solduri li lega a terra, al fianco dei
+## compagni, non in sella. Porta comunque il vessillo della tribù — piantato
+## sul dorso invece che sulla sella — che resta l'unica asta verticale della
+## sagoma vista dall'alto, e l'elmo cornuto che segnalava il capo in battaglia.
+static func _build_solduros(root: Node3D, palette: Dictionary) -> void:
+	_humanoid(root, palette, {"tunic": palette["primary"], "scale": 1.14, "shoulders": 0.36})
 	var cloak: Color = palette["primary"]
-	_cloak(rider, cloak.darkened(0.25), 0.34, 0.44)
-	_torque(rider, palette)
-	_horns(rider, palette["cloth"], 0.66)
-	_long_sword(rider, palette, 0.40)
-	# Insegna: asta, drappo e il cinghiale in cima.
-	_add(rider, _cylinder(0.016, 0.66), palette["wood"],
-		_xf(Vector3(-0.24, 0.52, -0.06)))
-	_add(rider, _box(Vector3(0.03, 0.16, 0.18)), palette["secondary"],
-		_xf(Vector3(-0.24, 0.70, -0.14)))
-	_add(rider, _box(Vector3(0.05, 0.06, 0.14)), palette["secondary"],
-		_xf(Vector3(-0.24, 0.88, -0.04)))
+	_cloak(root, cloak.darkened(0.25), 0.34, 0.44)
+	_torque(root, palette)
+	_horns(root, palette["cloth"], 0.70)
+	_long_sword(root, palette, 0.46)
+	# Scudo ovale, stretto al corpo come nella parete di scudi dei Solduri.
+	var shield := _add(root, _cylinder(0.19, 0.05), palette["secondary"],
+		_xf(Vector3(-0.23, 0.42, 0.06), Vector3(90, 0, 0)))
+	shield.scale = Vector3(1.0, 1.0, 1.35)
+	_add(root, _sphere(0.05), palette["metal"],
+		_xf(Vector3(-0.27, 0.42, 0.06), Vector3.ZERO, Vector3(0.6, 1, 1)))
+	# Insegna sul dorso: asta, drappo e il cinghiale in cima.
+	_add(root, _cylinder(0.016, 0.66), palette["wood"],
+		_xf(Vector3(0, 0.30, -0.22), Vector3(-8, 0, 0)))
+	_add(root, _box(Vector3(0.03, 0.16, 0.18)), palette["secondary"],
+		_xf(Vector3(0, 0.55, -0.30)))
+	_add(root, _box(Vector3(0.05, 0.06, 0.14)), palette["secondary"],
+		_xf(Vector3(0, 0.68, -0.24)))
 
 
 ## Il fromboliere fa roteare la fionda sopra la testa: il cerchio di corda è un
@@ -776,9 +855,9 @@ static func _horse(parent: Node3D, palette: Dictionary) -> void:
 		_xf(Vector3(0, 0.57, -0.04)))
 
 
-## Corpo in veste lunga, senza gambe né braccia distinte: la base di druidi,
-## veggenti e vestali. In pianta è un cerchio pieno, l'opposto di una sagoma
-## armata, ed è così che si riconosce un lanciatore di incantesimi a distanza.
+## Corpo in veste lunga, senza gambe né braccia distinte: la base di druidi e
+## veggenti. In pianta è un cerchio pieno, l'opposto di una sagoma armata, ed è
+## così che si riconosce un lanciatore di incantesimi a distanza.
 static func _robed(parent: Node3D, palette: Dictionary, hood_color: Color) -> void:
 	_add(parent, _tapered(0.25, 0.12, 0.54), palette["cloth"],
 		_xf(Vector3(0, 0.27, 0)))

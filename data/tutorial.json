@@ -1,0 +1,72 @@
+{
+  "_comment": "Testi di onboarding: la schermata Guida e i suggerimenti one-shot in partita. I segnaposto {chiave} vengono sostituiti a runtime con valori letti da balance.json, mai scritti a mano nel testo.",
+
+  "guide": [
+    {
+      "id": "obiettivo",
+      "title": "Obiettivo",
+      "body": "Siete in {players} alla partenza. Ogni round il vostro schieramento affronta quello di un avversario, in automatico. Chi perde subisce danni alla propria vita: resta in gioco l'ultimo che non arriva a zero."
+    },
+    {
+      "id": "economia",
+      "title": "Oro e interessi",
+      "body": "Guadagnate oro a ogni round. Tenerne un po' da parte invece di spenderlo tutto rende di più: ogni {interest_per} oro risparmiato frutta 1 oro di interesse, fino a un massimo di {max_interest}."
+    },
+    {
+      "id": "negozio",
+      "title": "Negozio e stelle",
+      "body": "Le unità si comprano dal negozio: il pool da cui vengono pescate è condiviso con tutti gli avversari, quindi ciò che comprano loro non lo trovate voi. Tre copie uguali diventano automaticamente un'unità a 2 stelle, più forte; tre da 2 stelle diventano una da 3."
+    },
+    {
+      "id": "schieramento",
+      "title": "Schieramento",
+      "body": "Solo le unità sul campo combattono: quelle in panchina restano a guardare. La prima fila del campo è quella a contatto con il nemico, quindi è lì che vanno le unità pensate per incassare i colpi."
+    },
+    {
+      "id": "sinergie",
+      "title": "Sinergie",
+      "body": "Unità della stessa civiltà o dello stesso ruolo attivano bonus di squadra al raggiungimento di certe soglie. Le trovate elencate come chip sotto al campo: piene quando sono attive, vuote quando manca ancora qualche unità."
+    },
+    {
+      "id": "combattimento",
+      "title": "La battaglia",
+      "body": "Durante il combattimento non si controlla nulla: ogni decisione va presa prima, in preparazione. Potete solo accelerare la riproduzione o saltare dritti al risultato."
+    },
+    {
+      "id": "livello",
+      "title": "Livello ed esperienza",
+      "body": "Salire di livello aumenta quante unità potete schierare e migliora le probabilità di trovare unità costose nel negozio. Comprare esperienza costa {buy_xp_cost} oro."
+    }
+  ],
+
+  "tips": {
+    "shop": {
+      "title": "Il negozio",
+      "body": "Da qui si comprano le unità. Toccatene una per portarla in panchina: costa oro, e se il negozio non vi piace potete aggiornarlo per {reroll_cost} oro."
+    },
+    "bench": {
+      "title": "La panchina",
+      "body": "Le unità comprate finiscono qui. Da sole non combattono: toccatele e poi toccate una cella del campo per schierarle."
+    },
+    "board": {
+      "title": "La prima fila",
+      "body": "Avete selezionato un'unità: toccate una cella del campo per schierarla. La fila più vicina al bordo è quella che incassa i colpi per prima."
+    },
+    "star": {
+      "title": "Tre copie, una stella",
+      "body": "Tre copie della stessa unità si fondono da sole in una a 2 stelle, molto più forte della somma delle singole. Vale la pena tenerne in panchina invece di venderle subito."
+    },
+    "synergy": {
+      "title": "Sinergie attive",
+      "body": "Le chip sotto al campo mostrano quali bonus di squadra sono attivi. Toccatene una per vedere a quante unità serve la soglia successiva."
+    },
+    "combat": {
+      "title": "Si combatte da soli",
+      "body": "Avete appena visto la prima battaglia: si svolge tutta in automatico. Preparatevi meglio per il prossimo round mentre l'oro è ancora vostro."
+    },
+    "economy": {
+      "title": "Interessi",
+      "body": "Ogni {interest_per} oro tenuto da parte frutta 1 oro di interesse a fine round, fino a {max_interest}. Spendere tutto ogni volta costa più di quanto sembri."
+    }
+  }
+}

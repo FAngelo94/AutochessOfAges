@@ -143,7 +143,7 @@ func _resolve_matchup(matchup: Dictionary) -> Dictionary:
 
 	if player_b == null:
 		# Nessun avversario disponibile: round a vuoto, nessun danno.
-		return {"player": player_a, "opponent": null, "won": true, "damage": 0, "ghost": true, "team": 0, "combat": {}}
+		return {"player": player_a, "opponent": null, "won": true, "damage": 0, "damage_dealt": 0, "ghost": true, "team": 0, "combat": {}}
 
 	# Il seed del combattimento deriva da partita e round: rigiocare lo stesso
 	# round con le stesse squadre dà lo stesso risultato.
@@ -174,6 +174,7 @@ func _resolve_matchup(matchup: Dictionary) -> Dictionary:
 		"opponent": player_b,
 		"won": a_won,
 		"damage": damage_to_a,
+		"damage_dealt": damage_to_b if a_won else 0,
 		"ghost": matchup.get("ghost", false),
 		"team": 0,
 		"combat": combat_result,
@@ -184,6 +185,7 @@ func _resolve_matchup(matchup: Dictionary) -> Dictionary:
 			"opponent": player_a,
 			"won": b_won,
 			"damage": damage_to_b,
+			"damage_dealt": damage_to_a if b_won else 0,
 			"ghost": false,
 			"team": 1,
 			"combat": combat_result,

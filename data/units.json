@@ -14,7 +14,23 @@
         "description": "Si copre con lo scudo: ottiene uno scudo e riflette parte dei danni per 4 secondi.",
         "type": "shield_self",
         "params": { "amount": [250, 425, 750], "duration": 4.0, "reflect": 0.25 }
-      }
+      },
+      "lore": "Il legionario era il fante pesante dell'esercito romano dopo la riforma di Mario (fine II secolo a.C.), un soldato professionista arruolato per lunghe ferme e non più il cittadino-contadino richiamato in guerra. Combatteva in ranghi serrati, protetto dallo scutum (lo scudo rettangolare semicilindrico), dalla lorica (corazza a segmenti o a maglia) e dal galea (elmo); l'arma d'assalto era il pilum, il giavellotto pesante lanciato per scompaginare le linee nemiche prima del corpo a corpo, risolto poi con il gladio, la spada corta ideale per colpire di punta a distanza ravvicinata. La formazione a testuggine, con gli scudi uniti sopra le teste, lo rendeva quasi invulnerabile ai proiettili durante gli assedi."
+    },
+    {
+      "id": "velites",
+      "name": "Velite",
+      "origin": "roman",
+      "classes": ["legionary"],
+      "cost": 1,
+      "stats": { "hp": 560, "attack_damage": 48, "attack_speed": 0.85, "range": 2, "armor": 18, "magic_resist": 18, "mana_max": 55, "mana_start": 5 },
+      "ability": {
+        "name": "Volo di giavellotti",
+        "description": "Scaglia una raffica di giavellotti sui due nemici più vicini.",
+        "type": "damage_nearest",
+        "params": { "damage": [150, 225, 400], "targets": 2 }
+      },
+      "lore": "I veliti erano la fanteria leggera della legione repubblicana, reclutata fra i cittadini più poveri (i capite censi, che non potevano permettersi l'equipaggiamento pesante del legionario). Portavano solo una parma, un piccolo scudo rotondo, e nessuna corazza, spesso riconoscibili per una pelle di lupo indossata sull'elmo come segno distintivo. La loro arma era l'hasta velitaris, un mazzo di giavellotti leggeri lanciati contro il nemico prima dello scontro, per poi ritirarsi rapidamente attraverso i varchi lasciati aperti nei ranghi dei manipoli più pesanti alle loro spalle."
     },
     {
       "id": "sagittarius",
@@ -28,11 +44,12 @@
         "description": "Scaglia una freccia infuocata sul bersaglio più lontano, infliggendo danno magico ad area.",
         "type": "damage_splash",
         "params": { "damage": [220, 330, 550], "radius": 1, "target": "farthest" }
-      }
+      },
+      "lore": "Roma non coltivò mai una grande tradizione di arcieri fra i propri cittadini, preferendo la fanteria pesante da corpo a corpo: i sagittari erano perciò per lo più truppe ausiliarie reclutate in Oriente, soprattutto a Creta e in Siria, regioni con una lunga tradizione di tiro con l'arco composito. Vestivano leggeri per non rallentare il tiro, e operavano in appoggio alle linee di legionari, colpendo da distanza prima dell'urto e continuando a bersagliare i fianchi durante la battaglia."
     },
     {
-      "id": "ballista",
-      "name": "Balista",
+      "id": "ballistarius",
+      "name": "Balistari",
       "origin": "roman",
       "classes": ["siege"],
       "cost": 2,
@@ -42,7 +59,8 @@
         "description": "Un dardo attraversa la fila e colpisce ogni nemico sulla traiettoria.",
         "type": "damage_line",
         "params": { "damage": [200, 300, 500], "target": "current" }
-      }
+      },
+      "lore": "I balistari erano gli artiglieri addetti alla balista, una macchina da lancio a torsione che scagliava dardi pesanti con una precisione micidiale su lunghe distanze, erede delle macchine greche perfezionata dagli ingegneri romani. Impiegata sia negli assedi sia in campo aperto, a partire dal tardo impero venne organizzata in reparti stabili di specialisti, i ballistarii appunto, integrati nelle legioni come corpo d'artiglieria permanente."
     },
     {
       "id": "equites",
@@ -56,11 +74,12 @@
         "description": "Carica il nemico più lontano infliggendo danno e stordendolo.",
         "type": "stun_target",
         "params": { "damage": [180, 270, 450], "duration": [1.2, 1.5, 2.5], "target": "farthest" }
-      }
+      },
+      "lore": "Gli equites erano in origine i cittadini abbastanza ricchi da mantenere un cavallo proprio, l'ordine equestre della prima repubblica, e prestavano servizio come cavalleria di linea. Con l'espansione di Roma il loro ruolo militare passò sempre più agli alleati e agli ausiliari, ma il nome restò legato al cavaliere romano equipaggiato con hasta (una lancia leggera) e parma equestris, uno scudo rotondo più piccolo di quello della fanteria, usato per esplorazione, inseguimento del nemico in rotta e protezione dei fianchi dello schieramento."
     },
     {
       "id": "centurio",
-      "name": "Centurione",
+      "name": "Pretoriano",
       "origin": "roman",
       "classes": ["legionary"],
       "cost": 4,
@@ -70,36 +89,23 @@
         "description": "Concede uno scudo a sé e ai due alleati più vicini, e aumenta la loro armatura.",
         "type": "shield_allies",
         "params": { "amount": [280, 420, 700], "allies": 2, "armor": [20, 30, 55], "duration": 6.0 }
-      }
+      },
+      "lore": "I pretoriani formavano la guardia imperiale, istituita da Augusto per proteggere l'imperatore e riunire in un solo corpo scelto le antiche coorti pretorie che scortavano i generali in campagna. Erano meglio pagati e meglio equipaggiati dei legionari di linea, con ferme più brevi e un equipaggiamento spesso più ricco e ornato, di stanza a Roma nel Castra Praetoria. Oltre al ruolo militare di scorta e protezione, divennero nel tempo un attore politico decisivo, capace di fare e disfare imperatori."
     },
     {
-      "id": "caesar",
-      "name": "Cesare",
+      "id": "cataphractus",
+      "name": "Catafratto",
       "origin": "roman",
-      "classes": ["legionary", "cavalry"],
+      "classes": ["cavalry"],
       "cost": 5,
-      "stats": { "hp": 1200, "attack_damage": 110, "attack_speed": 0.75, "range": 1, "armor": 50, "magic_resist": 50, "mana_max": 100, "mana_start": 30 },
+      "stats": { "hp": 1300, "attack_damage": 100, "attack_speed": 0.65, "range": 1, "armor": 60, "magic_resist": 45, "mana_max": 100, "mana_start": 25 },
       "ability": {
-        "name": "Alea iacta est",
-        "description": "Ordina l'assalto: tutti gli alleati guadagnano velocità d'attacco e Cesare colpisce ad area davanti a sé.",
+        "name": "Cuneo corazzato",
+        "description": "Carica in formazione serrata: infligge danno ad area davanti a sé e aumenta la velocità d'attacco degli alleati vicini.",
         "type": "rally",
-        "params": { "damage": [350, 525, 1100], "radius": 1, "attack_speed_bonus": [0.30, 0.45, 0.90], "duration": 8.0 }
-      }
-    },
-
-    {
-      "id": "vestal",
-      "name": "Vestale",
-      "origin": "roman",
-      "classes": ["druid"],
-      "cost": 2,
-      "stats": { "hp": 620, "attack_damage": 45, "attack_speed": 0.65, "range": 3, "armor": 20, "magic_resist": 35, "mana_max": 60, "mana_start": 15 },
-      "ability": {
-        "name": "Fuoco sacro",
-        "description": "Cura l'alleato più ferito e brucia il nemico più vicino.",
-        "type": "heal_lowest_ally",
-        "params": { "amount": [240, 360, 640], "regen": [10, 18, 32], "duration": 5.0 }
-      }
+        "params": { "damage": [380, 570, 1150], "radius": 1, "attack_speed_bonus": [0.25, 0.40, 0.85], "duration": 8.0 }
+      },
+      "lore": "I catafratti erano cavalieri corazzati da capo a piedi, cavallo compreso, un modello di cavalleria pesante appreso da Roma dai propri avversari orientali — Parti e Sarmati — e adottato su larga scala nel tardo impero. L'armatura, a lamelle o a maglia, copriva anche il destriero (spesso indicato come cataphractarius o clibanarius nelle fonti), e la lancia lunga (contus) impugnata a due mani permetteva una carica d'urto devastante contro la fanteria nemica, pagata però con una mobilità molto inferiore a quella della cavalleria leggera."
     },
     {
       "id": "clansman",
@@ -172,15 +178,15 @@
       }
     },
     {
-      "id": "vercingetorix",
-      "name": "Vercingetorige",
+      "id": "solduros",
+      "name": "Solduros",
       "origin": "gaul",
-      "classes": ["berserker", "cavalry"],
+      "classes": ["legionary", "berserker"],
       "cost": 5,
-      "stats": { "hp": 1150, "attack_damage": 115, "attack_speed": 0.80, "range": 1, "armor": 40, "magic_resist": 40, "mana_max": 90, "mana_start": 20 },
+      "stats": { "hp": 1200, "attack_damage": 110, "attack_speed": 0.75, "range": 1, "armor": 48, "magic_resist": 44, "mana_max": 90, "mana_start": 20 },
       "ability": {
-        "name": "Rivolta delle tribù",
-        "description": "Ogni alleato caduto lo rende più forte: infligge danno ad area e ruba salute per 10 secondi.",
+        "name": "Giuramento dei Solduri",
+        "description": "Ogni alleato caduto rinsalda il suo giuramento: infligge danno ad area e ruba salute per 10 secondi.",
         "type": "rally",
         "params": { "damage": [300, 450, 950], "radius": 1, "attack_speed_bonus": [0.25, 0.40, 0.85], "omnivamp": 0.30, "duration": 10.0, "self_only": true }
       }

@@ -11,6 +11,7 @@ var classes: PackedStringArray
 var cost: int
 var base_stats: Dictionary
 var ability: Dictionary
+var lore: String
 
 
 static func from_dict(dict: Dictionary) -> UnitDef:
@@ -22,6 +23,7 @@ static func from_dict(dict: Dictionary) -> UnitDef:
 	def.cost = int(dict["cost"])
 	def.base_stats = dict["stats"]
 	def.ability = dict.get("ability", {})
+	def.lore = String(dict.get("lore", ""))
 	return def
 
 
@@ -65,11 +67,9 @@ func ability_type() -> String:
 	return ability.get("type", "")
 
 
-## Prezzo di vendita. Le copie a 2★/3★ costano rispettivamente 3 e 9 acquisti,
-## ma per convenzione del genere il rimborso pieno vale solo per le 1★:
-## salire di stella è un investimento che non si disfa senza perdita.
+## Prezzo di vendita: sempre la cifra spesa per ottenere l'unità meno 1,
+## a qualunque stella. Vendere fa quindi sempre perdere 1 oro rispetto
+## all'investimento fatto.
 func sell_value(star: int) -> int:
-	if star <= 1:
-		return cost
 	var copies: int = int(pow(GameData.balance()["match"]["copies_to_upgrade"], star - 1))
 	return cost * copies - 1

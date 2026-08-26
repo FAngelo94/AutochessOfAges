@@ -15,10 +15,12 @@ func _initialize() -> void:
 	GameData.ensure_loaded()
 
 	_test_data_integrity()
+	_test_tutorial_data()
 	_test_hex_grid()
 	_test_rng_determinism()
 	_test_pool_conservation()
 	_test_upgrade_cascade()
+	_test_heroes()
 	_test_economy()
 	_test_combat_determinism()
 	_test_traits()
@@ -177,6 +179,89 @@ func _test_data_integrity() -> void:
 				unreachable.append("%s %d" % [trait_id, int(tier["count"])])
 	check(unreachable.is_empty(), "ogni soglia dei tratti è raggiungibile", ", ".join(unreachable))
 
+	var heroes := GameData.all_heroes()
+	check(heroes.size() >= 2, "heroes.json contiene almeno 2 eroi", str(heroes.size()))
+
+	var unit_ids := {}
+	for def in units:
+		unit_ids[def.id] = true
+	var colliding_hero := ""
+	var bad_hero_origin := ""
+	for hdef in heroes:
+		if unit_ids.has(hdef.id):
+			colliding_hero = hdef.id
+		if not known_origins.has(hdef.origin):
+			bad_hero_origin = hdef.id
+	check(colliding_hero == "", "nessun id eroe coincide con un id unità", colliding_hero)
+	check(bad_hero_origin == "", "ogni eroe ha una civiltà nota (per la palette del modello)", bad_hero_origin)
+
+
+## Verifica solo i dati (data/tutorial.json), senza costruire nessuna UI: la
+## guida e le bolle vengono provate con lo schermo vero in menu_smoke.gd e
+## ui_smoke.gd, qui si controlla solo che il contenuto sia coerente.
+func _test_tutorial_data() -> void:
+	section("Dati del tutorial")
+
+	var tutorial := GameData.tutorial()
+	check(tutorial.has("guide") and tutorial.has("tips"),
+		"tutorial.json ha sia 'guide' sia 'tips'")
+
+	var sections: Array = GameData.guide_sections()
+	check(not sections.is_empty(), "la guida ha almeno un capitolo")
+
+	var bad_section := ""
+	var seen_ids := {}
+	var duplicate_id := ""
+	for entry in sections:
+		var id := String(entry.get("id", ""))
+		var title := String(entry.get("title", ""))
+		var body := String(entry.get("body", ""))
+		if id.is_empty() or title.is_empty() or body.is_empty():
+			bad_section = id if not id.is_empty() else title
+		if seen_ids.has(id):
+			duplicate_id = id
+		seen_ids[id] = true
+	check(bad_section == "", "ogni capitolo ha id, titolo e corpo non vuoti", bad_section)
+	check(duplicate_id == "", "gli id dei capitoli sono unici", duplicate_id)
+
+	# Ogni id usato dal codice deve avere una voce nel JSON: altrimenti
+	# TipBubble.queue_tip scarta silenziosamente il suggerimento (push_error
+	# a parte) e la bolla non compare mai.
+	var missing_tip := ""
+	for tip_id in TipBubble.KNOWN_TIPS:
+		if GameData.tip(tip_id).is_empty():
+			missing_tip = tip_id
+	check(missing_tip == "", "ogni id noto a TipBubble esiste in tutorial.json", missing_tip)
+
+	for tip_id in GameData.tutorial().get("tips", {}).keys():
+		var entry: Dictionary = GameData.tip(tip_id)
+		var ok := not String(entry.get("title", "")).is_empty() and not String(entry.get("body", "")).is_empty()
+		check(ok, "il suggerimento '%s' ha titolo e corpo non vuoti" % tip_id)
+
+	# Ogni segnaposto {chiave} nei testi deve corrispondere a una chiave che
+	# TutorialText.expand sa risolvere: altrimenti resterebbe "{chiave}"
+	# letterale a schermo.
+	var known_placeholders := ["players", "interest_per", "max_interest", "reroll_cost", "buy_xp_cost"]
+	var all_texts: Array[String] = []
+	for entry in sections:
+		all_texts.append(String(entry.get("body", "")))
+	for tip_id in GameData.tutorial().get("tips", {}).keys():
+		all_texts.append(String(GameData.tip(tip_id).get("body", "")))
+
+	var regex := RegEx.new()
+	regex.compile("\\{(\\w+)\\}")
+	var unknown_placeholder := ""
+	var unresolved_after_expand := ""
+	for text in all_texts:
+		for m in regex.search_all(text):
+			var placeholder := m.get_string(1)
+			if not known_placeholders.has(placeholder):
+				unknown_placeholder = placeholder
+		if "{" in TutorialText.expand(text):
+			unresolved_after_expand = text
+	check(unknown_placeholder == "", "ogni segnaposto usato è risolvibile da TutorialText", unknown_placeholder)
+	check(unresolved_after_expand == "", "TutorialText.expand risolve tutti i segnaposto presenti", unresolved_after_expand)
+
 
 func _test_rng_determinism() -> void:
 	section("RNG")
@@ -310,6 +395,75 @@ func _count_at_star(player: Player, unit_id: String, star: int) -> int:
 	return count
 
 
+func _test_heroes() -> void:
+	section("Eroi")
+
+	var pool := UnitPool.new()
+
+	# Cesare: 3-6 oro casuali a ogni sconfitta, sempre nel range, riproducibile
+	# a parità di seed. È l'unica fonte di casualità nuova aggiunta dagli eroi,
+	# quindi va verificata contro il rischio più grave del progetto: se non
+	# passasse dallo SimRNG del player, romperebbe il determinismo.
+	var cesare := Player.new(pool, SimRNG.new(42))
+	cesare.hero_id = "cesare"
+	var bonuses: Array[int] = []
+	for i in 200:
+		var income := cesare.grant_round_income(false)
+		bonuses.append(int(income["hero_bonus"]))
+	var out_of_range := bonuses.filter(func(b: int) -> bool: return b < 3 or b > 6)
+	check(out_of_range.is_empty(), "il bonus di Cesare resta sempre tra 3 e 6",
+		str(out_of_range))
+
+	var cesare_repeat := Player.new(pool, SimRNG.new(42))
+	cesare_repeat.hero_id = "cesare"
+	var repeated: Array[int] = []
+	for i in 200:
+		repeated.append(int(cesare_repeat.grant_round_income(false)["hero_bonus"]))
+	check(bonuses == repeated, "il bonus di Cesare è riproducibile a parità di seed")
+
+	var no_hero := Player.new(pool, SimRNG.new(7))
+	check(int(no_hero.grant_round_income(false)["hero_bonus"]) == 0,
+		"senza eroe selezionato non c'è alcun bonus")
+
+	# Vercingetorige: 1 oro per ogni evento di fusione. Comprando quattro copie
+	# una alla volta si fondono le prime due in una 2★, le altre due in
+	# un'altra 2★, e infine le due 2★ in una 3★: tre fusioni in tutto (lo
+	# stesso conteggio verificato da "quattro copie diventano una 3★" sopra).
+	var vercingetorige := Player.new(pool, SimRNG.new(9))
+	vercingetorige.hero_id = "vercingetorige"
+	vercingetorige.gold = 0
+	for i in 4:
+		vercingetorige.grant_unit("legionarius")
+	check(vercingetorige.gold == 3, "Vercingetorige guadagna 1 oro per ognuna delle tre fusioni della catena",
+		str(vercingetorige.gold))
+
+	# Bot: l'eroe assegnato deve essere valido e deterministico a parità di seed.
+	var seed_value := 4242
+	var match_a := MatchState.new(seed_value, 1)
+	var brain_rng_a := SimRNG.new(match_a.seed_value ^ 0x5EED)
+	var bot_heroes_a: Array[String] = []
+	for p in match_a.players:
+		if p.is_bot:
+			BotBrain.new(p, brain_rng_a.fork(p.index))
+			bot_heroes_a.append(p.hero_id)
+
+	var match_b := MatchState.new(seed_value, 1)
+	var brain_rng_b := SimRNG.new(match_b.seed_value ^ 0x5EED)
+	var bot_heroes_b: Array[String] = []
+	for p in match_b.players:
+		if p.is_bot:
+			BotBrain.new(p, brain_rng_b.fork(p.index))
+			bot_heroes_b.append(p.hero_id)
+
+	var invalid_bot_hero := ""
+	for hero_id in bot_heroes_a:
+		if not GameData.has_hero(hero_id):
+			invalid_bot_hero = hero_id
+	check(invalid_bot_hero == "", "ogni bot riceve un eroe valido", invalid_bot_hero)
+	check(bot_heroes_a == bot_heroes_b,
+		"a parità di seed i bot ricevono sempre gli stessi eroi")
+
+
 func _test_economy() -> void:
 	section("Economia")
 
@@ -349,7 +503,7 @@ func _test_traits() -> void:
 	var player := Player.new(pool, SimRNG.new(6))
 	player.level = 6  # servono abbastanza slot per schierare tutta la formazione
 
-	var roman_ids := ["legionarius", "sagittarius", "ballista", "equites"]
+	var roman_ids := ["legionarius", "sagittarius", "ballistarius", "equites"]
 	var column := 0
 	for unit_id in roman_ids:
 		var unit := player.grant_unit(unit_id)
@@ -420,7 +574,7 @@ func _simulate_reference_battle(battle_seed: int) -> Dictionary:
 	var player_a := Player.new(pool, SimRNG.new(1))
 	var player_b := Player.new(pool, SimRNG.new(2))
 
-	_deploy(player_a, ["legionarius", "sagittarius", "equites", "ballista"], 0)
+	_deploy(player_a, ["legionarius", "sagittarius", "equites", "ballistarius"], 0)
 	_deploy(player_b, ["clansman", "gaul_hunter", "chariot", "gaul_druid"], 0)
 
 	var sim := CombatSim.new(SimRNG.new(battle_seed))
@@ -468,7 +622,7 @@ func _simulate_asymmetric_battle(battle_seed: int) -> int:
 
 	strong.level = 6
 	for i in 4:
-		var unit := strong.grant_unit("caesar", 3)
+		var unit := strong.grant_unit("cataphractus", 3)
 		strong.move_to_board(unit, Vector2i(i + 1, 1))
 	weak.level = 6
 	for i in 4:
@@ -596,7 +750,7 @@ func _test_replay_log() -> void:
 	var pool := UnitPool.new()
 	var player_a := Player.new(pool, SimRNG.new(30))
 	var player_b := Player.new(pool, SimRNG.new(31))
-	_deploy(player_a, ["legionarius", "sagittarius", "vestal", "equites"], 0)
+	_deploy(player_a, ["legionarius", "sagittarius", "velites", "equites"], 0)
 	_deploy(player_b, ["clansman", "gaul_hunter", "gaul_druid", "chariot"], 0)
 
 	var sim := CombatSim.new(SimRNG.new(555))

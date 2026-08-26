@@ -13,6 +13,10 @@ signal changed
 var index: int = 0
 var display_name: String = "Giocatore"
 var is_bot: bool = false
+## Id dell'eroe scelto, o "" per nessun eroe. Il default "cesare" è una
+## regola di menu/match-setup (Profile.effective_hero()), non del costruttore:
+## i test esistenti su Player.new() grezzi assumono nessun bonus eroe.
+var hero_id: String = ""
 
 var hp: int
 var gold: int
@@ -270,7 +274,12 @@ func grant_round_income(won: bool) -> Dictionary:
 		if absi(streak) >= int(threshold["streak"]):
 			streak_bonus = int(threshold["gold"])
 
-	var total := base + interest + win_bonus + streak_bonus
+	var hero_bonus := 0
+	if not won and hero_id == "cesare":
+		var params: Dictionary = GameData.hero("cesare").ability_params
+		hero_bonus = _rng.randi_range_ex(int(params["min"]), int(params["max"]) + 1)
+
+	var total := base + interest + win_bonus + streak_bonus + hero_bonus
 	gold += total
 	last_round_won = won
 	add_xp(int(GameData.balance()["levels"]["xp_per_round"]))
@@ -281,6 +290,7 @@ func grant_round_income(won: bool) -> Dictionary:
 		"interest": interest,
 		"win_bonus": win_bonus,
 		"streak_bonus": streak_bonus,
+		"hero_bonus": hero_bonus,
 		"streak": streak,
 		"total": total,
 	}
@@ -404,6 +414,11 @@ func _try_upgrade(unit_id: String, star: int) -> UnitInstance:
 
 	for i in needed:
 		units.erase(matching[i])
+
+	if hero_id == "vercingetorige":
+		var params: Dictionary = GameData.hero("vercingetorige").ability_params
+		gold += int(params["gold_per_merge"])
+		changed.emit()
 
 	var upgraded := UnitInstance.create(GameData.unit(unit_id), star + 1)
 	upgraded.uid = _next_uid

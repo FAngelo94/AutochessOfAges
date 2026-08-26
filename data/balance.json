@@ -27,7 +27,7 @@
     "reroll_cost": 2,
     "buy_xp_cost": 4,
     "buy_xp_amount": 4,
-    "sell_refund_full_price": true
+    "sell_refund_full_price": false
   },
 
   "levels": {

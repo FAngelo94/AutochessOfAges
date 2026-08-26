@@ -38,7 +38,8 @@ const ZOOM := 1.85
 const BATCH := 8
 
 var _textures: Dictionary = {}
-var _queue: Array[String] = []
+## Ogni voce è {"id": String, "kind": "unit"|"hero"}.
+var _queue: Array[Dictionary] = []
 var _queued: Dictionary = {}
 ## Postazioni di rendering: {viewport, camera, model_root}, una per figura del
 ## gruppo in corso.
@@ -62,11 +63,21 @@ func is_available() -> bool:
 ## Ritratto dell'unità, o null se non è ancora pronto. La prima chiamata mette
 ## in coda la generazione; quando finisce arriva portrait_ready.
 func texture_for(unit_id: String) -> Texture2D:
-	if _textures.has(unit_id):
-		return _textures[unit_id]
-	if is_available() and not _queued.has(unit_id):
-		_queued[unit_id] = true
-		_queue.append(unit_id)
+	return _texture_for_impl(unit_id, "unit")
+
+
+## Ritratto dell'eroe, stessa logica asincrona di texture_for().
+func hero_texture_for(hero_id: String) -> Texture2D:
+	return _texture_for_impl(hero_id, "hero")
+
+
+func _texture_for_impl(id: String, kind: String) -> Texture2D:
+	var key := "%s:%s" % [kind, id]
+	if _textures.has(key):
+		return _textures[key]
+	if is_available() and not _queued.has(key):
+		_queued[key] = true
+		_queue.append({"id": id, "kind": kind})
 		_process_queue()
 	return null
 
@@ -78,8 +89,17 @@ func preload_units(unit_ids: Array) -> void:
 		texture_for(String(unit_id))
 
 
+func preload_heroes(hero_ids: Array) -> void:
+	for hero_id in hero_ids:
+		hero_texture_for(String(hero_id))
+
+
 func has_portrait(unit_id: String) -> bool:
-	return _textures.has(unit_id)
+	return _textures.has("unit:%s" % unit_id)
+
+
+func has_hero_portrait(hero_id: String) -> bool:
+	return _textures.has("hero:%s" % hero_id)
 
 
 ## Vero quando non resta nulla in coda. Serve agli strumenti che catturano
@@ -150,15 +170,27 @@ func _render_batch() -> void:
 		_busy = false
 		return
 
-	var rendering: Array[String] = []
+	var rendering: Array[Dictionary] = []
 	while not _queue.is_empty() and rendering.size() < _stations.size():
-		var unit_id: String = _queue.pop_front()
-		var def := GameData.unit(unit_id)
-		if def == null:
-			_queued.erase(unit_id)
-			continue
-		_prepare_station(_stations[rendering.size()], unit_id, def.origin)
-		rendering.append(unit_id)
+		var entry: Dictionary = _queue.pop_front()
+		var key := "%s:%s" % [entry["kind"], entry["id"]]
+		var model: Node3D = null
+		var height := 1.0
+		if entry["kind"] == "hero":
+			if not GameData.has_hero(entry["id"]):
+				_queued.erase(key)
+				continue
+			model = UnitModels.build_hero(entry["id"])
+			height = UnitModels.height_of_hero(entry["id"])
+		else:
+			if not GameData.has_unit(entry["id"]):
+				_queued.erase(key)
+				continue
+			var def := GameData.unit(entry["id"])
+			model = UnitModels.build(entry["id"], def.origin)
+			height = UnitModels.height_of(entry["id"])
+		_prepare_station(_stations[rendering.size()], model, height)
+		rendering.append(entry)
 
 	if rendering.is_empty():
 		_busy = false
@@ -167,28 +199,28 @@ func _render_batch() -> void:
 	await RenderingServer.frame_post_draw
 
 	for i in rendering.size():
-		var unit_id: String = rendering[i]
+		var entry: Dictionary = rendering[i]
+		var key := "%s:%s" % [entry["kind"], entry["id"]]
 		var viewport: SubViewport = _stations[i]["viewport"]
 		var image := viewport.get_texture().get_image()
 		if image != null and not image.is_empty():
-			_textures[unit_id] = ImageTexture.create_from_image(image)
-			portrait_ready.emit(unit_id)
-		_queued.erase(unit_id)
+			_textures[key] = ImageTexture.create_from_image(image)
+			portrait_ready.emit(entry["id"])
+		_queued.erase(key)
 
 	_busy = false
 	_process_queue()
 
 
-func _prepare_station(station: Dictionary, unit_id: String, origin: String) -> void:
+func _prepare_station(station: Dictionary, model: Node3D, height: float) -> void:
 	var model_root: Node3D = station["model_root"]
 	for child in model_root.get_children():
 		model_root.remove_child(child)
 		child.queue_free()
-	model_root.add_child(UnitModels.build(unit_id, origin))
+	model_root.add_child(model)
 
 	# La camera guarda il centro della figura, non i piedi: le unità basse
 	# (le macchine d'assedio) resterebbero altrimenti nella metà inferiore.
-	var height := UnitModels.height_of(unit_id)
 	# Il centro sta sopra la metà: elmi, creste e archi sporgono verso l'alto,
 	# mentre sotto i piedi non c'è nulla da inquadrare.
 	var centre := Vector3(0, height * 0.58, 0)

@@ -4,12 +4,12 @@ file esiste, art/unit_models.gd lo usa al posto della figura procedurale per
 quello stesso id; se manca, l'unita' ricade sulla figura procedurale come
 oggi.
 
-Id delle 20 unita' attuali (nome file atteso):
+Id delle 21 unita' attuali (nome file atteso):
 
-  legionarius.glb        caesar.glb              gaul_champion.glb
-  centurio.glb           sagittarius.glb         vercingetorix.glb
-  ballista.glb           equites.glb             gaul_slinger.glb
-  vestal.glb             clansman.glb            teuton_spearman.glb
+  legionarius.glb        cataphractus.glb        gaul_champion.glb
+  velites.glb             sagittarius.glb         solduros.glb
+  centurio.glb            equites.glb             gaul_slinger.glb
+  ballistarius.glb        clansman.glb            teuton_spearman.glb
   gaul_hunter.glb         gaul_druid.glb          teuton_skirmisher.glb
   chariot.glb            shieldmaiden.glb        seeress.glb
   battering_ram.glb      arminius.glb
