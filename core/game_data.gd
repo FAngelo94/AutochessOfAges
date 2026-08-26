@@ -1,0 +1,139 @@
+class_name GameData
+extends RefCounted
+
+## Accesso ai file JSON di data/. Caricamento pigro e memorizzato: i JSON
+## vengono letti una volta sola per esecuzione.
+##
+## Tutta la simulazione legge i numeri da qui, mai da costanti sparse nel
+## codice: il bilanciamento si tocca in data/, non in core/.
+
+const UNITS_PATH := "res://data/units.json"
+const TRAITS_PATH := "res://data/traits.json"
+const BALANCE_PATH := "res://data/balance.json"
+
+static var _units_by_id: Dictionary = {}
+static var _traits: Dictionary = {}
+static var _balance: Dictionary = {}
+static var _loaded := false
+
+
+static func _load_json(path: String) -> Dictionary:
+	var text := FileAccess.get_file_as_string(path)
+	if text.is_empty():
+		push_error("GameData: impossibile leggere %s (errore %d)" % [path, FileAccess.get_open_error()])
+		return {}
+	var parsed = JSON.parse_string(text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_error("GameData: %s non contiene un oggetto JSON valido" % path)
+		return {}
+	return parsed
+
+
+static func ensure_loaded() -> void:
+	if _loaded:
+		return
+	_loaded = true
+	_balance = _load_json(BALANCE_PATH)
+	_traits = _load_json(TRAITS_PATH)
+	var units_file := _load_json(UNITS_PATH)
+	for entry in units_file.get("units", []):
+		var def := UnitDef.from_dict(entry)
+		_units_by_id[def.id] = def
+
+
+## Ricarica i JSON da disco. Utile per iterare sul bilanciamento senza
+## riavviare l'editor.
+static func reload() -> void:
+	_loaded = false
+	_units_by_id.clear()
+	_traits.clear()
+	_balance.clear()
+	ensure_loaded()
+
+
+static func balance() -> Dictionary:
+	ensure_loaded()
+	return _balance
+
+
+static func unit(unit_id: String) -> UnitDef:
+	ensure_loaded()
+	if not _units_by_id.has(unit_id):
+		push_error("GameData: unità sconosciuta '%s'" % unit_id)
+		return null
+	return _units_by_id[unit_id]
+
+
+static func all_units() -> Array[UnitDef]:
+	ensure_loaded()
+	var result: Array[UnitDef] = []
+	for def in _units_by_id.values():
+		result.append(def)
+	# Ordine stabile: il pool e la generazione dello shop dipendono
+	# dall'ordinamento, e Dictionary.values() non lo garantisce nel tempo.
+	result.sort_custom(func(a: UnitDef, b: UnitDef) -> bool:
+		if a.cost != b.cost:
+			return a.cost < b.cost
+		return a.id < b.id)
+	return result
+
+
+static func units_of_cost(cost: int) -> Array[UnitDef]:
+	var result: Array[UnitDef] = []
+	for def in all_units():
+		if def.cost == cost:
+			result.append(def)
+	return result
+
+
+## Definizione di un tratto, cercata prima tra le civiltà e poi tra le classi.
+static func trait_def(trait_id: String) -> Dictionary:
+	ensure_loaded()
+	var origins: Dictionary = _traits.get("origins", {})
+	if origins.has(trait_id):
+		return origins[trait_id]
+	var classes: Dictionary = _traits.get("classes", {})
+	if classes.has(trait_id):
+		return classes[trait_id]
+	return {}
+
+
+static func is_origin(trait_id: String) -> bool:
+	ensure_loaded()
+	return _traits.get("origins", {}).has(trait_id)
+
+
+static func origin_ids() -> Array:
+	ensure_loaded()
+	var ids: Array = _traits.get("origins", {}).keys()
+	ids.sort()
+	return ids
+
+
+static func class_ids() -> Array:
+	ensure_loaded()
+	var ids: Array = _traits.get("classes", {}).keys()
+	ids.sort()
+	return ids
+
+
+## Soglia attiva di un tratto dato il numero di unità distinte che lo portano.
+## Restituisce {} se nessuna soglia è raggiunta.
+static func active_tier(trait_id: String, count: int) -> Dictionary:
+	var def := trait_def(trait_id)
+	var active := {}
+	for tier in def.get("tiers", []):
+		if count >= int(tier["count"]):
+			active = tier
+	return active
+
+
+static func trait_name(trait_id: String) -> String:
+	return trait_def(trait_id).get("name", trait_id)
+
+
+## Probabilità di pescare le varie fasce di costo a un dato livello squadra.
+static func shop_odds(level: int) -> Array:
+	var odds: Dictionary = balance()["shop_odds"]
+	var key := str(clampi(level, 1, balance()["levels"]["max_level"]))
+	return odds.get(key, [1.0, 0.0, 0.0, 0.0, 0.0])

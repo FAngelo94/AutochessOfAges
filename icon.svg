@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Icona dell'app. Un pedone con la cresta dell'elmo romano: dice "scacchi"
+       e "antichità" nello stesso segno, e resta leggibile a 48 px dove qualsiasi
+       dettaglio in più diventa una macchia. Colori presi da ui/style.gd. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#121A33"/>
+      <stop offset="1" stop-color="#292238"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FAC747"/>
+      <stop offset="1" stop-color="#B87A1A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="28" fill="url(#sky)"/>
+  <rect x="3" y="3" width="122" height="122" rx="25" fill="none" stroke="#B87A1A" stroke-width="3"/>
+
+  <!-- Cresta: l'unico tratto che distingue questo pedone da un pedone qualsiasi. -->
+  <path d="M46 34 Q64 6 82 34 L74 38 Q64 20 54 38 Z" fill="#FAC747"/>
+
+  <!-- Testa, collo e base del pedone. -->
+  <circle cx="64" cy="48" r="16" fill="url(#gold)"/>
+  <path d="M54 62 Q64 74 74 62 L80 88 L48 88 Z" fill="url(#gold)"/>
+  <rect x="38" y="90" width="52" height="14" rx="7" fill="url(#gold)"/>
+</svg>

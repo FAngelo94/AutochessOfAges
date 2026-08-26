@@ -1,0 +1,93 @@
+{
+  "_comment": "Tutte le costanti di bilanciamento in un posto solo. Il codice non contiene numeri magici: se un valore è qui, si tocca qui. Il campo è a celle ESAGONALI: board_columns/board_rows sono la griglia di un giocatore in coordinate offset-per-righe (le righe dispari sono spostate di mezza cella); l'arena di battaglia è alta il doppio.",
+
+  "match": {
+    "players": 8,
+    "starting_hp": 100,
+    "board_columns": 5,
+    "board_rows": 4,
+    "bench_size": 5,
+    "shop_slots": 5,
+    "max_star": 3,
+    "copies_to_upgrade": 2
+  },
+
+  "economy": {
+    "_starting_gold_doc": "Deve bastare per almeno un'unità da 1 oro: con 0 il primo round sarebbe una battaglia a campo vuoto per tutti.",
+    "starting_gold": 3,
+    "base_income": 5,
+    "interest_per": 10,
+    "max_interest": 5,
+    "win_bonus": 1,
+    "streak_thresholds": [
+      { "streak": 3, "gold": 1 },
+      { "streak": 5, "gold": 2 },
+      { "streak": 7, "gold": 3 }
+    ],
+    "reroll_cost": 2,
+    "buy_xp_cost": 4,
+    "buy_xp_amount": 4,
+    "sell_refund_full_price": true
+  },
+
+  "levels": {
+    "_comment": "xp_to_next[i] = xp necessari per passare dal livello i+1 al livello i+2. units[i] = unità schierabili al livello i+1: il tetto è 6, raggiunto al livello 6. I livelli successivi non allargano la squadra, migliorano solo le probabilità del negozio.",
+    "max_level": 9,
+    "starting_level": 2,
+    "starting_xp": 0,
+    "xp_per_round": 2,
+    "xp_to_next": [2, 6, 10, 20, 36, 56, 80, 100],
+    "units": [1, 2, 3, 4, 5, 6, 6, 6, 6]
+  },
+
+  "shop_odds": {
+    "_comment": "Probabilità di pescare un'unità di costo 1..5, per livello squadra (indice 0 = livello 1).",
+    "1": [1.00, 0.00, 0.00, 0.00, 0.00],
+    "2": [1.00, 0.00, 0.00, 0.00, 0.00],
+    "3": [0.75, 0.25, 0.00, 0.00, 0.00],
+    "4": [0.55, 0.30, 0.15, 0.00, 0.00],
+    "5": [0.45, 0.33, 0.20, 0.02, 0.00],
+    "6": [0.30, 0.40, 0.25, 0.05, 0.00],
+    "7": [0.19, 0.30, 0.35, 0.15, 0.01],
+    "8": [0.18, 0.25, 0.32, 0.22, 0.03],
+    "9": [0.10, 0.20, 0.25, 0.35, 0.10]
+  },
+
+  "pool": {
+    "_comment": "Copie disponibili nel pool CONDIVISO per ogni unità, in base al costo. È la meccanica di contesa: se gli avversari comprano, tu peschi meno.",
+    "copies_per_cost": { "1": 29, "2": 22, "3": 18, "4": 12, "5": 10 }
+  },
+
+  "star_scaling": {
+    "_comment": "Moltiplicatori applicati alle statistiche base per stella (indice 0 = 1★).",
+    "hp": [1.0, 1.8, 3.24],
+    "attack_damage": [1.0, 1.8, 3.24]
+  },
+
+  "combat": {
+    "tick_rate": 30,
+    "max_duration_seconds": 45.0,
+    "mana_per_attack": 10,
+    "mana_per_damage_taken": 0.03,
+    "mana_cap_after_cast": 0,
+    "base_crit_chance": 0.0,
+    "base_crit_damage": 1.5,
+    "armor_constant": 100.0,
+    "move_cells_per_second": 2.0,
+    "attack_windup_ratio": 0.35
+  },
+
+  "damage_to_player": {
+    "_comment": "Danno alla vita del giocatore che perde: base per stage + 1 per ogni unità nemica sopravvissuta, pesata per stella.",
+    "stage_base": [2, 3, 5, 6, 7, 8, 9, 10],
+    "per_surviving_unit": [1, 2, 3]
+  },
+
+  "rounds": {
+    "_comment": "Struttura degli stage. Ogni round è uno scontro tra giocatori.",
+    "stages": 8,
+    "rounds_per_stage": 5,
+    "preparation_seconds": 30.0,
+    "first_round_preparation_seconds": 45.0
+  }
+}

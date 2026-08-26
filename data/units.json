@@ -1,0 +1,288 @@
+{
+  "_comment": "Statistiche a 1 stella. Salute e danno d'attacco vengono moltiplicati per star_scaling (vedi balance.json) a ogni stella; i valori delle abilità sono già espressi come terna [1★, 2★, 3★]. 'range' è in celle; 1 = corpo a corpo. 'attack_speed' è in attacchi al secondo.",
+
+  "units": [
+    {
+      "id": "legionarius",
+      "name": "Legionario",
+      "origin": "roman",
+      "classes": ["legionary"],
+      "cost": 1,
+      "stats": { "hp": 650, "attack_damage": 45, "attack_speed": 0.65, "range": 1, "armor": 35, "magic_resist": 30, "mana_max": 70, "mana_start": 10 },
+      "ability": {
+        "name": "Testuggine",
+        "description": "Si copre con lo scudo: ottiene uno scudo e riflette parte dei danni per 4 secondi.",
+        "type": "shield_self",
+        "params": { "amount": [250, 425, 750], "duration": 4.0, "reflect": 0.25 }
+      }
+    },
+    {
+      "id": "sagittarius",
+      "name": "Sagittario",
+      "origin": "roman",
+      "classes": ["archer"],
+      "cost": 2,
+      "stats": { "hp": 600, "attack_damage": 55, "attack_speed": 0.75, "range": 4, "armor": 20, "magic_resist": 20, "mana_max": 50, "mana_start": 0 },
+      "ability": {
+        "name": "Salva incendiaria",
+        "description": "Scaglia una freccia infuocata sul bersaglio più lontano, infliggendo danno magico ad area.",
+        "type": "damage_splash",
+        "params": { "damage": [220, 330, 550], "radius": 1, "target": "farthest" }
+      }
+    },
+    {
+      "id": "ballista",
+      "name": "Balista",
+      "origin": "roman",
+      "classes": ["siege"],
+      "cost": 2,
+      "stats": { "hp": 550, "attack_damage": 50, "attack_speed": 0.55, "range": 5, "armor": 15, "magic_resist": 15, "mana_max": 80, "mana_start": 20 },
+      "ability": {
+        "name": "Colpo perforante",
+        "description": "Un dardo attraversa la fila e colpisce ogni nemico sulla traiettoria.",
+        "type": "damage_line",
+        "params": { "damage": [200, 300, 500], "target": "current" }
+      }
+    },
+    {
+      "id": "equites",
+      "name": "Equite",
+      "origin": "roman",
+      "classes": ["cavalry"],
+      "cost": 3,
+      "stats": { "hp": 800, "attack_damage": 70, "attack_speed": 0.70, "range": 1, "armor": 30, "magic_resist": 25, "mana_max": 60, "mana_start": 15 },
+      "ability": {
+        "name": "Sfondamento",
+        "description": "Carica il nemico più lontano infliggendo danno e stordendolo.",
+        "type": "stun_target",
+        "params": { "damage": [180, 270, 450], "duration": [1.2, 1.5, 2.5], "target": "farthest" }
+      }
+    },
+    {
+      "id": "centurio",
+      "name": "Centurione",
+      "origin": "roman",
+      "classes": ["legionary"],
+      "cost": 4,
+      "stats": { "hp": 1050, "attack_damage": 80, "attack_speed": 0.70, "range": 1, "armor": 45, "magic_resist": 40, "mana_max": 80, "mana_start": 20 },
+      "ability": {
+        "name": "Serrate i ranghi",
+        "description": "Concede uno scudo a sé e ai due alleati più vicini, e aumenta la loro armatura.",
+        "type": "shield_allies",
+        "params": { "amount": [280, 420, 700], "allies": 2, "armor": [20, 30, 55], "duration": 6.0 }
+      }
+    },
+    {
+      "id": "caesar",
+      "name": "Cesare",
+      "origin": "roman",
+      "classes": ["legionary", "cavalry"],
+      "cost": 5,
+      "stats": { "hp": 1200, "attack_damage": 110, "attack_speed": 0.75, "range": 1, "armor": 50, "magic_resist": 50, "mana_max": 100, "mana_start": 30 },
+      "ability": {
+        "name": "Alea iacta est",
+        "description": "Ordina l'assalto: tutti gli alleati guadagnano velocità d'attacco e Cesare colpisce ad area davanti a sé.",
+        "type": "rally",
+        "params": { "damage": [350, 525, 1100], "radius": 1, "attack_speed_bonus": [0.30, 0.45, 0.90], "duration": 8.0 }
+      }
+    },
+
+    {
+      "id": "vestal",
+      "name": "Vestale",
+      "origin": "roman",
+      "classes": ["druid"],
+      "cost": 2,
+      "stats": { "hp": 620, "attack_damage": 45, "attack_speed": 0.65, "range": 3, "armor": 20, "magic_resist": 35, "mana_max": 60, "mana_start": 15 },
+      "ability": {
+        "name": "Fuoco sacro",
+        "description": "Cura l'alleato più ferito e brucia il nemico più vicino.",
+        "type": "heal_lowest_ally",
+        "params": { "amount": [240, 360, 640], "regen": [10, 18, 32], "duration": 5.0 }
+      }
+    },
+    {
+      "id": "clansman",
+      "name": "Guerriero del clan",
+      "origin": "gaul",
+      "classes": ["berserker"],
+      "cost": 1,
+      "stats": { "hp": 600, "attack_damage": 50, "attack_speed": 0.70, "range": 1, "armor": 25, "magic_resist": 25, "mana_max": 60, "mana_start": 0 },
+      "ability": {
+        "name": "Grido di guerra",
+        "description": "Aumenta la propria velocità d'attacco per 5 secondi.",
+        "type": "buff_self",
+        "params": { "attack_speed_bonus": [0.45, 0.65, 1.20], "duration": 5.0 }
+      }
+    },
+    {
+      "id": "gaul_hunter",
+      "name": "Cacciatore gallico",
+      "origin": "gaul",
+      "classes": ["archer"],
+      "cost": 2,
+      "stats": { "hp": 580, "attack_damage": 58, "attack_speed": 0.80, "range": 4, "armor": 18, "magic_resist": 20, "mana_max": 55, "mana_start": 10 },
+      "ability": {
+        "name": "Freccia avvelenata",
+        "description": "Infligge danno nel tempo e riduce le cure ricevute dal bersaglio.",
+        "type": "damage_over_time",
+        "params": { "damage": [240, 360, 620], "duration": 4.0, "heal_reduction": 0.5, "target": "current" }
+      }
+    },
+    {
+      "id": "gaul_druid",
+      "name": "Druido",
+      "origin": "gaul",
+      "classes": ["druid"],
+      "cost": 3,
+      "stats": { "hp": 700, "attack_damage": 55, "attack_speed": 0.65, "range": 3, "armor": 25, "magic_resist": 35, "mana_max": 70, "mana_start": 25 },
+      "ability": {
+        "name": "Linfa del bosco sacro",
+        "description": "Cura l'alleato con meno salute e gli concede rigenerazione.",
+        "type": "heal_lowest_ally",
+        "params": { "amount": [300, 450, 800], "regen": [15, 25, 45], "duration": 5.0 }
+      }
+    },
+    {
+      "id": "chariot",
+      "name": "Carro falcato",
+      "origin": "gaul",
+      "classes": ["cavalry", "siege"],
+      "cost": 3,
+      "stats": { "hp": 850, "attack_damage": 65, "attack_speed": 0.60, "range": 1, "armor": 30, "magic_resist": 20, "mana_max": 75, "mana_start": 15 },
+      "ability": {
+        "name": "Falci rotanti",
+        "description": "Travolge tutti i nemici adiacenti infliggendo danno e respingendoli.",
+        "type": "damage_splash",
+        "params": { "damage": [260, 390, 680], "radius": 1, "target": "self" }
+      }
+    },
+    {
+      "id": "gaul_champion",
+      "name": "Campione gallico",
+      "origin": "gaul",
+      "classes": ["berserker"],
+      "cost": 4,
+      "stats": { "hp": 1000, "attack_damage": 90, "attack_speed": 0.75, "range": 1, "armor": 35, "magic_resist": 30, "mana_max": 70, "mana_start": 10 },
+      "ability": {
+        "name": "Duello",
+        "description": "Colpisce il bersaglio con un fendente devastante, più forte quanto più il nemico è ferito.",
+        "type": "damage_execute",
+        "params": { "damage": [320, 480, 900], "missing_hp_scaling": 0.5, "target": "current" }
+      }
+    },
+    {
+      "id": "vercingetorix",
+      "name": "Vercingetorige",
+      "origin": "gaul",
+      "classes": ["berserker", "cavalry"],
+      "cost": 5,
+      "stats": { "hp": 1150, "attack_damage": 115, "attack_speed": 0.80, "range": 1, "armor": 40, "magic_resist": 40, "mana_max": 90, "mana_start": 20 },
+      "ability": {
+        "name": "Rivolta delle tribù",
+        "description": "Ogni alleato caduto lo rende più forte: infligge danno ad area e ruba salute per 10 secondi.",
+        "type": "rally",
+        "params": { "damage": [300, 450, 950], "radius": 1, "attack_speed_bonus": [0.25, 0.40, 0.85], "omnivamp": 0.30, "duration": 10.0, "self_only": true }
+      }
+    },
+
+    {
+      "id": "gaul_slinger",
+      "name": "Fromboliere gallico",
+      "origin": "gaul",
+      "classes": ["archer"],
+      "cost": 1,
+      "stats": { "hp": 540, "attack_damage": 46, "attack_speed": 0.75, "range": 3, "armor": 18, "magic_resist": 18, "mana_max": 55, "mana_start": 0 },
+      "ability": {
+        "name": "Raffica di pietre",
+        "description": "Colpisce i due nemici più vicini con una scarica di proiettili.",
+        "type": "damage_nearest",
+        "params": { "damage": [160, 240, 420], "targets": 2 }
+      }
+    },
+    {
+      "id": "teuton_spearman",
+      "name": "Lanciere teutonico",
+      "origin": "teuton",
+      "classes": ["legionary"],
+      "cost": 1,
+      "stats": { "hp": 680, "attack_damage": 42, "attack_speed": 0.65, "range": 2, "armor": 30, "magic_resist": 30, "mana_max": 65, "mana_start": 5 },
+      "ability": {
+        "name": "Muro di lance",
+        "description": "Trafigge i due nemici più vicini e riduce la loro velocità d'attacco.",
+        "type": "damage_nearest",
+        "params": { "damage": [190, 285, 480], "targets": 2, "attack_speed_slow": 0.3, "duration": 4.0 }
+      }
+    },
+    {
+      "id": "teuton_skirmisher",
+      "name": "Frombolier teutonico",
+      "origin": "teuton",
+      "classes": ["archer"],
+      "cost": 1,
+      "stats": { "hp": 520, "attack_damage": 48, "attack_speed": 0.75, "range": 4, "armor": 15, "magic_resist": 18, "mana_max": 50, "mana_start": 0 },
+      "ability": {
+        "name": "Sasso in fronte",
+        "description": "Colpisce il bersaglio con meno salute, con probabilità di stordirlo brevemente.",
+        "type": "stun_target",
+        "params": { "damage": [170, 255, 440], "duration": [0.8, 1.0, 1.8], "target": "lowest_hp" }
+      }
+    },
+    {
+      "id": "shieldmaiden",
+      "name": "Scudiera",
+      "origin": "teuton",
+      "classes": ["legionary"],
+      "cost": 2,
+      "stats": { "hp": 750, "attack_damage": 48, "attack_speed": 0.60, "range": 1, "armor": 40, "magic_resist": 35, "mana_max": 70, "mana_start": 15 },
+      "ability": {
+        "name": "Parata",
+        "description": "Per 4 secondi riduce i danni subiti e restituisce parte del danno bloccato.",
+        "type": "shield_self",
+        "params": { "amount": [200, 300, 520], "duration": 4.0, "reflect": 0.35, "damage_reduction": 0.25 }
+      }
+    },
+    {
+      "id": "seeress",
+      "name": "Veggente",
+      "origin": "teuton",
+      "classes": ["druid"],
+      "cost": 3,
+      "stats": { "hp": 680, "attack_damage": 50, "attack_speed": 0.65, "range": 3, "armor": 22, "magic_resist": 40, "mana_max": 65, "mana_start": 20 },
+      "ability": {
+        "name": "Presagio",
+        "description": "Cura l'alleato più ferito e gli concede uno scudo che assorbe danno magico.",
+        "type": "heal_lowest_ally",
+        "params": { "amount": [260, 390, 700], "shield": [150, 225, 400], "duration": 5.0 }
+      }
+    },
+    {
+      "id": "battering_ram",
+      "name": "Ariete da guerra",
+      "origin": "teuton",
+      "classes": ["siege"],
+      "cost": 4,
+      "stats": { "hp": 1100, "attack_damage": 75, "attack_speed": 0.50, "range": 1, "armor": 45, "magic_resist": 25, "mana_max": 85, "mana_start": 20 },
+      "ability": {
+        "name": "Sfondaporte",
+        "description": "Sferra un colpo che infligge danno pari a una percentuale della salute massima del bersaglio.",
+        "type": "damage_execute",
+        "params": { "damage": [200, 300, 520], "max_hp_scaling": 0.12, "target": "current" }
+      }
+    },
+    {
+      "id": "arminius",
+      "name": "Arminio",
+      "origin": "teuton",
+      "classes": ["legionary", "berserker"],
+      "cost": 5,
+      "stats": { "hp": 1250, "attack_damage": 105, "attack_speed": 0.70, "range": 1, "armor": 55, "magic_resist": 50, "mana_max": 95, "mana_start": 25 },
+      "ability": {
+        "name": "Imboscata di Teutoburgo",
+        "description": "Il bosco si chiude sui nemici: danno ad area ampia e scudo per gli alleati vicini.",
+        "type": "rally",
+        "params": { "damage": [400, 600, 1250], "radius": 2, "shield": [250, 375, 800], "duration": 8.0 }
+      }
+    }
+  ]
+}

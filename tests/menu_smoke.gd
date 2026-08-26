@@ -1,0 +1,142 @@
+extends SceneTree
+
+## Smoke test della schermata iniziale:
+##
+##   godot --headless --path . --script res://tests/menu_smoke.gd
+##
+## Verifica che il menu si costruisca, che le preferenze si salvino e si
+## rileggano, che i pannelli si aprano e che da qui si entri davvero in
+## partita. Il passaggio più importante è l'ultimo: se il cambio di scena si
+## rompe, il gioco resta bloccato sul menu e nessun altro test se ne accorge.
+
+var _passed := 0
+var _failed := 0
+var _frames := 0
+var _menu: Control = null
+var _profile: Node = null
+var _saved_favourite := ""
+var _saved_speed := 1.0
+var _saved_matches := 0
+var _saved_best := 0
+
+
+func _process(_delta: float) -> bool:
+	_frames += 1
+
+	match _frames:
+		1:
+			_menu = (load("res://ui/menu.tscn") as PackedScene).instantiate()
+			root.add_child(_menu)
+		2:
+			_run()
+			# Il cambio di scena ha bisogno di un frame per completarsi: i
+			# controlli sul risultato stanno nel passaggio successivo.
+			_menu._on_play_pressed()
+		4:
+			_check_scene_change()
+			# Dal gioco si deve poter tornare indietro, altrimenti il menu è
+			# una schermata a senso unico.
+			current_scene._on_menu_pressed()
+		6:
+			var back := current_scene
+			check(back != null and back.scene_file_path == "res://ui/menu.tscn",
+				"dalla partita si torna al menu",
+				back.scene_file_path if back != null else "nessuna scena")
+			_restore_profile()
+			print("\n%d superati, %d falliti" % [_passed, _failed])
+			quit(1 if _failed > 0 else 0)
+
+	return false
+
+
+func _run() -> void:
+	_profile = _menu.get_node("/root/Profile")
+	# Le preferenze reali dell'utente vanno rimesse a posto a fine test.
+	_saved_favourite = _profile.favourite_origin
+	_saved_speed = _profile.combat_speed
+	_saved_matches = _profile.matches_played
+	_saved_best = _profile.best_placement
+
+	check(_menu._store_panel != null, "il menu costruisce il pannello del negozio")
+	check(_menu._collection_panel != null, "il menu costruisce la collezione")
+	check(_menu._mode_panel != null, "il menu costruisce la modale di modalità")
+	check(_menu._mode_option_buttons.size() == 2, "ci sono due opzioni di modalità",
+		str(_menu._mode_option_buttons.size()))
+
+	# Collezione: si apre, elenca tutte le unità e mostra una scheda.
+	_menu._on_collection_pressed()
+	var collection: CollectionPanel = _menu._collection_panel
+	check(collection.visible, "la collezione si apre")
+	check(collection._grid.get_child_count() == GameData.all_units().size(),
+		"la collezione elenca tutte le unità (una casella per unità)",
+		"%d di %d" % [collection._grid.get_child_count(), GameData.all_units().size()])
+	check(collection._detail.text.length() > 0, "la collezione mostra la scheda di un'unità")
+
+	collection._filter_origin = "roman"
+	collection._refresh()
+	var romans := 0
+	for def in GameData.all_units():
+		if def.origin == "roman":
+			romans += 1
+	check(collection._grid.get_child_count() == romans,
+		"il filtro per civiltà riduce l'elenco", str(collection._grid.get_child_count()))
+	collection.visible = false
+
+	# Negozio raggiungibile dal menu, cioè prima di entrare in partita.
+	_menu._on_store_pressed()
+	check(_menu._store_panel.visible, "il negozio si apre dal menu")
+	_menu._store_panel.visible = false
+
+	# Modalità: cpu di default, e si può passare a pvp dalla modale.
+	check(_menu._match_mode == _menu.MODE_CPU, "la modalità predefinita è contro il computer")
+	_menu._on_mode_pressed(_menu.MODE_PVP)
+	check(_menu._match_mode == _menu.MODE_PVP, "si può selezionare la modalità contro giocatori")
+	check(not _menu._mode_panel.visible, "selezionare una modalità chiude la modale")
+	_menu._on_mode_pressed(_menu.MODE_CPU)
+
+	# Velocità delle battaglie e civiltà preferita: si salvano e si rileggono da
+	# disco anche senza un selettore nella home, perché il profilo resta usato
+	# altrove (ritmo di combattimento, evidenziazione nel negozio).
+	_profile.set_combat_speed(4.0)
+	_profile.set_favourite_origin("roman")
+	var reread := ConfigFile.new()
+	check(reread.load("user://profile.cfg") == OK, "il profilo viene scritto su disco")
+	check(float(reread.get_value("preferences", "combat_speed", 0.0)) == 4.0,
+		"la velocità scelta finisce nel file")
+	check(String(reread.get_value("preferences", "favourite_origin", "")) == "roman",
+		"la civiltà preferita finisce nel file")
+
+	_profile.combat_speed = 1.0
+	_profile.load_profile()
+	check(_profile.combat_speed == 4.0, "il profilo si rilegge correttamente")
+
+
+func _check_scene_change() -> void:
+	var current := current_scene
+	check(current != null and current.scene_file_path == "res://ui/main.tscn",
+		"premere Gioca porta in partita",
+		current.scene_file_path if current != null else "nessuna scena")
+	if current != null and current.has_method("player"):
+		check(current.match_state != null, "la partita è pronta appena entrati")
+		# La velocità scelta nel menu deve valere già dalla prima battaglia.
+		check(is_equal_approx(float(_profile.combat_speed), 4.0),
+			"la preferenza di velocità sopravvive al cambio di scena")
+
+
+## I test non devono lasciare tracce nel profilo di chi sviluppa: partite
+## finte e preferenze cambiate comparirebbero nel menu come se fossero vere.
+func _restore_profile() -> void:
+	_profile.favourite_origin = _saved_favourite
+	_profile.combat_speed = _saved_speed
+	_profile.matches_played = _saved_matches
+	_profile.best_placement = _saved_best
+	_profile.save_profile()
+
+
+func check(condition: bool, label: String, detail: String = "") -> void:
+	if condition:
+		_passed += 1
+		print("  ok   %s" % label)
+	else:
+		_failed += 1
+		printerr("  FAIL %s%s" % [label, ("  -> " + detail) if detail != "" else ""])

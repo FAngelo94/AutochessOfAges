@@ -1,0 +1,341 @@
+{
+  "_comment": "Tratti = sinergie. 'origin' è la civiltà (aggiungerne una nuova significa aggiungere una voce qui e le sue unità in units.json). 'class' è il ruolo tattico, condiviso tra civiltà. I bonus sono cumulativi solo per la soglia più alta raggiunta.",
+  "origins": {
+    "roman": {
+      "name": "Romani",
+      "description": "La formazione compatta trasforma la fanteria in un muro. Ogni soglia irrobustisce l'intera squadra, non solo i Romani.",
+      "tiers": [
+        {
+          "count": 2,
+          "scope": "all",
+          "effects": [
+            {
+              "stat": "armor",
+              "add": 12
+            },
+            {
+              "stat": "magic_resist",
+              "add": 12
+            }
+          ],
+          "text": "+12 armatura e resistenza magica a tutti gli alleati"
+        },
+        {
+          "count": 4,
+          "scope": "all",
+          "effects": [
+            {
+              "stat": "armor",
+              "add": 25
+            },
+            {
+              "stat": "magic_resist",
+              "add": 25
+            }
+          ],
+          "text": "+25 armatura e resistenza magica a tutti gli alleati"
+        },
+        {
+          "count": 6,
+          "scope": "all",
+          "effects": [
+            {
+              "stat": "armor",
+              "add": 45
+            },
+            {
+              "stat": "magic_resist",
+              "add": 45
+            },
+            {
+              "stat": "hp_percent",
+              "add": 0.15
+            }
+          ],
+          "text": "+45 armatura e resistenza magica, +15% salute a tutti gli alleati"
+        }
+      ]
+    },
+    "gaul": {
+      "name": "Galli",
+      "description": "Combattono meglio quando la battaglia va male: ogni alleato caduto fa salire la furia dei Galli sopravvissuti.",
+      "tiers": [
+        {
+          "count": 2,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "rage_per_death",
+              "add": 0.08
+            }
+          ],
+          "text": "Ogni alleato morto: +8% velocità d'attacco ai Galli"
+        },
+        {
+          "count": 4,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "rage_per_death",
+              "add": 0.15
+            },
+            {
+              "stat": "attack_speed_percent",
+              "add": 0.1
+            }
+          ],
+          "text": "Ogni alleato morto: +15% velocità d'attacco ai Galli. +10% iniziale"
+        },
+        {
+          "count": 6,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "rage_per_death",
+              "add": 0.22
+            },
+            {
+              "stat": "attack_speed_percent",
+              "add": 0.25
+            },
+            {
+              "stat": "omnivamp",
+              "add": 0.15
+            }
+          ],
+          "text": "Ogni alleato morto: +22% velocità d'attacco ai Galli. +25% iniziale e 15% del danno rubato come salute"
+        }
+      ]
+    },
+    "teuton": {
+      "name": "Teutonici",
+      "description": "Entrano in campo già protetti da uno scudo che assorbe i primi colpi.",
+      "tiers": [
+        {
+          "count": 2,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "shield_flat",
+              "add": 150
+            }
+          ],
+          "text": "I Teutonici iniziano con 150 di scudo"
+        },
+        {
+          "count": 4,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "shield_flat",
+              "add": 320
+            },
+            {
+              "stat": "damage_reduction",
+              "add": 0.08
+            }
+          ],
+          "text": "I Teutonici iniziano con 320 di scudo e subiscono l'8% di danni in meno"
+        },
+        {
+          "count": 6,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "shield_flat",
+              "add": 600
+            },
+            {
+              "stat": "damage_reduction",
+              "add": 0.18
+            }
+          ],
+          "text": "I Teutonici iniziano con 600 di scudo e subiscono il 18% di danni in meno"
+        }
+      ]
+    }
+  },
+  "classes": {
+    "legionary": {
+      "name": "Legionario",
+      "description": "Prima linea. Più legionari schierati, più a lungo regge il fronte.",
+      "tiers": [
+        {
+          "count": 2,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "hp_percent",
+              "add": 0.18
+            }
+          ],
+          "text": "+18% salute ai Legionari"
+        },
+        {
+          "count": 4,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "hp_percent",
+              "add": 0.4
+            },
+            {
+              "stat": "armor",
+              "add": 20
+            }
+          ],
+          "text": "+40% salute e +20 armatura ai Legionari"
+        }
+      ]
+    },
+    "archer": {
+      "name": "Arciere",
+      "description": "Danno dalla distanza: colpi critici e gittata aumentata.",
+      "tiers": [
+        {
+          "count": 2,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "crit_chance",
+              "add": 0.2
+            }
+          ],
+          "text": "+20% probabilità di critico agli Arcieri"
+        },
+        {
+          "count": 4,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "crit_chance",
+              "add": 0.4
+            },
+            {
+              "stat": "crit_damage",
+              "add": 0.3
+            },
+            {
+              "stat": "range",
+              "add": 1
+            }
+          ],
+          "text": "+40% critico, +30% danno critico e +1 gittata agli Arcieri"
+        }
+      ]
+    },
+    "cavalry": {
+      "name": "Cavalleria",
+      "description": "Carica iniziale: parte più avanti e con un colpo d'apertura potenziato.",
+      "tiers": [
+        {
+          "count": 2,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "charge_damage",
+              "add": 120
+            }
+          ],
+          "text": "Il primo attacco della Cavalleria infligge 120 danni bonus"
+        },
+        {
+          "count": 4,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "charge_damage",
+              "add": 300
+            },
+            {
+              "stat": "move_speed_percent",
+              "add": 0.35
+            }
+          ],
+          "text": "Il primo attacco infligge 300 danni bonus e la Cavalleria si muove il 35% più rapidamente"
+        }
+      ]
+    },
+    "druid": {
+      "name": "Druido",
+      "description": "Supporto: rigenerazione costante per gli alleati feriti.",
+      "tiers": [
+        {
+          "count": 2,
+          "scope": "all",
+          "effects": [
+            {
+              "stat": "regen_per_second",
+              "add": 12
+            }
+          ],
+          "text": "Tutti gli alleati recuperano 12 salute al secondo"
+        },
+        {
+          "count": 3,
+          "scope": "all",
+          "effects": [
+            {
+              "stat": "regen_per_second",
+              "add": 30
+            },
+            {
+              "stat": "heal_power",
+              "add": 0.25
+            }
+          ],
+          "text": "Tutti gli alleati recuperano 30 salute al secondo, +25% cure ricevute"
+        }
+      ]
+    },
+    "berserker": {
+      "name": "Berserker",
+      "description": "Gli attacchi colpiscono anche i nemici adiacenti al bersaglio.",
+      "tiers": [
+        {
+          "count": 2,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "cleave",
+              "add": 0.25
+            }
+          ],
+          "text": "Gli attacchi dei Berserker infliggono il 25% del danno ai nemici adiacenti"
+        },
+        {
+          "count": 4,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "cleave",
+              "add": 0.55
+            },
+            {
+              "stat": "attack_damage_percent",
+              "add": 0.2
+            }
+          ],
+          "text": "Gli attacchi infliggono il 55% ai nemici adiacenti, +20% danno d'attacco"
+        }
+      ]
+    },
+    "siege": {
+      "name": "Assedio",
+      "description": "Macchine da guerra: danno proporzionale alla salute massima del bersaglio.",
+      "tiers": [
+        {
+          "count": 2,
+          "scope": "trait",
+          "effects": [
+            {
+              "stat": "max_hp_damage",
+              "add": 0.03
+            }
+          ],
+          "text": "Gli attacchi d'Assedio infliggono il 3% della salute massima del bersaglio come danno bonus"
+        }
+      ]
+    }
+  }
+}

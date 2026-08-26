@@ -1,0 +1,11 @@
+[config]
+
+name="RevenueCatGodot"
+binary_type="local"
+binary="RevenueCatGodot.release.aar"
+
+[dependencies]
+
+local=[]
+remote=["com.revenuecat.purchases:purchases:8.10.0"]
+custom_maven_repos=[]

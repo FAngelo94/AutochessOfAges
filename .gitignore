@@ -1,0 +1,19 @@
+# Godot 4+ specific ignores
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+
+# Godot-specific mono/C# ignores
+.mono/
+data_*/
+
+# Build output
+build/
+
+# System / editor files
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json

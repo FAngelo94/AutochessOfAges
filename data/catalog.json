@@ -1,0 +1,51 @@
+{
+  "_comment": "Catalogo dei contenuti acquistabili. Gli 'entitlement' sono i diritti che il gioco interroga; i 'product_id' sono gli identificativi da creare su Google Play Console e su RevenueCat. Il gioco non parla mai di prodotti: parla solo di entitlement.",
+
+  "roster_mode": "shared",
+  "_roster_mode_doc": "'shared' = la lobby decide quali civiltà sono in gioco e valgono per tutti; possedere una civiltà sblocca la possibilità di SCEGLIERLA in singolo e di proporla in lobby. 'owned' = si gioca solo con le civiltà possedute, che entrano nel proprio pool: più semplice da vendere, ma rompe l'equità del pool condiviso in multiplayer.",
+
+  "entitlements": {
+    "season_pass": {
+      "name": "Pass stagionale",
+      "type": "subscription",
+      "description": "Ricompense cosmetiche lungo tutta la stagione.",
+      "grants": ["cosmetic_track_premium"]
+    },
+    "civ_gaul": {
+      "name": "Civiltà: Galli",
+      "type": "non_consumable",
+      "description": "Sblocca i Galli.",
+      "grants": ["origin:gaul"]
+    },
+    "civ_teuton": {
+      "name": "Civiltà: Teutonici",
+      "type": "non_consumable",
+      "description": "Sblocca i Teutonici.",
+      "grants": ["origin:teuton"]
+    },
+    "cosmetic_pack_legion": {
+      "name": "Aspetti: Legione dorata",
+      "type": "non_consumable",
+      "description": "Aspetti alternativi per le unità romane.",
+      "grants": ["skin:roman_gold"]
+    }
+  },
+
+  "_free_content_doc": "Le civiltà elencate qui sono sempre disponibili senza acquisto. Almeno una deve esserci, altrimenti al primo avvio non si può giocare.",
+  "free_origins": ["roman"],
+
+  "products": {
+    "_comment": "entitlement -> identificativi per piattaforma. Vanno creati con gli stessi id su Google Play Console e collegati in RevenueCat; per il web sono i price id configurati in RevenueCat Web Billing.",
+    "season_pass": { "android": "aoa_season_pass_monthly", "web": "aoa_season_pass_monthly_web" },
+    "civ_gaul": { "android": "aoa_civ_gaul", "web": "aoa_civ_gaul_web" },
+    "civ_teuton": { "android": "aoa_civ_teuton", "web": "aoa_civ_teuton_web" },
+    "cosmetic_pack_legion": { "android": "aoa_skin_roman_gold", "web": "aoa_skin_roman_gold_web" }
+  },
+
+  "revenuecat": {
+    "_comment": "Le chiavi pubbliche di RevenueCat (SDK key) non sono segreti: identificano l'app, non autorizzano operazioni sensibili. La chiave SEGRETA (v1 secret) non deve MAI stare nel client: serve solo al server per la REST API.",
+    "android_api_key": "",
+    "web_api_key": "",
+    "offering_id": "default"
+  }
+}

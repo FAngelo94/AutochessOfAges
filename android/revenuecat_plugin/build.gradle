@@ -1,0 +1,42 @@
+// Plugin Android per RevenueCat. Produce l'.aar da copiare in android/plugins/.
+//
+// Serve godot-lib.<versione>.template_release.aar, scaricabile dalla pagina
+// delle release di Godot ("Android source"/"Templates") e messo in libs/.
+
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.atuochess.revenuecat'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 34
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    libraryVariants.all { variant ->
+        variant.outputs.all { output ->
+            output.outputFileName = "RevenueCatGodot.${variant.name}.aar"
+        }
+    }
+}
+
+dependencies {
+    // La libreria Godot NON va inclusa nell'.aar: è già dentro l'applicazione.
+    compileOnly fileTree(dir: 'libs', include: ['godot-lib.*.aar'])
+
+    implementation 'com.revenuecat.purchases:purchases:8.10.0'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
+}
