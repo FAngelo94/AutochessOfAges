@@ -21,6 +21,7 @@ config/icon="res://icon.svg"
 Profile="*res://app/profile.gd"
 Portraits="*res://art/unit_portraits.gd"
 Store="*res://monetization/store.gd"
+Auth="*res://net/auth.gd"
 
 [display]
 

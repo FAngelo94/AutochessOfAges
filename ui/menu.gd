@@ -12,6 +12,7 @@ extends Control
 ## tattile sotto Style.TOUCH_MIN.
 
 const GAME_SCENE := "res://ui/main.tscn"
+const LOBBY_SCENE := "res://ui/lobby.tscn"
 
 const MODE_CPU := "cpu"
 const MODE_PVP := "pvp"
@@ -643,7 +644,7 @@ func _build_mode_panel() -> void:
 	column.add_child(_mode_option(MODE_CPU, "🖥️  Contro il computer",
 		"Affronta subito degli avversari controllati dal gioco."))
 	column.add_child(_mode_option(MODE_PVP, "👥  Contro giocatori",
-		"In arrivo: per ora seleziona questa modalità solo in anteprima."))
+		"Partita online 8 giocatori. Richiede l'accesso con Google."))
 
 	column.add_child(_grow())
 
@@ -928,17 +929,43 @@ func _grow() -> Control:
 
 func _on_play_pressed() -> void:
 	if _match_mode == MODE_PVP:
-		# Non implementata: lo si dice invece di far finta di partire.
-		var notice := AcceptDialog.new()
-		notice.dialog_text = "La modalità contro giocatori arriva in un prossimo aggiornamento."
-		notice.title = "In arrivo"
-		add_child(notice)
-		notice.confirmed.connect(notice.queue_free)
-		notice.canceled.connect(notice.queue_free)
-		notice.popup_centered()
+		_start_pvp()
 		return
 
 	get_tree().change_scene_to_file(GAME_SCENE)
+
+
+## Contro giocatori: serve un account. Se gia' loggati si va in lobby; se no si
+## avvia il login Google e si prosegue al suo completamento. Senza l'autoload
+## Auth (edge headless) si ricade sul vecchio avviso "in arrivo".
+func _start_pvp() -> void:
+	var auth := get_node_or_null("/root/Auth")
+	if auth == null:
+		_show_pvp_unavailable("La modalità contro giocatori arriva in un prossimo aggiornamento.")
+		return
+	if auth.is_logged_in():
+		get_tree().change_scene_to_file(LOBBY_SCENE)
+		return
+	if not auth.login_completed.is_connected(_on_pvp_login_completed):
+		auth.login_completed.connect(_on_pvp_login_completed, CONNECT_ONE_SHOT)
+	auth.login_google()
+
+
+func _on_pvp_login_completed(success: bool, reason: String) -> void:
+	if success:
+		get_tree().change_scene_to_file(LOBBY_SCENE)
+	else:
+		_show_pvp_unavailable("Accesso non riuscito: %s" % reason)
+
+
+func _show_pvp_unavailable(message: String) -> void:
+	var notice := AcceptDialog.new()
+	notice.dialog_text = message
+	notice.title = "Contro giocatori"
+	add_child(notice)
+	notice.confirmed.connect(notice.queue_free)
+	notice.canceled.connect(notice.queue_free)
+	notice.popup_centered()
 
 
 func _on_collection_pressed() -> void:

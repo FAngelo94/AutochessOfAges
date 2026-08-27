@@ -65,3 +65,29 @@ func duplicate_instance() -> UnitInstance:
 
 func _to_string() -> String:
 	return "%s %d★" % [def.display_name, star]
+
+
+# --------------------------------------------------------------------------
+# Serializzazione (per il protocollo di rete, vedi MULTIPLAYER_PLAN.md M0)
+# --------------------------------------------------------------------------
+
+func to_dict() -> Dictionary:
+	return {
+		"uid": uid,
+		"id": def.id,
+		"star": star,
+		"cell": cell,
+		"on_board": is_on_board(),
+	}
+
+
+static func from_dict(d: Dictionary) -> UnitInstance:
+	var instance := UnitInstance.new()
+	instance.def = GameData.unit(String(d["id"]))
+	instance.star = int(d["star"])
+	instance.uid = int(d["uid"])
+	if bool(d.get("on_board", false)):
+		instance.place_on_board(d.get("cell", Vector2i(-1, -1)))
+	else:
+		instance.place_on_bench(-1)
+	return instance

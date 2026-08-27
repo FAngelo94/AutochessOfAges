@@ -1,0 +1,6 @@
+{
+  "_comment": "Configurazione del backend online (Supabase). L'anon key è pubblica per progetto — è pensata per stare nel client e non autorizza nulla senza un JWT valido, perciò il file resta tracciato con valori segnaposto. Lo sviluppatore inserisce i valori reali seguendo SETUP_SUPABASE.md. La service_role key NON va mai messa qui: vive solo sul server.",
+  "supabase_url": "https://YOUR-PROJECT-REF.supabase.co",
+  "anon_key": "REPLACE_WITH_ANON_KEY",
+  "game_host": "game.tuodominio.it"
+}

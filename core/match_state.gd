@@ -15,6 +15,11 @@ signal match_finished(standings: Array)
 
 enum Phase { PREPARATION, COMBAT, FINISHED }
 
+## Quanti round guardare indietro per evitare di riproporre lo stesso avversario.
+## Non è in balance.json di proposito: è una regola di accoppiamento, non un
+## numero da bilanciare, e balance.json ha modifiche non committate in corso.
+const REMATCH_AVOID_WINDOW := 2
+
 var players: Array[Player] = []
 var pool: UnitPool
 var phase: int = Phase.PREPARATION
@@ -25,6 +30,10 @@ var seed_value: int
 var _rng: SimRNG
 var _last_results: Array[Dictionary] = []
 var _next_placement: int
+
+## player.index -> Array[int] degli avversari degli ultimi REMATCH_AVOID_WINDOW
+## round (il più recente in coda). Solo lato server: il client non accoppia.
+var _recent_opponents: Dictionary = {}
 
 
 func _init(match_seed: int = 0, human_players: int = 1) -> void:
@@ -76,6 +85,39 @@ func last_results() -> Array[Dictionary]:
 
 
 # --------------------------------------------------------------------------
+# Serializzazione (MULTIPLAYER_PLAN.md M0)
+# --------------------------------------------------------------------------
+
+## Snapshot completo dello stato, filtrato dal punto di vista di for_index:
+## solo quel giocatore riceve shop/gold/xp/panchina, gli altri il solo tavolo.
+func to_dict(for_index: int) -> Dictionary:
+	var players_data: Array = []
+	for i in players.size():
+		players_data.append(players[i].to_dict(i == for_index))
+	return {
+		"phase": phase,
+		"stage": stage,
+		"round_index": round_index,
+		"seed_value": seed_value,
+		"players": players_data,
+		"pool": pool.snapshot(),
+	}
+
+
+func apply_dict(d: Dictionary) -> void:
+	phase = int(d.get("phase", phase))
+	stage = int(d.get("stage", stage))
+	round_index = int(d.get("round_index", round_index))
+	seed_value = int(d.get("seed_value", seed_value))
+	if d.has("pool"):
+		pool.restore(d["pool"])
+	var players_data: Array = d.get("players", [])
+	for i in players_data.size():
+		if i < players.size():
+			players[i].apply_dict(players_data[i])
+
+
+# --------------------------------------------------------------------------
 # Ciclo di gioco
 # --------------------------------------------------------------------------
 
@@ -86,27 +128,59 @@ func start_round() -> void:
 	round_started.emit(stage, round_index)
 
 
-## Accoppia i giocatori vivi. Ogni giocatore incontra un avversario diverso
-## finché possibile; con un numero dispari, uno combatte contro la copia della
-## squadra di un altro (il "fantasma" del genere).
+## Accoppia i giocatori vivi. Si mescola in modo deterministico (shuffle_ex),
+## poi si accoppia con una scelta greedy che evita gli avversari degli ultimi
+## REMATCH_AVOID_WINDOW round finché è possibile — con 8 umani veri, ritrovarsi
+## contro la stessa board 2-3 volte di fila è frustrante. Con un numero dispari
+## uno combatte contro la copia della squadra di un altro (il "fantasma").
+##
+## Il consumo dello SimRNG è identico a prima (uno shuffle + al più un pick):
+## cambia solo QUALE accoppiamento esce, non la posizione dello stream.
 func build_matchups() -> Array[Dictionary]:
 	var living := alive_players()
 	var shuffled := living.duplicate()
 	_rng.shuffle_ex(shuffled)
 
 	var matchups: Array[Dictionary] = []
-	var i := 0
-	while i + 1 < shuffled.size():
-		matchups.append({"a": shuffled[i], "b": shuffled[i + 1], "ghost": false})
-		i += 2
-	if shuffled.size() % 2 == 1:
-		var odd_one: Player = shuffled[-1]
+	var pending := shuffled.duplicate()
+	while pending.size() >= 2:
+		var a: Player = pending.pop_front()
+		var seen: Array = _recent_opponents.get(a.index, [])
+		var pick_at := -1
+		for j in pending.size():
+			if not seen.has(pending[j].index):
+				pick_at = j
+				break
+		if pick_at == -1:
+			pick_at = 0  # tutti già affrontati di recente: si accetta la rivincita
+		var b: Player = pending[pick_at]
+		pending.remove_at(pick_at)
+		matchups.append({"a": a, "b": b, "ghost": false})
+		_remember(a.index, b.index)
+		_remember(b.index, a.index)
+
+	if pending.size() == 1:
+		var odd_one: Player = pending[0]
 		var candidates := living.filter(func(p: Player) -> bool: return p != odd_one)
 		if candidates.is_empty():
 			matchups.append({"a": odd_one, "b": null, "ghost": true})
 		else:
-			matchups.append({"a": odd_one, "b": _rng.pick(candidates), "ghost": true})
+			var seen_odd: Array = _recent_opponents.get(odd_one.index, [])
+			var fresh := candidates.filter(func(p: Player) -> bool: return not seen_odd.has(p.index))
+			var ghost_opp: Player = _rng.pick(fresh if not fresh.is_empty() else candidates)
+			matchups.append({"a": odd_one, "b": ghost_opp, "ghost": true})
+			_remember(odd_one.index, ghost_opp.index)
 	return matchups
+
+
+## Registra un avversario nella cronologia di `who`, tenendo solo gli ultimi
+## REMATCH_AVOID_WINDOW.
+func _remember(who: int, opponent: int) -> void:
+	var history: Array = _recent_opponents.get(who, [])
+	history.append(opponent)
+	while history.size() > REMATCH_AVOID_WINDOW:
+		history.pop_front()
+	_recent_opponents[who] = history
 
 
 ## Risolve il round: combattimenti, danni, eliminazioni, reddito.

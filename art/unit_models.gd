@@ -79,6 +79,8 @@ static func build(unit_id: String, origin: String) -> Node3D:
 
 	var custom := _load_custom_model(unit_id)
 	if custom != null:
+		_normalize_custom_model(custom, height_of(unit_id))
+		_recolor_custom_model(custom, palette)
 		root.add_child(custom)
 		return root
 
@@ -120,6 +122,95 @@ static func _load_custom_model(unit_id: String) -> Node3D:
 	if scene == null:
 		return null
 	return scene.instantiate() as Node3D
+
+
+## Riporta un modello d'artista alla convenzione delle figure procedurali:
+## poggia sull'origine (y = 0), centrato su x/z, e alto `target_height` unità di
+## mondo (una cella vale 1.0). Un .glb esportato con una scala qualsiasi —
+## metri, centimetri, unità di Blender — appare così alla dimensione giusta
+## senza doverlo riesportare, e tutti i consumatori (ritratti, collezione,
+## scacchiera) lo inquadrano con lo stesso calcolo che usano per le primitive.
+static func _normalize_custom_model(node: Node3D, target_height: float) -> void:
+	var box := _local_aabb(node, Transform3D.IDENTITY)
+	if box.size.y <= 0.0001:
+		return
+	var factor := target_height / box.size.y
+	node.scale = node.scale * factor
+	var scaled := box.abs()
+	scaled.position *= factor
+	scaled.size *= factor
+	node.position -= Vector3(
+		scaled.position.x + scaled.size.x * 0.5,
+		scaled.position.y,
+		scaled.position.z + scaled.size.z * 0.5)
+
+
+## AABB di tutte le mesh sotto `node`, nello spazio del genitore.
+static func _local_aabb(node: Node, xform: Transform3D) -> AABB:
+	var here := xform
+	if node is Node3D:
+		here = xform * (node as Node3D).transform
+	var acc := AABB()
+	var seeded := false
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		acc = here * (node as MeshInstance3D).mesh.get_aabb()
+		seeded = true
+	for child in node.get_children():
+		var sub := _local_aabb(child, here)
+		if sub.size == Vector3.ZERO:
+			continue
+		acc = acc.merge(sub) if seeded else sub
+		seeded = true
+	return acc
+
+
+## Tinte per un .glb esportato senza colori (ogni materiale grigio uniforme):
+## si indovina il ruolo dal nome del materiale — la convenzione è nominarli in
+## italiano come nel resto del progetto — e si applica la palette della civiltà,
+## così lo stesso modello serve romani, galli e teutoni. Un materiale il cui
+## nome non combacia con nessuna parola chiave resta com'è.
+const _RECOLOR_KEYWORDS: Array = [
+	[["bordo"], "secondary"],
+	[["cintura", "cuoio", "belt"], "wood"],
+	[["metallo", "ferro", "metal", "iron", "acciaio", "lama", "elmo", "punta"], "metal"],
+	[["legno", "wood", "asta", "lancia", "scudo", "manico"], "wood"],
+	[["pelle", "skin", "viso", "faccia", "mani", "braccia"], "skin"],
+	[["capelli", "hair", "baffi", "barba", "calce", "biondo", "crine"], "hair"],
+	[["bracae", "braghe", "pantaloni", "breeches", "scacchi", "gambe"], "breeches"],
+	[["mantello", "cloak", "ocra", "rosso", "cappa"], "cloak"],
+	[["verde", "gallico", "tunica", "tunic", "corpo", "busto", "veste", "primary"], "primary"],
+]
+
+
+static func _recolor_custom_model(node: Node, palette: Dictionary) -> void:
+	for child in node.get_children():
+		_recolor_custom_model(child, palette)
+	if not (node is MeshInstance3D):
+		return
+	var mesh_instance := node as MeshInstance3D
+	if mesh_instance.mesh == null:
+		return
+	for surface in mesh_instance.mesh.get_surface_count():
+		var source := mesh_instance.get_active_material(surface)
+		var mat_name := source.resource_name.to_lower() if source != null else ""
+		if mat_name.is_empty():
+			mat_name = String(mesh_instance.name).to_lower()
+		var color: Variant = _recolor_pick(mat_name, palette)
+		if color == null:
+			continue
+		mesh_instance.set_surface_override_material(surface, _material(color))
+
+
+static func _recolor_pick(mat_name: String, palette: Dictionary) -> Variant:
+	for rule in _RECOLOR_KEYWORDS:
+		for keyword in rule[0]:
+			if mat_name.contains(keyword):
+				match rule[1]:
+					"hair": return palette["secondary"].lightened(0.35)
+					"breeches": return palette["primary"].darkened(0.35)
+					"cloak": return Color(0.60, 0.28, 0.20)
+					_: return palette[rule[1]]
+	return null
 
 
 ## Archetipo di un'unità, letto dalle sue classi. Serve sia a scegliere il

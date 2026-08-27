@@ -19,8 +19,18 @@ le figure procedurali (vedi FORWARD in art/unit_models.gd) -- e' cosi' che
 BattleBoard3D orienta le unita' verso il lato giusto del campo.
 
 Scala: una cella della scacchiera vale 1.0 unita' di mondo; un fante
-procedurale e' alto ~0.8. Un modello mille volte troppo grande o piccolo va
-ridimensionato prima di essere esportato, non dopo in codice.
+procedurale e' alto ~0.8. build() normalizza comunque ogni .glb -- lo scala in
+modo uniforme fino all'altezza dell'archetipo (height_of), lo poggia su y = 0 e
+lo centra su x/z -- quindi un modello esportato in metri, centimetri o unita'
+di Blender appare lo stesso alla dimensione giusta. Resta buona norma
+esportarlo gia' vicino alla scala finale, ma non e' piu' obbligatorio.
+
+Colori: se il .glb non porta colori (materiali tutti grigi, nessuna texture),
+build() li assegna dai NOMI dei materiali -- nominali in italiano come nel
+progetto ("Verde_Gallico", "Metallo_Ferro", "Cintura_Cuoio", "Capelli...",
+"Mantello...", "Bracae...", "Bordo_Tunica", "Pelle...") e prendono la palette
+della civilta'. Un materiale gia' colorato o con nome non riconosciuto resta
+com'e'. Vedi _RECOLOR_KEYWORDS in art/unit_models.gd.
 
 Dopo aver aggiunto i file, serve un import una tantum prima che Godot li veda
 (vale anche per i test headless):

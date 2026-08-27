@@ -17,10 +17,17 @@ Godot is not on PATH. Executable:
 Run tests (headless):
 
 ```sh
-godot --headless --path . --script res://tests/run_tests.gd                 # engine: 59 tests
-godot --headless --path . --script res://tests/ui_smoke.gd -- --seed=4242   # full match: 37 tests
-godot --headless --path . --script res://tests/menu_smoke.gd               # menu: 19 tests
+godot --headless --path . --script res://tests/run_tests.gd                 # engine + serialization
+godot --headless --path . --script res://tests/ui_smoke.gd -- --seed=4242   # full match
+godot --headless --path . --script res://tests/menu_smoke.gd               # menu
+godot --headless --path . --script res://tests/auth_smoke.gd               # login facade (guest mode)
+godot --headless --path . --script res://tests/net_smoke.gd                # matchmaking + authoritative worker
 ```
+
+Three tests currently fail on a clean checkout, unrelated to multiplayer work and pre-dating it —
+they depend on local `user://profile.cfg` state (tips/guide marked seen) and one on sell economics:
+`il suggerimento del negozio compare all'avvio`, `la vendita restituisce oro`,
+`la guida non è ancora stata vista`.
 
 `ui_smoke` **requires a fixed seed** — without one each run buys different units and the test
 fails intermittently. The same `--seed=NNNN` flag works when playing normally, to reproduce an
@@ -54,10 +61,23 @@ data/           all balance numbers as JSON
 monetization/   store: interface + RevenueCat backends (see monetization/README.md)
 app/            persistent player state (preferences, stats)
 ui/             presentation (reads state, does not mutate it)
+net/            client networking: auth facade, session abstraction, wire protocol
+server/         headless authoritative server: master (matchmaking) + worker (match)
+db/             Supabase Postgres schema + migrations (see db/README.md)
+deploy/         VPS deploy files — Caddy, systemd units, backup (see SETUP_VPS.md)
 android/        Kotlin plugin for RevenueCat (see android/README.md)
 web/            JS bridge for the HTML5 export (see web/README.md)
 tests/          headless test suites
 ```
+
+Multiplayer (see `MULTIPLAYER_PLAN.md` for the full design, `SETUP_SUPABASE.md` / `SETUP_VPS.md`
+for infra). `core/` gained pure `to_dict()`/`apply_dict()` serialization and still knows nothing
+about `net/` or `server/`. `ui/main.gd` drives a `MatchSession` (`net/match_session.gd`):
+`LocalSession` owns a real `MatchState` (offline, unchanged behaviour), `RemoteSession` fills its
+`MatchState` only from server snapshots — it never simulates. Online, the client is never
+authoritative and never sees another player's private state (`Player.to_dict(viewer=false)` omits
+shop/gold/bench). Transport is WebSocket (`wss://`, TLS via Caddy), messages are
+`var_to_bytes`-encoded dicts (`net/protocol.gd`), not JSON — preserves `Vector2i`.
 
 The rule that holds everything else up: **`core/` does not know about `ui/`**. The simulation is
 deterministic and seeded, so the same match can be replayed identically — the prerequisite for
@@ -74,7 +94,16 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `core/match_state.gd` | rounds, pairings, damage, eliminations |
 | `core/bot_brain.gd` | opponent prep AI |
 | `ui/menu.gd` | start screen — **this is the main scene** |
-| `ui/main.gd` | in-match screen |
+| `ui/lobby.gd` | matchmaking waiting room (queue count + 30s countdown) |
+| `ui/main.gd` | in-match screen; local mode unchanged, remote mode shows prep timer + PRONTO |
+| `net/auth.gd` | autoload `Auth` — Google Sign-In via Supabase, loopback+PKCE; degrades to guest |
+| `net/match_session.gd` | base class; `LocalSession` / `RemoteSession` back it |
+| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` |
+| `server/master_server.gd` | `SceneTree` script; JWT verify, queue, 30s timer, worker routing |
+| `server/matchmaker.gd` | socket-free queue core (testable) |
+| `server/game_worker.gd` | `SceneTree` script; `match_id → MatchRunner` |
+| `server/match_runner.gd` | authoritative match: prep timer, 3-level command validation, resolve, targeted logs, reconnect |
+| `server/stats_writer.gd` | writes `match_history` / `player_stats` via Supabase service_role RPC |
 | `ui/combat_view.gd` | replays the battle by reading the event log |
 | `ui/unit_slot.gd` | shop/board/bench/collection slot; shows the 3D model |
 | `art/unit_models.gd` | procedural unit figures (see below) |

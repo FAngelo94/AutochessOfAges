@@ -53,6 +53,9 @@ func platform_key() -> String:
 ## ci sarà l'account online andrà sostituito con l'id dell'account, altrimenti
 ## gli acquisti non seguono il giocatore da un dispositivo all'altro.
 func user_id() -> String:
+	var a := get_node_or_null("/root/Auth")
+	if a != null and a.user_id() != "":
+		return a.user_id()
 	return OS.get_unique_id()
 
 

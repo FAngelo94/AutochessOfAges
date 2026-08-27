@@ -1,0 +1,38 @@
+# /etc/systemd/system/autochess-master.service
+#
+# Master server: verifica JWT, coda di matchmaking, timer 30s, routing
+# least-loaded verso i worker. Ascolta su 127.0.0.1:9000 (esposto da Caddy
+# come /ws/mm). NON aprire la 9000 sul firewall.
+
+[Unit]
+Description=Autochess master server (matchmaking)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=autochess
+Group=autochess
+EnvironmentFile=/etc/autochess/env
+WorkingDirectory=/opt/autochess/app
+ExecStart=/opt/godot/godot --headless --path /opt/autochess/app --script res://server/master_server.gd -- --port=9000
+Restart=always
+RestartSec=3
+
+# --- hardening ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/autochess
+# Godot scrive cache/log nella home dell'utente di servizio
+Environment=HOME=/opt/autochess
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

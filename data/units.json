@@ -108,6 +108,21 @@
       "lore": "I catafratti erano cavalieri corazzati da capo a piedi, cavallo compreso, un modello di cavalleria pesante appreso da Roma dai propri avversari orientali — Parti e Sarmati — e adottato su larga scala nel tardo impero. L'armatura, a lamelle o a maglia, copriva anche il destriero (spesso indicato come cataphractarius o clibanarius nelle fonti), e la lancia lunga (contus) impugnata a due mani permetteva una carica d'urto devastante contro la fanteria nemica, pagata però con una mobilità molto inferiore a quella della cavalleria leggera."
     },
     {
+      "id": "vestalis",
+      "name": "Vestale",
+      "origin": "roman",
+      "classes": ["druid"],
+      "cost": 2,
+      "stats": { "hp": 600, "attack_damage": 45, "attack_speed": 0.65, "range": 3, "armor": 20, "magic_resist": 30, "mana_max": 60, "mana_start": 15 },
+      "ability": {
+        "name": "Fuoco sacro",
+        "description": "Cura l'alleato con meno salute e gli concede rigenerazione.",
+        "type": "heal_lowest_ally",
+        "params": { "amount": [220, 330, 580], "regen": [12, 20, 35], "duration": 5.0 }
+      },
+      "lore": "Le vestali erano le sacerdotesse del culto di Vesta, dea del focolare, scelte in età infantile tra le famiglie patrizie e vincolate per trent'anni a mantenere acceso il fuoco sacro nel tempio del Foro Romano. Godevano di uno status unico per una donna romana — proprietà personale, testimonianza in tribunale, un seggio d'onore ai giochi — e la loro incolumità era considerata legata a quella stessa di Roma: si credeva che finché il fuoco non si fosse spento, la città sarebbe rimasta al sicuro."
+    },
+    {
       "id": "clansman",
       "name": "Guerriero del clan",
       "origin": "gaul",
@@ -119,7 +134,8 @@
         "description": "Aumenta la propria velocità d'attacco per 5 secondi.",
         "type": "buff_self",
         "params": { "attack_speed_bonus": [0.45, 0.65, 1.20], "duration": 5.0 }
-      }
+      },
+      "lore": "Il guerriero del clan era il nucleo della fanteria gallica, un uomo libero che rispondeva alla chiamata alle armi della propria tribù portando le proprie armi ed equipaggiamenti. Combatteva spesso a torso nudo o con poca protezione, fidando nella forza fisica e nel furore dello scontro più che nella corazza pesante: gli autori romani, da Polibio a Cesare, descrivono con timore la furia dell'assalto iniziale gallico, capace di travolgere linee nemiche impreparate, anche se difficile da sostenere a lungo se il primo urto non fosse risolutivo."
     },
     {
       "id": "gaul_hunter",
@@ -133,7 +149,8 @@
         "description": "Infligge danno nel tempo e riduce le cure ricevute dal bersaglio.",
         "type": "damage_over_time",
         "params": { "damage": [240, 360, 620], "duration": 4.0, "heal_reduction": 0.5, "target": "current" }
-      }
+      },
+      "lore": "Le foreste della Gallia erano un terreno di caccia costante, e i cacciatori che vi si formavano portavano in guerra un'abilità con l'arco affinata inseguendo selvaggina di ogni tipo, dal cinghiale al cervo. A differenza della fanteria pesante del clan, operavano sciolti davanti allo schieramento o sui fianchi, tendendo imboscate e logorando il nemico da distanza prima che si arrivasse al corpo a corpo; alcune fonti romane ricordano anche l'uso di frecce intinte in sostanze velenose ricavate da piante ed erbe locali, per rendere ogni colpo più letale."
     },
     {
       "id": "gaul_druid",
@@ -147,7 +164,8 @@
         "description": "Cura l'alleato con meno salute e gli concede rigenerazione.",
         "type": "heal_lowest_ally",
         "params": { "amount": [300, 450, 800], "regen": [15, 25, 45], "duration": 5.0 }
-      }
+      },
+      "lore": "I druidi erano la classe sacerdotale e intellettuale della società gallica, custodi di un sapere religioso, astronomico e giuridico tramandato oralmente e appreso in una formazione che, secondo Cesare, poteva durare fino a vent'anni. Officiavano i riti nei boschi sacri, in particolare quelli legati al vischio raccolto dalle querce, mediavano le controversie fra tribù e potevano fermare una battaglia con la sola autorità morale; in guerra accompagnavano i clan più come guaritori e figure spirituali che come combattenti, invocando la protezione degli dei per gli alleati feriti."
     },
     {
       "id": "chariot",
@@ -161,7 +179,8 @@
         "description": "Travolge tutti i nemici adiacenti infliggendo danno e respingendoli.",
         "type": "damage_splash",
         "params": { "damage": [260, 390, 680], "radius": 1, "target": "self" }
-      }
+      },
+      "lore": "Il carro da guerra era già in declino come mezzo bellico continentale al tempo della conquista romana, sostituito quasi ovunque dalla cavalleria, ma restava in uso presso alcune tribù, come i Britanni descritti da Cesare, che ne fecero un uso tattico sofisticato: il guerriero veniva portato rapidamente in prima linea, scendeva a combattere a piedi e, se necessario, il carro tornava a recuperarlo per la ritirata. Le lame ricurve montate sui mozzi delle ruote, più leggendarie nelle fonti tarde che diffuse nella realtà archeologica, restano l'immagine più iconica di questo mezzo, capace di seminare il panico caricando attraverso i ranghi nemici."
     },
     {
       "id": "gaul_champion",
@@ -175,7 +194,8 @@
         "description": "Colpisce il bersaglio con un fendente devastante, più forte quanto più il nemico è ferito.",
         "type": "damage_execute",
         "params": { "damage": [320, 480, 900], "missing_hp_scaling": 0.5, "target": "current" }
-      }
+      },
+      "lore": "Nella società gallica il prestigio si conquistava sul campo di battaglia, e i campioni erano guerrieri che si erano guadagnati fama personale al punto da poter sfidare i migliori avversari nemici in duelli individuali davanti agli schieramenti, una pratica descritta da Diodoro Siculo e Tito Livio come parte integrante della cultura marziale celtica. Portavano spesso torque d'oro al collo, simbolo di rango e di voto agli dei, e armature riccamente decorate, e più il nemico appariva ferito o in difficoltà, più il campione cercava lo scontro diretto per suggellare la propria reputazione con un colpo definitivo."
     },
     {
       "id": "solduros",
@@ -189,7 +209,8 @@
         "description": "Ogni alleato caduto rinsalda il suo giuramento: infligge danno ad area e ruba salute per 10 secondi.",
         "type": "rally",
         "params": { "damage": [300, 450, 950], "radius": 1, "attack_speed_bonus": [0.25, 0.40, 0.85], "omnivamp": 0.30, "duration": 10.0, "self_only": true }
-      }
+      },
+      "lore": "I soldurii, descritti da Cesare a proposito dell'aquitano Adcantuannus, erano un seguito di guerrieri legati al proprio capo da un giuramento assoluto: condividevano con lui ogni bene in vita e, se il capo cadeva in battaglia o veniva ucciso, si toglievano la vita per non sopravvivergli, ritenendo disonorevole continuare a vivere dopo la sua morte. Questo legame di fedeltà totale, più forte di qualsiasi altro vincolo sociale gallico, li rendeva combattenti implacabili proprio nel momento in cui la battaglia volgeva al peggio, spinti a vendicare i compagni caduti prima di seguirli."
     },
 
     {
@@ -204,7 +225,8 @@
         "description": "Colpisce i due nemici più vicini con una scarica di proiettili.",
         "type": "damage_nearest",
         "params": { "damage": [160, 240, 420], "targets": 2 }
-      }
+      },
+      "lore": "La fromboliera era un'arma povera e diffusissima nella Gallia rurale, poco costosa da fabbricare e facile da procurare rispetto a un arco composito, e per questo era spesso l'arma dei ceti meno abbienti richiamati alle armi dal clan. Con un semplice cinturino di cuoio o fibra vegetale e pallottole di pietra o piombo fuso, un fromboliere esperto poteva raggiungere una gittata considerevole e una precisione sorprendente, ideale per bersagliare le prime file nemiche da distanza prima che le linee si scontrassero corpo a corpo."
     },
     {
       "id": "teuton_spearman",
@@ -247,6 +269,21 @@
         "type": "shield_self",
         "params": { "amount": [200, 300, 520], "duration": 4.0, "reflect": 0.35, "damage_reduction": 0.25 }
       }
+    },
+    {
+      "id": "cherusker_reiter",
+      "name": "Cavaliere Cherusco",
+      "origin": "teuton",
+      "classes": ["cavalry"],
+      "cost": 2,
+      "stats": { "hp": 700, "attack_damage": 60, "attack_speed": 0.75, "range": 1, "armor": 25, "magic_resist": 22, "mana_max": 60, "mana_start": 10 },
+      "ability": {
+        "name": "Assalto boschivo",
+        "description": "Carica il nemico più lontano infliggendo danno e stordendolo brevemente.",
+        "type": "stun_target",
+        "params": { "damage": [150, 225, 400], "duration": [0.9, 1.2, 2.0], "target": "farthest" }
+      },
+      "lore": "A differenza dei popoli mediterranei, i Germani non svilupparono una tradizione di cavalleria pesante: i loro cavalieri, reclutati tra i membri più facoltosi del clan, combattevano leggeri e mobili, spesso in appoggio coordinato alla fanteria, come descrisse Tacito a proposito dei Cherusci di Arminio. La stessa vittoria di Teutoburgo del 9 d.C. si affidò più all'imboscata nella foresta che a un urto di cavalleria in campo aperto."
     },
     {
       "id": "seeress",

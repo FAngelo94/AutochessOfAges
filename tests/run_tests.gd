@@ -25,8 +25,11 @@ func _initialize() -> void:
 	_test_combat_determinism()
 	_test_traits()
 	_test_full_match()
+	_test_rematch_avoidance()
 	_test_replay_log()
 	_test_monetization()
+	_test_serialization_roundtrip()
+	_test_view_filtering()
 
 	print("\n%d superati, %d falliti" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -686,6 +689,51 @@ func _test_full_match() -> void:
 	print("  (vincitore: %s, round: %d, livello max: %d)" % [standings[0].display_name, rounds, max_level])
 
 
+## A7 — build_matchups() evita di riproporre gli avversari degli ultimi round.
+func _test_rematch_avoidance() -> void:
+	section("Accoppiamenti — niente rivincite ravvicinate")
+
+	# Tutti e 8 vivi (nessun resolve_round): si osservano solo gli accoppiamenti.
+	var immediate := 0
+	var total := 0
+	for s in [11, 22, 33, 44, 55, 66, 77, 88]:
+		var ms := MatchState.new(s, 0)
+		var prev := {}
+		for _r in 6:
+			var cur := {}
+			for m in ms.build_matchups():
+				if m["b"] == null:
+					continue
+				cur[m["a"].index] = m["b"].index
+				cur[m["b"].index] = m["a"].index
+			for idx in cur:
+				total += 1
+				if prev.get(idx, -1) == cur[idx]:
+					immediate += 1
+			prev = cur
+	# L'accoppiamento adiacente casuale darebbe ~1/7 (~14%); con la finestra
+	# la rivincita col round precedente deve essere rara.
+	check(immediate <= total / 20,
+		"le rivincite col round precedente sono rare (%d su %d)" % [immediate, total])
+
+	# Riproducibilità: stesso seed -> stessa sequenza di accoppiamenti.
+	var run_a := _matchup_trace(4242)
+	var run_b := _matchup_trace(4242)
+	check(run_a == run_b, "gli accoppiamenti sono riproducibili a parità di seed")
+
+
+func _matchup_trace(seed_value: int) -> Array:
+	var ms := MatchState.new(seed_value, 0)
+	var trace: Array = []
+	for _r in 5:
+		var round_pairs: Array = []
+		for m in ms.build_matchups():
+			var b_idx: int = (m["b"].index if m["b"] != null else -1)
+			round_pairs.append([m["a"].index, b_idx, m["ghost"]])
+		trace.append(round_pairs)
+	return trace
+
+
 func _test_monetization() -> void:
 	section("Monetizzazione")
 
@@ -742,6 +790,76 @@ func _test_monetization() -> void:
 	# I backend reali non devono attivarsi su desktop.
 	check(not RevenueCatAndroid.new().is_available(), "il backend Android non si attiva su desktop")
 	check(not RevenueCatWeb.new().is_available(), "il backend web non si attiva su desktop")
+
+
+## MatchState -> to_dict -> var_to_bytes -> bytes_to_var -> apply_dict su una
+## istanza vuota, e lo stato ricostruito coincide campo per campo. È il
+## prerequisito del multiplayer autoritativo: il client rigioca gli snapshot.
+func _test_serialization_roundtrip() -> void:
+	section("Serializzazione")
+
+	var original := MatchState.new(20260827, 1)
+	var brains: Array[BotBrain] = []
+	var brain_rng := SimRNG.new(original.seed_value ^ 0x5EED)
+	for player in original.players:
+		brains.append(BotBrain.new(player, brain_rng.fork(player.index)))
+	for r in 3:
+		original.start_round()
+		for brain in brains:
+			brain.play_preparation(original.stage)
+		original.resolve_round()
+
+	var for_index := 0
+	var bytes := var_to_bytes(original.to_dict(for_index))
+	var decoded: Dictionary = bytes_to_var(bytes)
+	check(decoded is Dictionary and not decoded.is_empty(), "il dizionario sopravvive a var_to_bytes/bytes_to_var")
+
+	var rebuilt := MatchState.new(1, 1)
+	rebuilt.apply_dict(decoded)
+
+	check(rebuilt.phase == original.phase, "fase ricostruita", "%d vs %d" % [rebuilt.phase, original.phase])
+	check(rebuilt.stage == original.stage, "stage ricostruito")
+	check(rebuilt.round_index == original.round_index, "round_index ricostruito")
+	check(rebuilt.seed_value == original.seed_value, "seed_value ricostruito")
+	check(rebuilt.pool.snapshot() == original.pool.snapshot(), "snapshot del pool identico")
+
+	var fields_ok := true
+	var units_ok := true
+	for i in original.players.size():
+		var o: Player = original.players[i]
+		var b: Player = rebuilt.players[i]
+		if o.hp != b.hp or o.level != b.level or o.placement != b.placement or o.streak != b.streak:
+			fields_ok = false
+		var expected: Array = o.units if i == for_index else o.board_units()
+		if b.units.size() != expected.size():
+			units_ok = false
+			continue
+		for ou in expected:
+			var bu: UnitInstance = b.unit_by_uid(ou.uid)
+			if bu == null or bu.star != ou.star or bu.cell != ou.cell or bu.def.id != ou.def.id:
+				units_ok = false
+	check(fields_ok, "hp, livello, piazzamento e serie ricostruiti per ogni giocatore")
+	check(units_ok, "ogni unità ricostruita con uid, stella e cella")
+	check(rebuilt.players[for_index].gold == original.players[for_index].gold, "l'oro del ricevente è ricostruito")
+	check(rebuilt.players[for_index].xp == original.players[for_index].xp, "l'esperienza del ricevente è ricostruita")
+
+
+## Test anti-cheat: il dict di un giocatore visto da un ALTRO giocatore non
+## contiene shop, gold, xp, panchina. Mai sul filo lo stato privato altrui.
+func _test_view_filtering() -> void:
+	section("Filtro delle viste (anti-cheat)")
+
+	var ms := MatchState.new(555, 1)
+	var mine := ms.players[0].to_dict(true)
+	var d := ms.players[0].to_dict(false)
+
+	check(mine.has("shop") and mine.has("gold") and mine.has("bench"),
+		"il giocatore vede il proprio shop, oro e panchina")
+	check(not d.has("shop"), "un avversario non vede lo shop")
+	check(not d.has("gold"), "un avversario non vede l'oro")
+	check(not d.has("xp"), "un avversario non vede l'esperienza")
+	check(not d.has("bench"), "un avversario non vede la panchina")
+	check(d.has("board"), "un avversario vede comunque il tavolo")
 
 
 func _test_replay_log() -> void:

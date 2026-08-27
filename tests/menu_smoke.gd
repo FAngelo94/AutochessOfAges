@@ -129,7 +129,23 @@ func _run() -> void:
 	_menu._on_mode_pressed(_menu.MODE_PVP)
 	check(_menu._match_mode == _menu.MODE_PVP, "si può selezionare la modalità contro giocatori")
 	check(not _menu._mode_panel.visible, "selezionare una modalità chiude la modale")
-	_menu._on_mode_pressed(_menu.MODE_CPU)
+
+	# Il ramo PVP non apre più un dialog "in arrivo": da loggati va in lobby, da
+	# sloggati avvia il login Google. Senza backend configurato Auth.login_google()
+	# degrada subito a login_completed(false, ...): qui si verifica solo che non
+	# si crashi e che NON si esca dal menu (il full path lobby→partita richiede
+	# un server e si prova a mano — vedi criteri di accettazione M6).
+	var auth := _menu.get_node_or_null("/root/Auth")
+	check(auth != null, "l'autoload Auth è presente")
+	if auth != null:
+		check(not auth.is_logged_in(), "il test parte da sloggati")
+		_menu._match_mode = _menu.MODE_PVP
+		_menu._on_play_pressed()
+		var scene := current_scene
+		check(scene == null or scene.scene_file_path != "res://ui/lobby.tscn",
+			"da sloggati il tasto Battaglia in PVP non entra in lobby")
+
+	_menu._match_mode = _menu.MODE_CPU
 
 	# Eroe: la selezione è obbligatoria, quindi il menu parte sempre con un id
 	# valido, e sceglierne uno diverso si salva sul profilo.

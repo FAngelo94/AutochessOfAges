@@ -16,9 +16,16 @@ const CELL_SIZE := Vector2(76, 88)
 const SHOP_SLOT_SIZE := Vector2(92, 96)
 const BENCH_SLOT_SIZE := SHOP_SLOT_SIZE
 
+## In locale il MatchState e' quello di _session; in remoto sara' lo stesso
+## oggetto, solo riempito dagli snapshot del server. La UI lo legge e basta.
 var match_state: MatchState
-var brains: Array[BotBrain] = []
 var selected: UnitInstance = null
+
+## Da dove arriva la partita. LOCAL: simulata qui da LocalSession. REMOTE:
+## decisa da un server autoritativo (MULTIPLAYER_PLAN.md M6).
+enum SessionMode { LOCAL, REMOTE }
+var session_mode: int = SessionMode.LOCAL
+var _session: MatchSession
 
 var _round_label: Label
 var _hp_label: Label
@@ -33,6 +40,12 @@ var _ranking_list: VBoxContainer
 var _synergy_row: HFlowContainer
 var _fight_button: Button
 var _sell_button: Button
+
+## Modalità remota: al posto di COMBATTI, un countdown di preparazione e PRONTO.
+var _prep_bar: VBoxContainer
+var _prep_label: Label
+var _ready_button: Button
+var _reconnect_panel: Panel
 
 ## I controlli di negozio, griglia e panchina hanno numero fisso: vengono
 ## creati una volta sola e poi solo aggiornati. Ricostruirli a ogni refresh
@@ -319,6 +332,31 @@ func _build_action_bar() -> Control:
 	Style.apply_plate(_fight_button, Style.GOLD, Style.GOLD_DEEP, 20, 8)
 	_fight_button.pressed.connect(_on_fight_pressed)
 	column.add_child(_fight_button)
+
+	# Modalità remota: il tick del round è del server, non di un bottone. Al
+	# posto di COMBATTI, il tempo di preparazione rimasto e un PRONTO che dice
+	# al server "ho finito" (il round si chiude comunque allo scadere).
+	_prep_bar = VBoxContainer.new()
+	_prep_bar.add_theme_constant_override("separation", 4)
+	_prep_bar.visible = false
+	column.add_child(_prep_bar)
+
+	_prep_label = Label.new()
+	_prep_label.add_theme_font_size_override("font_size", 20)
+	_prep_label.add_theme_color_override("font_color", Style.GOLD)
+	_prep_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_prep_bar.add_child(_prep_label)
+
+	_ready_button = Button.new()
+	_ready_button.text = "PRONTO"
+	_ready_button.custom_minimum_size = Vector2(0, Style.TOUCH_PRIMARY)
+	_ready_button.add_theme_font_size_override("font_size", 34)
+	_ready_button.add_theme_color_override("font_color", Style.INK)
+	_ready_button.add_theme_color_override("font_hover_color", Style.INK)
+	_ready_button.add_theme_color_override("font_pressed_color", Style.INK)
+	Style.apply_plate(_ready_button, Style.GOLD, Style.GOLD_DEEP, 20, 8)
+	_ready_button.pressed.connect(_on_ready_pressed)
+	_prep_bar.add_child(_ready_button)
 
 	return column
 
@@ -618,18 +656,21 @@ func _build_spectate_overlay() -> void:
 ## fantasma senza schieramento, il tocco non fa nulla: non c'è niente da
 ## mostrare.
 func _open_spectate(pl: Player) -> void:
-	var result := {}
-	for entry in match_state.last_results():
-		if entry["player"] == pl:
-			result = entry
-			break
-	if result.is_empty() or bool(result.get("ghost", false)) or result["combat"].is_empty():
-		return
+	# La sessione risponde con spectate_ready: sincrono in locale (il client ha
+	# tutti i log), asincrono in remoto (il worker manda solo il tuo log di
+	# combattimento, quello altrui va chiesto — MULTIPLAYER_PLAN.md A5).
+	_session.request_spectate(pl.index)
 
-	var opponent: Player = result.get("opponent")
-	_spectate_title.text = "Ultimo schieramento — %s" % pl.display_name
-	_spectate_view.set_hero_portraits(pl.hero_id, opponent.hero_id if opponent != null else "")
-	_spectate_view.load_combat(result["combat"], int(result.get("team", 0)))
+
+func _on_spectate_ready(player_index: int, combat: Dictionary, team: int, opponent_hero_id: String) -> void:
+	if combat.is_empty():
+		return  # niente schieramento da mostrare (round a vuoto / fantasma)
+	var pl: Player = null
+	if player_index >= 0 and player_index < match_state.players.size():
+		pl = match_state.players[player_index]
+	_spectate_title.text = "Ultimo schieramento — %s" % (pl.display_name if pl != null else "?")
+	_spectate_view.set_hero_portraits(pl.hero_id if pl != null else "", opponent_hero_id)
+	_spectate_view.load_combat(combat, team)
 	_spectate_overlay.visible = true
 
 
@@ -968,19 +1009,123 @@ func _start_new_match() -> void:
 	_fight_button.text = "COMBATTI"
 	selected = null
 
-	match_state = MatchState.new(_requested_seed(), 1)
-	match_state.human_player().hero_id = _profile.effective_hero()
-	brains.clear()
-	var brain_rng := SimRNG.new(match_state.seed_value ^ 0x5EED)
-	for p in match_state.players:
-		if p.is_bot:
-			brains.append(BotBrain.new(p, brain_rng.fork(p.index)))
+	_session = _make_session()
+	_session.begin(_requested_seed(), _profile.effective_hero())
+	_session.state_changed.connect(_refresh)
+	_session.round_concluded.connect(_on_round_concluded)
+	_session.command_rejected.connect(_on_command_rejected)
+	_session.spectate_ready.connect(_on_spectate_ready)
+
+	if session_mode == SessionMode.REMOTE:
+		_session.round_started.connect(_on_remote_round_started)
+		_session.connection_lost.connect(_on_connection_lost)
+	_apply_session_mode_ui()
+
+	match_state = _session.state()
 
 	_log("[b]Nuova partita[/b] (seed %d)" % match_state.seed_value)
 	_log("Civiltà disponibili: %s" % ", ".join(_store.playable_origins()))
-	match_state.start_round()
 	_refresh()
 	_tips.queue_tip("shop")
+
+
+## Crea la sessione adatta alla modalità corrente. Il single-player usa sempre
+## LocalSession; RemoteSession è lo scheletro che si completa in M6.
+func _make_session() -> MatchSession:
+	# La lobby consegna una RemoteSession gia' agganciata al worker tramite un
+	# meta sulla radice (handoff senza autoload). Consumato subito.
+	var tree_root := get_tree().root
+	if tree_root.has_meta("pending_session"):
+		var handed: Variant = tree_root.get_meta("pending_session")
+		tree_root.remove_meta("pending_session")
+		if handed is RemoteSession:
+			session_mode = SessionMode.REMOTE
+			var remote := handed as RemoteSession
+			remote.drive(self)
+			return remote
+	session_mode = SessionMode.LOCAL
+	return LocalSession.new()
+
+
+## Nasconde/mostra i comandi in base alla modalità: in remoto niente COMBATTI,
+## c'è PRONTO + countdown; in locale il contrario.
+func _apply_session_mode_ui() -> void:
+	var remote := session_mode == SessionMode.REMOTE
+	_fight_button.visible = not remote
+	_prep_bar.visible = remote
+
+
+func _on_ready_pressed() -> void:
+	if _combat_overlay.visible:
+		return
+	_ready_button.disabled = true
+	_ready_button.text = "IN ATTESA…"
+	_session.request_ready()
+
+
+func _on_remote_round_started(_stage: int, _round_index: int) -> void:
+	_ready_button.disabled = false
+	_ready_button.text = "PRONTO"
+
+
+func _process(_delta: float) -> void:
+	if session_mode != SessionMode.REMOTE or _prep_label == null:
+		return
+	if _session is RemoteSession and not _combat_overlay.visible:
+		var left: float = (_session as RemoteSession).prep_seconds_left
+		_prep_label.text = "Preparazione: %d s" % int(ceil(maxf(0.0, left)))
+
+
+## La connessione col worker è caduta: pannello modale con riconnessione manuale
+## come fallback (RemoteSession tenta comunque la riconnessione automatica).
+func _on_connection_lost(_reason: String) -> void:
+	if _reconnect_panel == null:
+		_build_reconnect_panel()
+	_reconnect_panel.visible = true
+
+
+func _build_reconnect_panel() -> void:
+	_reconnect_panel = Panel.new()
+	_reconnect_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_reconnect_panel.add_theme_stylebox_override("panel", Style.box(Color(0.02, 0.03, 0.07, 0.94), Color(0.02, 0.03, 0.07, 0.94), 0, 0))
+	_reconnect_panel.visible = false
+	add_child(_reconnect_panel)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_reconnect_panel.add_child(center)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 16)
+	center.add_child(column)
+
+	var label := Label.new()
+	label.text = "Connessione persa — riconnessione…"
+	label.add_theme_font_size_override("font_size", 24)
+	label.add_theme_color_override("font_color", Style.GOLD)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(label)
+
+	var retry := Button.new()
+	retry.text = "Riconnetti"
+	retry.custom_minimum_size = Vector2(260, Style.TOUCH_MIN)
+	retry.add_theme_font_size_override("font_size", 22)
+	Style.apply_plate(retry, Style.GOLD, Style.GOLD_DEEP, 18, 6)
+	retry.add_theme_color_override("font_color", Style.INK)
+	retry.pressed.connect(func() -> void:
+		_reconnect_panel.visible = false
+		if _session is RemoteSession:
+			(_session as RemoteSession).reconnect())
+	column.add_child(retry)
+
+	var to_menu := Button.new()
+	to_menu.text = "Torna al menu"
+	to_menu.custom_minimum_size = Vector2(260, Style.TOUCH_MIN)
+	to_menu.add_theme_font_size_override("font_size", 22)
+	Style.apply_plate(to_menu, Style.BLUE, Style.BLUE_DEEP, 18, 6)
+	to_menu.pressed.connect(_on_menu_pressed)
+	column.add_child(to_menu)
 
 
 func _on_fight_pressed() -> void:
@@ -990,10 +1135,14 @@ func _on_fight_pressed() -> void:
 		_start_new_match()
 		return
 
-	for brain in brains:
-		brain.play_preparation(match_state.stage)
+	_session.request_ready()
 
-	var results := match_state.resolve_round()
+
+## La sessione ha risolto il round. Il giocatore vede il replay se c'è qualcosa
+## da guardare, altrimenti si passa dritti alla conclusione. La sessione ha già
+## fatto avanzare lo stato (e, se la partita continua, aperto il round dopo):
+## qui si decide solo cosa mostrare.
+func _on_round_concluded(results: Array) -> void:
 	var own := _own_result(results)
 
 	# Niente replay se non c'è nulla da guardare: giocatore già eliminato,
@@ -1004,6 +1153,32 @@ func _on_fight_pressed() -> void:
 
 	_pending_results = results
 	_show_combat(own)
+
+
+## Un comando è stato rifiutato dalla sessione: si racconta perché, con lo
+## stesso testo che prima era in linea nei gestori dei pulsanti.
+func _on_command_rejected(reason: String) -> void:
+	match reason:
+		"reroll":
+			_log("[color=#e0a070]Oro insufficiente per aggiornare il negozio.[/color]")
+		"buy_xp":
+			_log("[color=#e0a070]Non puoi comprare esperienza adesso.[/color]")
+		"board_full":
+			var p := player()
+			_log("[color=#e0a070]Puoi schierare al massimo %d unità (livello %d).[/color]" % [p.max_board_units(), p.level])
+		# Motivi dal server autoritativo (modalità remota).
+		"phase":
+			_log("[color=#e0a070]Non puoi farlo adesso: la fase di preparazione è chiusa.[/color]")
+		"rules":
+			_log("[color=#e0a070]Mossa non consentita.[/color]")
+		"identity":
+			_log("[color=#e0a070]Comando rifiutato dal server.[/color]")
+		"not_joined", "no_match", "join_token", "join_seat":
+			_log("[color=#e0a070]Sessione non valida — prova a riconnetterti.[/color]")
+		"oversize":
+			_log("[color=#e0a070]Comando troppo grande, ignorato.[/color]")
+		_:
+			_log("[color=#e0a070]Comando rifiutato (%s).[/color]" % reason)
 
 
 ## Il risultato del round dal punto di vista del giocatore umano.
@@ -1083,13 +1258,17 @@ func _conclude_round(results: Array) -> void:
 		_log("Il tuo piazzamento: %d° su %d." % [player().placement, match_state.players.size()])
 		_fight_button.text = "NUOVA PARTITA"
 		_profile.record_match(player().placement)
+		if session_mode == SessionMode.REMOTE:
+			_ready_button.visible = false
+			_prep_label.text = "Partita conclusa — usa ☰ per uscire"
 	else:
 		# round_index è già stato fatto avanzare da resolve_round(): stage 1,
 		# round 2 è il primo round che il giocatore sta per affrontare dopo
 		# aver visto un round intero di economia in azione.
+		# Il round successivo l'ha già aperto la sessione (in remoto lo fa il
+		# server): qui resta solo il suggerimento sull'economia.
 		if match_state.stage == 1 and match_state.round_index == 2:
 			_tips.queue_tip("economy")
-		match_state.start_round()
 	_refresh()
 
 
@@ -1099,12 +1278,23 @@ func _conclude_round(results: Array) -> void:
 func _on_menu_button_pressed() -> void:
 	if _exit_confirm == null:
 		_exit_confirm = ConfirmationDialog.new()
+		_exit_confirm.cancel_button_text = "Annulla"
+		_exit_confirm.confirmed.connect(_on_exit_confirmed)
+		add_child(_exit_confirm)
+	if session_mode == SessionMode.REMOTE:
+		# Online non si può distruggere la scena e sparire: è una resa.
+		_exit_confirm.dialog_text = "Abbandonare la partita? Verrà contata come sconfitta."
+		_exit_confirm.ok_button_text = "Abbandona"
+	else:
 		_exit_confirm.dialog_text = "Uscire dal combattimento? La partita in corso andrà persa."
 		_exit_confirm.ok_button_text = "Esci"
-		_exit_confirm.cancel_button_text = "Annulla"
-		_exit_confirm.confirmed.connect(_on_menu_pressed)
-		add_child(_exit_confirm)
 	_exit_confirm.popup_centered()
+
+
+func _on_exit_confirmed() -> void:
+	if session_mode == SessionMode.REMOTE and _session != null:
+		_session.leave()  # invia SURRENDER
+	_on_menu_pressed()
 
 
 ## Torna alla schermata iniziale. La partita in corso viene abbandonata: il
@@ -1140,15 +1330,11 @@ func _report(results: Array) -> void:
 
 
 func _on_reroll_pressed() -> void:
-	if not player().reroll():
-		_log("[color=#e0a070]Oro insufficiente per aggiornare il negozio.[/color]")
-	_refresh()
+	_session.request_reroll()
 
 
 func _on_buy_xp_pressed() -> void:
-	if not player().buy_xp():
-		_log("[color=#e0a070]Non puoi comprare esperienza adesso.[/color]")
-	_refresh()
+	_session.request_buy_xp()
 
 
 func _on_sell_pressed() -> void:
@@ -1156,10 +1342,9 @@ func _on_sell_pressed() -> void:
 		return
 	var value := selected.sell_value()
 	var name := selected.def.display_name
-	player().sell(selected)
+	_session.request_sell(selected.uid)
 	selected = null
 	_log("Venduto %s per %d oro." % [name, value])
-	_refresh()
 
 
 func _on_shop_slot_pressed(slot: int) -> void:
@@ -1173,10 +1358,10 @@ func _on_shop_slot_pressed(slot: int) -> void:
 		else:
 			_log("[color=#e0a070]Panchina piena.[/color]")
 		return
-	var bought := p.buy(slot)
-	_log("Comprato %s." % bought)
+	var bought_name: String = (p.shop[slot] as UnitDef).display_name
+	_session.request_buy(slot)
+	_log("Comprato %s." % bought_name)
 	_tips.queue_tip("bench")
-	_refresh()
 
 
 ## Un clic su una cella: se c'è un'unità selezionata la sposta, altrimenti
@@ -1184,8 +1369,7 @@ func _on_shop_slot_pressed(slot: int) -> void:
 func _on_cell_pressed(cell: Vector2i) -> void:
 	var p := player()
 	if selected != null:
-		if not p.move_to_board(selected, cell):
-			_log("[color=#e0a070]Puoi schierare al massimo %d unità (livello %d).[/color]" % [p.max_board_units(), p.level])
+		_session.request_move_to_board(selected.uid, cell)
 		selected = null
 	else:
 		selected = p.unit_at_cell(cell)
@@ -1201,7 +1385,7 @@ func _on_bench_slot_pressed(slot: int) -> void:
 			break
 
 	if selected != null:
-		p.move_to_bench(selected, slot)
+		_session.request_move_to_bench(selected.uid, slot)
 		selected = null
 	else:
 		selected = occupant
@@ -1215,6 +1399,10 @@ func _on_bench_slot_pressed(slot: int) -> void:
 # --------------------------------------------------------------------------
 
 func _refresh() -> void:
+	# Uno snapshot dal server significa che la connessione regge: via il pannello.
+	if _reconnect_panel != null and _reconnect_panel.visible:
+		_reconnect_panel.visible = false
+
 	var p := player()
 
 	_round_label.text = "Round %s" % match_state.round_label()

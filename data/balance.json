@@ -8,7 +8,7 @@
     "board_rows": 4,
     "bench_size": 5,
     "shop_slots": 5,
-    "max_star": 3,
+    "max_star": 4,
     "copies_to_upgrade": 2
   },
 
@@ -60,8 +60,8 @@
 
   "star_scaling": {
     "_comment": "Moltiplicatori applicati alle statistiche base per stella (indice 0 = 1★).",
-    "hp": [1.0, 1.8, 3.24],
-    "attack_damage": [1.0, 1.8, 3.24]
+    "hp": [1.0, 1.8, 3.24, 5.832],
+    "attack_damage": [1.0, 1.8, 3.24, 5.832]
   },
 
   "combat": {

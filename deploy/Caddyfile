@@ -1,0 +1,50 @@
+# /etc/caddy/Caddyfile
+#
+# TLS automatico via Let's Encrypt (Caddy lo gestisce da solo alla prima
+# richiesta valida su :443). Sostituire il dominio con il proprio record A.
+#
+# WebSocket: Caddy v2 fa da proxy ai WebSocket in modo NATIVO tramite
+# reverse_proxy — nessuna direttiva speciale, nessun blocco di header manuale
+# per l'Upgrade. Basta indirizzare la route al backend.
+#
+# Le route sono STATICHE: un worker in piu' = una riga in piu' qui
+# (es. reverse_proxy /ws/w2 127.0.0.1:9002) + `systemctl enable --now
+# autochess-worker@2`. Caddy NON viene ricaricato a ogni partita.
+
+game.tuodominio.it {
+
+	# --- master (matchmaking) ---
+	reverse_proxy /ws/mm 127.0.0.1:9000
+
+	# --- worker 1 (match autoritativo) ---
+	reverse_proxy /ws/w1 127.0.0.1:9001
+
+	# --- worker 2: scommentare quando si aggiunge autochess-worker@2 ---
+	# reverse_proxy /ws/w2 127.0.0.1:9002
+
+	# hardening di base delle risposte
+	header {
+		# nasconde la versione del server
+		-Server
+		# no sniffing del content-type
+		X-Content-Type-Options "nosniff"
+		# niente framing di terze parti
+		X-Frame-Options "DENY"
+		# referrer minimo
+		Referrer-Policy "no-referrer"
+		# HSTS: 1 anno, subdomini inclusi
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	# qualsiasi altra route non e' prevista: 404 secco
+	respond /* "not found" 404
+
+	log {
+		output file /var/log/caddy/game.access.log {
+			roll_size 10MiB
+			roll_keep 10
+			roll_keep_for 720h
+		}
+		format json
+	}
+}

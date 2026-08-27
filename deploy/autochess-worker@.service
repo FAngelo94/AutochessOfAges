@@ -1,0 +1,42 @@
+# /etc/systemd/system/autochess-worker@.service
+#
+# Unit TEMPLATE. L'istanza %i determina la porta: 90%i
+#   autochess-worker@1  -> --port=9001  (Caddy: /ws/w1)
+#   autochess-worker@2  -> --port=9002  (Caddy: /ws/w2)
+#
+# Avvio:   systemctl enable --now autochess-worker@1
+# Aggiungere il worker 2 = questa riga + una riga nel Caddyfile + reload caddy.
+#
+# Ascolta su 127.0.0.1:90%i. NON aprire queste porte sul firewall.
+
+[Unit]
+Description=Autochess worker %i (match autoritativo)
+After=network-online.target autochess-master.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=autochess
+Group=autochess
+EnvironmentFile=/etc/autochess/env
+WorkingDirectory=/opt/autochess/app
+ExecStart=/opt/godot/godot --headless --path /opt/autochess/app --script res://server/game_worker.gd -- --port=90%i
+Restart=always
+RestartSec=3
+
+# --- hardening ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/autochess
+Environment=HOME=/opt/autochess
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

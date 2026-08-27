@@ -1,0 +1,38 @@
+# Supabase local config (minimal, supabase init style).
+# 0001_initial.sql under migrations/ is the source of truth for the schema.
+project_id = "autochess_of_ages"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1"
+# the client uses an ephemeral loopback port (RFC 8252 + PKCE), so the port
+# wildcard is required — see net/auth.gd and SETUP_SUPABASE.md.
+additional_redirect_urls = ["http://127.0.0.1", "http://127.0.0.1:*"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+enable_signup = true
+
+[auth.external.google]
+enabled = true
+client_id = ""
+secret = ""
+
+[db.seed]
+enabled = true
+sql_paths = ["../seed.sql"]

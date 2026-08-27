@@ -86,3 +86,8 @@ func draw_for_level(level: int, rng: SimRNG) -> UnitDef:
 
 func snapshot() -> Dictionary:
 	return _available.duplicate()
+
+
+## Ripristina lo stato del pool da uno snapshot (per apply_dict lato client).
+func restore(snapshot: Dictionary) -> void:
+	_available = snapshot.duplicate()

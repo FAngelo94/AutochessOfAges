@@ -225,6 +225,16 @@ func sell_by_uid(uid: int) -> bool:
 	return sell(unit) if unit != null else false
 
 
+func move_to_board_by_uid(uid: int, cell: Vector2i) -> bool:
+	var unit := unit_by_uid(uid)
+	return move_to_board(unit, cell) if unit != null else false
+
+
+func move_to_bench_by_uid(uid: int, slot: int = -1) -> bool:
+	var unit := unit_by_uid(uid)
+	return move_to_bench(unit, slot) if unit != null else false
+
+
 # --------------------------------------------------------------------------
 # Livello ed esperienza
 # --------------------------------------------------------------------------
@@ -438,3 +448,70 @@ func _try_upgrade(unit_id: String, star: int) -> UnitInstance:
 ## i mostri neutrali, i test e i comandi di debug.
 func grant_unit(unit_id: String, star: int = 1) -> UnitInstance:
 	return _add_unit(GameData.unit(unit_id), star)
+
+
+# --------------------------------------------------------------------------
+# Serializzazione con filtro delle viste (MULTIPLAYER_PLAN.md M0)
+# --------------------------------------------------------------------------
+
+## viewer = true  -> è il giocatore che riceve: include shop, gold, xp, panchina.
+## viewer = false -> è un avversario: SOLO i campi pubblici e le unità sul tavolo.
+## Con viewer = false le chiavi shop/gold/xp/bench non devono esistere: sono
+## omesse, non azzerate. Il test anti-cheat di M0 verifica esattamente questo.
+func to_dict(viewer: bool) -> Dictionary:
+	var d := {
+		"index": index,
+		"display_name": display_name,
+		"is_bot": is_bot,
+		"hero_id": hero_id,
+		"hp": hp,
+		"level": level,
+		"streak": streak,
+		"last_round_won": last_round_won,
+		"eliminated": eliminated,
+		"placement": placement,
+	}
+	var board_arr: Array = []
+	for unit in board_units():
+		board_arr.append(unit.to_dict())
+	d["board"] = board_arr
+
+	if viewer:
+		d["gold"] = gold
+		d["xp"] = xp
+		var bench_arr: Array = []
+		for unit in bench_units():
+			bench_arr.append(unit.to_dict())
+		d["bench"] = bench_arr
+		var shop_arr: Array = []
+		for offer in shop:
+			shop_arr.append(offer.id if offer != null else "")
+		d["shop"] = shop_arr
+	return d
+
+
+func apply_dict(d: Dictionary) -> void:
+	index = int(d.get("index", index))
+	display_name = String(d.get("display_name", display_name))
+	is_bot = bool(d.get("is_bot", is_bot))
+	hero_id = String(d.get("hero_id", hero_id))
+	hp = int(d.get("hp", hp))
+	level = int(d.get("level", level))
+	streak = int(d.get("streak", streak))
+	last_round_won = bool(d.get("last_round_won", last_round_won))
+	eliminated = bool(d.get("eliminated", eliminated))
+	placement = int(d.get("placement", placement))
+	if d.has("gold"):
+		gold = int(d["gold"])
+	if d.has("xp"):
+		xp = int(d["xp"])
+
+	units.clear()
+	for key in ["board", "bench"]:
+		for unit_data in d.get(key, []):
+			units.append(UnitInstance.from_dict(unit_data))
+
+	if d.has("shop"):
+		shop.clear()
+		for unit_id in d["shop"]:
+			shop.append(GameData.unit(unit_id) if String(unit_id) != "" else null)
