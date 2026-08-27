@@ -15,7 +15,7 @@ extends MarginContainer
 
 ## Ogni id qui dentro deve avere una voce corrispondente in
 ## data/tutorial.json sotto "tips" — tests/run_tests.gd lo verifica.
-const KNOWN_TIPS := ["shop", "bench", "board", "star", "synergy", "combat", "economy"]
+const KNOWN_TIPS := ["shop", "bench", "board", "star", "synergy", "combat", "economy", "ranking"]
 
 ## Spento dai test per non interferire col percorso già coperto da ui_smoke.
 var enabled: bool = true

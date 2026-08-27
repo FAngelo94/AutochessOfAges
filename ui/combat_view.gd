@@ -37,6 +37,15 @@ const ORIGIN_MARKS := {"roman": "R", "gaul": "G", "teuton": "T"}
 const BAR_SIZE := Vector2(58.0, 8.0)
 const RESULT_BEAM_DURATION := 0.55
 
+## Fasce riservate agli eroi sopra e sotto la scacchiera 3D: senza queste, il
+## riquadro 3D copriva l'intero controllo e i ritratti agli angoli finivano
+## sovrapposti alle celle estreme del campo. Restringendo il SubViewport a
+## un'area centrale, queste fasce restano libere per i piedistalli degli eroi
+## e per lo sfondo da arena, e non fanno mai parte della simulazione 3D.
+const HERO_ZONE_TOP := 10.0
+const HERO_ZONE_BOTTOM := 72.0
+const HERO_PORTRAIT_SIZE := 56.0
+
 var speed: float = 1.0
 var is_playing: bool = false
 ## true mentre il fascio di fine round sta animando: _process() in questo
@@ -99,6 +108,12 @@ func _build_scene() -> void:
 	var container := SubViewportContainer.new()
 	container.stretch = true
 	container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Il riquadro 3D resta rientrato di HERO_ZONE_TOP/BOTTOM rispetto al
+	# controllo: le due fasce libere che ne risultano sopra e sotto ospitano i
+	# ritratti degli eroi e lo sfondo da arena, senza che nulla della scena 3D
+	# possa mai finire disegnato sotto di loro.
+	container.offset_top = HERO_ZONE_TOP
+	container.offset_bottom = -HERO_ZONE_BOTTOM
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Un Control disegna se stesso prima dei propri figli, quindi il _draw di
 	# CombatView finirebbe sotto l'immagine della battaglia. Mandare il riquadro
@@ -134,7 +149,7 @@ func _build_scene() -> void:
 func _board_pixel_size() -> Vector2:
 	return Vector2(
 		_columns * (CELL.x + CELL_GAP),
-		_rows * (CELL.y + CELL_GAP) + 28.0
+		_rows * (CELL.y + CELL_GAP) + 28.0 + HERO_ZONE_TOP + HERO_ZONE_BOTTOM
 	)
 
 
@@ -147,21 +162,22 @@ func _corner_hero_portrait() -> TextureRect:
 
 
 ## Entrambi i ritratti restano ancorati in alto a sinistra (anchor 0,0,0,0) e
-## si posizionano con offset assoluti calcolati dalla dimensione della board:
-## un'ancora al 100% (in basso/a destra) sembra la scelta ovvia per il
-## ritratto del giocatore, ma CombatView è più grande della board disegnata —
-## si allunga con SIZE_EXPAND_FILL per riempire lo spazio verticale E
-## orizzontale che avanza nel layout — quindi quell'ancora lo piazzava fuori
-## dallo schermo, al fondo del controllo invece che al fondo della board.
-## Il fondo del controllo coincide sempre con l'origine locale (0,0), la
-## stessa da cui _draw() disegna la board: da lì, gli offset assoluti restano
-## corretti qualunque sia la dimensione reale del controllo.
+## si posizionano con offset assoluti calcolati dalla dimensione reale del
+## controllo: CombatView si allunga con SIZE_EXPAND_FILL per riempire lo
+## spazio verticale e orizzontale che avanza nel layout, e il riquadro 3D
+## (PRESET_FULL_RECT) si allarga insieme a lui, quindi la board disegnata
+## occupa sempre l'intero controllo, non la sua sola dimensione minima.
+## Usare `_board_pixel_size()` qui — fissa, calcolata solo da righe/colonne —
+## ancorava i ritratti alla dimensione di default: al primo ridimensionamento
+## della finestra la board visibile cresceva ma i ritratti restavano fermi.
 func _position_corner_portraits() -> void:
-	var board := _board_pixel_size()
-	_opponent_hero_portrait.position = Vector2(8.0, 8.0)
-	_opponent_hero_portrait.size = Vector2(56.0, 56.0)
-	_self_hero_portrait.position = Vector2(board.x - 64.0, board.y - 64.0)
-	_self_hero_portrait.size = Vector2(56.0, 56.0)
+	var board := size
+	# Entrambi restano nelle fasce riservate (HERO_ZONE_TOP/BOTTOM), fuori
+	# dall'area occupata dal riquadro 3D: non coprono più il campo.
+	_opponent_hero_portrait.position = Vector2(-40, -40)
+	_opponent_hero_portrait.size = Vector2(HERO_PORTRAIT_SIZE, HERO_PORTRAIT_SIZE)
+	_self_hero_portrait.position = Vector2(board.x - 160, board.y - 230)
+	_self_hero_portrait.size = Vector2(HERO_PORTRAIT_SIZE, HERO_PORTRAIT_SIZE)
 
 
 ## Ritratti degli eroi ai due angoli. `self_hero_id`/`opponent_hero_id` sono
@@ -212,6 +228,7 @@ func _on_hero_portrait_ready(hero_id: String) -> void:
 func _on_resized() -> void:
 	if _board != null:
 		_board.on_viewport_resized()
+	_position_corner_portraits()
 
 
 ## Carica una battaglia risolta e si prepara a riprodurla dall'inizio.

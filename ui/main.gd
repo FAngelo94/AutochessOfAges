@@ -423,7 +423,7 @@ func _build_combat_overlay() -> void:
 	box.add_child(_build_combat_bottom_bar())
 
 	_combat_outcome = Label.new()
-	_combat_outcome.add_theme_font_size_override("font_size", 26)
+	_combat_outcome.add_theme_font_size_override("font_size", 18)
 	_combat_outcome.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_combat_outcome.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_combat_outcome)
@@ -456,8 +456,8 @@ func _build_combat_overlay() -> void:
 	# pulsanti più un quinto non ci starebbe comunque.
 	_continue_button = Button.new()
 	_continue_button.text = "CONTINUA"
-	_continue_button.custom_minimum_size = Vector2(0, Style.TOUCH_PRIMARY)
-	_continue_button.add_theme_font_size_override("font_size", 34)
+	_continue_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	_continue_button.add_theme_font_size_override("font_size", 22)
 	_continue_button.add_theme_color_override("font_color", Style.INK)
 	_continue_button.add_theme_color_override("font_hover_color", Style.INK)
 	_continue_button.add_theme_color_override("font_pressed_color", Style.INK)
@@ -676,12 +676,16 @@ func _refresh_ranking() -> void:
 	opponents.sort_custom(func(a: Player, b: Player) -> bool: return a.hp > b.hp)
 
 	for pl in opponents:
-		# La riga è un pulsante piatto: tocca per rivedere l'ultimo schieramento
-		# di quell'avversario. I figli ignorano il mouse, così il clic arriva
-		# sempre al pulsante che li contiene (come in UnitSlot).
+		# La riga tocca per rivedere l'ultimo schieramento di quell'avversario.
+		# I figli ignorano il mouse, così il clic arriva sempre al pulsante che
+		# li contiene (come in UnitSlot). Non più `flat`: senza uno stato hover
+		# e pressed la riga non sembra toccabile: una piastra minima —
+		# trasparente da ferma, appena illuminata al passaggio, incassata da
+		# premuta — dà l'affordance senza rubare spazio nel riquadro stretto.
 		var row := Button.new()
-		row.flat = true
 		row.custom_minimum_size = Vector2(0, Style.TOUCH_MIN * 0.4)
+		row.tooltip_text = "Rivedi lo schieramento di %s" % pl.display_name
+		_style_ranking_row(row)
 		row.pressed.connect(_open_spectate.bind(pl))
 		_ranking_list.add_child(row)
 
@@ -704,6 +708,15 @@ func _refresh_ranking() -> void:
 		hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		inner.add_child(hp_label)
 
+		# Lente in coda: segnala che la riga apre un dettaglio, senza dover
+		# leggere il tooltip (assente su touch).
+		var peek := Label.new()
+		peek.text = "🔍"
+		peek.add_theme_font_size_override("font_size", 13)
+		peek.add_theme_color_override("font_color", Style.TEXT_DIM)
+		peek.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(peek)
+
 		if pl.eliminated or pl.hp <= 0:
 			hp_label.text = "☠"
 			name_label.add_theme_color_override("font_color", Style.TEXT_DIM)
@@ -711,6 +724,29 @@ func _refresh_ranking() -> void:
 		else:
 			hp_label.text = str(pl.hp)
 			hp_label.add_theme_color_override("font_color", Color(0.92, 0.45, 0.45))
+
+
+## Piastra minima per le righe della classifica avversari: trasparente da
+## ferma per non appesantire il riquadro, un velo chiaro al passaggio del
+## mouse e una faccia incassata da premuta — lo stesso linguaggio di
+## Style.apply_plate ma con margini ridotti, perché la riga è alta poche
+## decine di pixel e larga 150.
+func _style_ranking_row(row: Button) -> void:
+	var clear := Style.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6)
+	clear.content_margin_left = 6
+	clear.content_margin_right = 6
+	clear.content_margin_top = 3
+	clear.content_margin_bottom = 3
+	var hover := clear.duplicate() as StyleBoxFlat
+	hover.bg_color = Style.PLATE.lightened(0.06)
+	hover.border_color = Style.PLATE.lightened(0.25)
+	hover.set_border_width_all(1)
+	var pressed := hover.duplicate() as StyleBoxFlat
+	pressed.bg_color = Style.PLATE_DARK
+	row.add_theme_stylebox_override("normal", clear)
+	row.add_theme_stylebox_override("hover", hover)
+	row.add_theme_stylebox_override("pressed", pressed)
+	row.add_theme_stylebox_override("focus", clear)
 
 
 ## Riquadro sinergie sulla schermata principale: una fila di chip che va a capo
@@ -1022,6 +1058,9 @@ func _on_playback_finished() -> void:
 	_continue_button.visible = true
 	_combat_controls.visible = false
 	_tips.queue_tip("combat")
+	# Vista la prima battaglia, il giocatore ha un motivo concreto per aprire il
+	# riquadro AVVERSARI: spiegargli che le righe sono toccabili.
+	_tips.queue_tip("ranking")
 	if own.get("opponent") != null and not bool(own.get("ghost", false)):
 		_combat_view.show_result_beam(bool(own["won"]), int(own["damage_dealt"] if bool(own["won"]) else own["damage"]))
 

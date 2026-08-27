@@ -64,6 +64,10 @@
       "title": "Si combatte da soli",
       "body": "Avete appena visto la prima battaglia: si svolge tutta in automatico. Preparatevi meglio per il prossimo round mentre l'oro è ancora vostro."
     },
+    "ranking": {
+      "title": "Spiare gli avversari",
+      "body": "Il riquadro AVVERSARI elenca chi è ancora in gioco, ordinato per vita. Toccate una riga per rivedere lo schieramento con cui quell'avversario ha combattuto l'ultimo round: utile per capire cosa vi aspetta e correggere la formazione."
+    },
     "economy": {
       "title": "Interessi",
       "body": "Ogni {interest_per} oro tenuto da parte frutta 1 oro di interesse a fine round, fino a {max_interest}. Spendere tutto ogni volta costa più di quanto sembri."
