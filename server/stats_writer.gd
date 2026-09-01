@@ -1,36 +1,32 @@
 class_name StatsWriter
 extends RefCounted
 
-## Persistenza dei risultati di partita su Supabase (MULTIPLAYER_PLAN.md M5, M1).
+## Persistenza dei risultati di partita, via PostgREST sul loopback del VPS
+## (MULTIPLAYER_PLAN.md M5, M1). SOLO il server scrive `match_history` e
+## `player_stats`: il ruolo Postgres `autochess_app` non ha `update` su
+## player_stats, ce l'ha solo la funzione `record_match_result` (SECURITY DEFINER).
 ##
-## SOLO il server scrive `match_history` e `player_stats`, con la SERVICE_ROLE key
-## (bypassa la RLS). Il client non ha alcuna policy di scrittura su quelle tabelle.
-##
-## Config via ambiente (deploy: /etc/autochess/env, mode 0600):
-##   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-## Assenti -> no-op loggato: i test headless e lo sviluppo locale non richiedono
-## Supabase.
+## Config via ambiente (deploy: /etc/autochess/env, mode 0600): DB_API_URL.
+## Assente -> no-op loggato: i test headless e lo sviluppo locale non richiedono
+## PostgREST.
 ##
 ## --- "Transazione" ---
-## PostgREST non offre transazioni multi-tabella dal client REST. Per scrivere
+## PostgREST non offre transazioni multi-tabella dal REST. Per scrivere
 ## `match_history` + N righe `player_stats` atomicamente si usa UNA funzione
-## Postgres `public.record_match_result(payload jsonb)` (SECURITY DEFINER),
-## invocata con POST /rest/v1/rpc/record_match_result: gira interamente
-## server-side in una singola transazione implicita. La definizione della
-## funzione va aggiunta a db/migrations (M1); la firma del payload e' qui sotto.
-## Se la RPC non esiste ancora, _fallback_insert() inserisce almeno match_history
-## (non atomico, ma nessuna perdita di dati di cronologia).
+## Postgres `public.record_match_result(...)` (SECURITY DEFINER), invocata con
+## POST /rpc/record_match_result: gira interamente server-side in una singola
+## transazione implicita. Se la RPC fallisce, _fallback_insert() inserisce almeno
+## match_history (non atomico, ma nessuna perdita di dati di cronologia).
 
-const RPC_PATH := "/rest/v1/rpc/record_match_result"
-const HISTORY_PATH := "/rest/v1/match_history"
+const RPC_PATH := "/rpc/record_match_result"
+const HISTORY_PATH := "/match_history"
 
 
 ## standings: [{player_index, uid, placement, hp, hero_id, display_name, is_bot}]
 static func write_match(owner: Node, match_id: String, seed_value: int, ranked: bool, standings: Array) -> void:
-	var url := OS.get_environment("SUPABASE_URL").rstrip("/")
-	var key := OS.get_environment("SUPABASE_SERVICE_ROLE_KEY")
-	if url == "" or key == "":
-		print("StatsWriter: SUPABASE_URL/SERVICE_ROLE_KEY assenti — no-op. ",
+	var url := OS.get_environment("DB_API_URL").rstrip("/")
+	if url == "":
+		print("StatsWriter: DB_API_URL assente — no-op. ",
 			"match=%s ranked=%s standings=%s" % [match_id, ranked, _human_results(standings)])
 		return
 	if owner == null or not is_instance_valid(owner):
@@ -44,8 +40,6 @@ static func write_match(owner: Node, match_id: String, seed_value: int, ranked: 
 		"p_results": _human_results(standings),
 	}
 	var headers := PackedStringArray([
-		"apikey: " + key,
-		"Authorization: Bearer " + key,
 		"Content-Type: application/json",
 		"Prefer: return=minimal",
 	])
@@ -58,7 +52,7 @@ static func write_match(owner: Node, match_id: String, seed_value: int, ranked: 
 		else:
 			push_warning("StatsWriter: RPC fallita (result=%d code=%d) — fallback match_history. %s" % [
 				result, code, body.get_string_from_utf8()])
-			_fallback_insert(owner, url, key, match_id, seed_value, ranked, standings)
+			_fallback_insert(owner, url, match_id, seed_value, ranked, standings)
 		http.queue_free())
 	var err := http.request(url + RPC_PATH, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
 	if err != OK:
@@ -66,17 +60,16 @@ static func write_match(owner: Node, match_id: String, seed_value: int, ranked: 
 		http.queue_free()
 
 
-static func _fallback_insert(owner: Node, url: String, key: String, match_id: String,
+static func _fallback_insert(owner: Node, url: String, match_id: String,
 		seed_value: int, ranked: bool, standings: Array) -> void:
 	var row := {
+		"match_id": match_id,
 		"seed": seed_value,
 		"ranked": ranked,
 		"ended_at": Time.get_datetime_string_from_system(true),
 		"results": _human_results(standings),
 	}
 	var headers := PackedStringArray([
-		"apikey: " + key,
-		"Authorization: Bearer " + key,
 		"Content-Type: application/json",
 		"Prefer: return=minimal",
 	])
@@ -91,7 +84,7 @@ static func _fallback_insert(owner: Node, url: String, key: String, match_id: St
 
 
 ## Solo i posti umani (uid non vuoto) finiscono nelle statistiche: i bot non
-## hanno un profilo Supabase.
+## hanno un profilo sul server.
 static func _human_results(standings: Array) -> Array:
 	var out: Array = []
 	for s in standings:

@@ -16,10 +16,6 @@ extends SceneTree
 
 const DEFAULT_PORT := 9000
 const WORKER_CONTROL_URL := "ws://127.0.0.1:9001/ws/w1"
-const BACKEND_CONFIG := "res://data/backend.json"
-
-## Ogni quanto riscaricare la JWKS di Supabase (rollover delle chiavi di firma).
-const JWKS_REFRESH_SECONDS := 3600.0
 
 ## Quanto tenere in vita una lobby sigillata (i client ricevono MATCH_ASSIGNED e
 ## si riconnettono al worker; poi si scollegano dal master).
@@ -29,13 +25,13 @@ var _peer := WebSocketMultiplayerPeer.new()
 var _mm: Matchmaker
 var _sealed_mms: Array = []          # [{mm, age}]
 var _peer_mm: Dictionary = {}        # peer_id -> Matchmaker
-var _verifier := JwtVerifier.new()
+## Verifica dei token di SESSIONE emessi da questo stesso master (HMAC locale,
+## nessuna JWKS da scaricare). Iniettato in ogni Matchmaker.
+var _verifier := SessionVerifier.new()
 var _spawn := SpawnChannel.new(WORKER_CONTROL_URL)
 var _pump: Node
 var _bootstrapped := false
 var _pending_close: Array = []
-var _jwks_age := 0.0
-var _supabase_url_cached := ""
 
 
 func _initialize() -> void:
@@ -80,13 +76,10 @@ func _process(delta: float) -> bool:
 		_bootstrapped = true
 		_pump = Node.new()
 		root.add_child(_pump)
-		_supabase_url_cached = _supabase_url()
-		_refresh_jwks(true)
-
-	_jwks_age += delta
-	if _jwks_age >= JWKS_REFRESH_SECONDS:
-		_jwks_age = 0.0
-		_refresh_jwks(false)
+		if not GoogleOAuth.is_configured():
+			push_warning("master: GOOGLE_CLIENT_ID/SECRET assenti — login Google non disponibile (solo ospiti dev)")
+		if not DbClient.is_configured():
+			push_warning("master: DB_API_URL assente — nessuna persistenza (solo ospiti dev)")
 
 	_spawn.poll()
 	_peer.poll()
@@ -94,6 +87,15 @@ func _process(delta: float) -> bool:
 	while _peer.get_available_packet_count() > 0:
 		var from := _peer.get_packet_peer()
 		var bytes := _peer.get_packet()
+		# I messaggi di autenticazione sono asincroni (HTTP verso Google e
+		# PostgREST) e non riguardano la coda: li gestisce il master, non la
+		# Matchmaker sincrona.
+		var pre := Protocol.decode(bytes)
+		var pt := Protocol.message_type(pre)
+		if pt == Protocol.AUTH_GOOGLE or pt == Protocol.AUTH_REFRESH \
+				or pt == Protocol.PROFILE_SET or pt == Protocol.DELETE_ACCOUNT:
+			_handle_auth(from, pt, pre)
+			continue
 		var mm: Matchmaker = _peer_mm.get(from, _mm)
 		mm.handle_packet(from, bytes)
 
@@ -166,14 +168,14 @@ func _on_spawn_requested(payload: Dictionary) -> void:
 ## si logga soltanto. Se in futuro gli eroi diventano legati alla civiltà, o con
 ## roster_mode "owned", basta accendere la variabile.
 func _on_hero_review(uid: String, hero_id: String) -> void:
-	if not SupabaseAdmin.is_configured():
+	if not DbClient.is_configured():
 		return
 	var hero := GameData.hero(hero_id)
 	if hero == null or hero.origin == "":
 		return
 	var origin := hero.origin
 	var enforce := OS.get_environment("MASTER_ENFORCE_ROSTER") == "1"
-	SupabaseAdmin.fetch_owned_civs(_pump, uid, func(ok: bool, civs: PackedStringArray) -> void:
+	DbClient.fetch_owned_civs(_pump, uid, func(ok: bool, civs: PackedStringArray) -> void:
 		if not ok:
 			return  # errore di rete: non declassare
 		if civs.has(origin):
@@ -187,15 +189,52 @@ func _on_hero_review(uid: String, hero_id: String) -> void:
 			print("master: nota — uid %s hero '%s' civ '%s' non in owned_civs (enforce off)" % [uid, hero_id, origin]))
 
 
-func _refresh_jwks(first: bool) -> void:
-	if _supabase_url_cached == "":
-		if first:
-			push_warning("master: data/backend.json coi segnaposto — JWT non verificati in firma (dev)")
-		return
-	_verifier.init(_supabase_url_cached, _pump, func(loaded: bool) -> void:
-		print("master: JWKS %s%s" % [
-			("caricata" if loaded else "NON disponibile — firma JWT non verificata (solo exp/sub)"),
-			("" if first else " (refresh)")]))
+# --------------------------------------------------------------------------
+# Autenticazione (AUTH_GOOGLE / AUTH_REFRESH / PROFILE_SET)
+# --------------------------------------------------------------------------
+
+func _handle_auth(peer_id: int, msg_type: String, msg: Dictionary) -> void:
+	match msg_type:
+		Protocol.AUTH_GOOGLE:
+			AccountService.login_google(_pump,
+				String(msg.get("code", "")),
+				String(msg.get("code_verifier", "")),
+				String(msg.get("redirect_uri", "")),
+				func(ok: bool, bundle: Dictionary) -> void: _reply_auth(peer_id, ok, bundle))
+		Protocol.AUTH_REFRESH:
+			AccountService.refresh(_pump, String(msg.get("refresh_token", "")),
+				func(ok: bool, bundle: Dictionary) -> void: _reply_auth(peer_id, ok, bundle))
+		Protocol.PROFILE_SET:
+			var claims: Dictionary = _verifier.verify(String(msg.get("session_token", "")))
+			if claims.is_empty():
+				_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "auth"}))
+				return
+			DbClient.update_preferences(_pump, String(claims.get("sub", "")), {
+				"favourite_origin": String(msg.get("favourite_origin", "")),
+				"favourite_hero": String(msg.get("favourite_hero", "")),
+			}, func(_ok: bool) -> void: _reply(peer_id, Protocol.make(Protocol.PROFILE_OK)))
+		Protocol.DELETE_ACCOUNT:
+			var del_claims: Dictionary = _verifier.verify(String(msg.get("session_token", "")))
+			if del_claims.is_empty():
+				_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "auth"}))
+				return
+			DbClient.delete_account(_pump, String(del_claims.get("sub", "")), func(ok: bool) -> void:
+				if ok:
+					_reply(peer_id, Protocol.make(Protocol.ACCOUNT_DELETED))
+				else:
+					_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "db"})))
+
+
+func _reply_auth(peer_id: int, ok: bool, bundle: Dictionary) -> void:
+	if ok:
+		_reply(peer_id, Protocol.make(Protocol.AUTH_OK, bundle))
+	else:
+		_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": String(bundle.get("reason", "auth"))}))
+
+
+func _reply(peer_id: int, msg: Dictionary) -> void:
+	_peer.set_target_peer(peer_id)
+	_peer.put_packet(Protocol.encode(msg))
 
 
 func _arg_int(name: String, def: int) -> int:
@@ -203,15 +242,3 @@ func _arg_int(name: String, def: int) -> int:
 		if a.begins_with("--%s=" % name):
 			return int(a.get_slice("=", 1))
 	return def
-
-
-func _supabase_url() -> String:
-	if not FileAccess.file_exists(BACKEND_CONFIG):
-		return ""
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(BACKEND_CONFIG))
-	if typeof(parsed) != TYPE_DICTIONARY:
-		return ""
-	var url := String(parsed.get("supabase_url", "")).rstrip("/")
-	if url.contains("YOUR-PROJECT-REF") or not url.begins_with("http"):
-		return ""
-	return url

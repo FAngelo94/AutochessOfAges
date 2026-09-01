@@ -11,8 +11,9 @@
 
 [Unit]
 Description=Autochess worker %i (match autoritativo)
-After=network-online.target autochess-master.service
+After=network-online.target autochess-master.service autochess-postgrest.service
 Wants=network-online.target
+Requires=autochess-postgrest.service
 
 [Service]
 Type=simple

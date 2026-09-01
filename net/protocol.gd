@@ -8,11 +8,20 @@ extends RefCounted
 ## 4.7 e var_to_bytes preserva Vector2i nativamente (serve all'event log del
 ## combattimento). decode() non decodifica mai oggetti: accetta solo dati puri.
 
-const PROTOCOL_VERSION := 1
+const PROTOCOL_VERSION := 2
 const MAX_PACKET_BYTES := 262144        # 256 KiB: pacchetti piu' grandi -> scartati
 
 ## Chiave del tipo di messaggio.
 const KEY_TYPE := "t"
+
+# --- Client -> Master (autenticazione, prima di HELLO) ------------------------
+## Lo scambio del code OAuth lo fa il master (tiene GOOGLE_CLIENT_SECRET): il
+## client cattura il code sul loopback e lo inoltra qui. Vedi net/auth.gd e
+## server/account_service.gd.
+const AUTH_GOOGLE := "AUTH_GOOGLE"      # {code, code_verifier, redirect_uri}
+const AUTH_REFRESH := "AUTH_REFRESH"    # {refresh_token}
+const PROFILE_SET := "PROFILE_SET"      # {session_token, favourite_origin, favourite_hero}
+const DELETE_ACCOUNT := "DELETE_ACCOUNT"# {session_token} — cancellazione GDPR / requisito Play Store
 
 # --- Client -> Master ---------------------------------------------------------
 const HELLO := "HELLO"                  # {protocol_version, access_token}
@@ -20,6 +29,10 @@ const QUEUE_JOIN := "QUEUE_JOIN"        # {hero_id}
 const QUEUE_LEAVE := "QUEUE_LEAVE"      # {}
 
 # --- Master -> Client --------------------------------------------------------
+const AUTH_OK := "AUTH_OK"              # {session_token, refresh_token, user_id, username, profile, stats, owned_civs}
+const AUTH_FAIL := "AUTH_FAIL"          # {reason}
+const PROFILE_OK := "PROFILE_OK"        # {}
+const ACCOUNT_DELETED := "ACCOUNT_DELETED" # {}
 const WELCOME := "WELCOME"              # {user_id, username, stats}
 const REJECTED := "REJECTED"            # {reason: version|auth|banned|oversize}
 const QUEUE_UPDATE := "QUEUE_UPDATE"    # {players, seconds_left}

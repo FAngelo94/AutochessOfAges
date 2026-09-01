@@ -1,8 +1,8 @@
 class_name SettingsPanel
 extends Panel
 
-## Schermata "Impostazioni", raggiungibile dal menu principale. Per ora una sola
-## voce: il volume degli effetti sonori. Struttura ricalcata su GuidePanel —
+## Schermata "Impostazioni", raggiungibile dal menu principale. Volume effetti +
+## (da loggati) la cancellazione dell'account. Struttura ricalcata su GuidePanel —
 ## backdrop a tutto schermo, colonna, pulsante Chiudi in fondo.
 
 signal closed
@@ -14,10 +14,16 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_theme_stylebox_override("panel", Style.box(Style.SKY_TOP, Style.SKY_TOP, 0, 0))
 	visible = false
-	_build()
 
 
+## Costruisce (o ricostruisce) alla riapertura: lo stato di login può essere
+## cambiato dopo che il menu — e quindi questo pannello — è stato creato.
 func open() -> void:
+	for child in get_children():
+		remove_child(child)
+		child.free()
+	_volume_label = null
+	_build()
 	visible = true
 
 
@@ -43,6 +49,12 @@ func _build() -> void:
 	column.add_child(title)
 
 	column.add_child(_volume_card())
+
+	var auth := get_node_or_null("/root/Auth")
+	if auth != null and auth.is_logged_in():
+		column.add_child(_account_card(auth))
+	if auth != null and auth.game_host() != "":
+		column.add_child(_privacy_link(auth.game_host()))
 
 	var grow := Control.new()
 	grow.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -102,6 +114,79 @@ func _volume_card() -> Control:
 
 	_refresh_volume_label(float(profile.sfx_volume))
 	return card
+
+
+func _account_card(auth: Node) -> Control:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 8)
+	card.add_child(inner)
+
+	var name_label := Label.new()
+	name_label.text = "Account"
+	name_label.add_theme_font_size_override("font_size", 20)
+	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
+	inner.add_child(name_label)
+
+	var who := Label.new()
+	who.text = "Connesso come %s" % String(auth.username)
+	who.add_theme_font_size_override("font_size", 16)
+	who.add_theme_color_override("font_color", Style.TEXT_DIM)
+	inner.add_child(who)
+
+	var delete := Button.new()
+	delete.text = "Elimina account"
+	delete.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	delete.add_theme_font_size_override("font_size", 20)
+	# rosso: azione distruttiva, si distingue dal resto della UI blu/oro
+	Style.apply_plate(delete, Color(0.70, 0.20, 0.22), Color(0.45, 0.12, 0.14), 14, 4)
+	delete.pressed.connect(_confirm_delete_account.bind(auth))
+	inner.add_child(delete)
+
+	return card
+
+
+func _privacy_link(host: String) -> Control:
+	var link := Button.new()
+	link.text = "Privacy policy"
+	link.flat = true
+	link.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	link.add_theme_font_size_override("font_size", 16)
+	link.add_theme_color_override("font_color", Style.BLUE)
+	link.pressed.connect(func() -> void: OS.shell_open("https://%s/privacy" % host))
+	return link
+
+
+func _confirm_delete_account(auth: Node) -> void:
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Elimina account"
+	dialog.dialog_text = "Questa azione è irreversibile: profilo, statistiche e civiltà sbloccate verranno cancellati dal server. Il single-player resta disponibile come ospite."
+	dialog.ok_button_text = "Elimina"
+	dialog.cancel_button_text = "Annulla"
+	add_child(dialog)
+	dialog.confirmed.connect(func() -> void:
+		if not auth.account_deletion_completed.is_connected(_on_account_deletion_completed):
+			auth.account_deletion_completed.connect(_on_account_deletion_completed, CONNECT_ONE_SHOT)
+		auth.delete_account())
+	dialog.canceled.connect(dialog.queue_free)
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.popup_centered()
+
+
+func _on_account_deletion_completed(success: bool) -> void:
+	var notice := AcceptDialog.new()
+	notice.title = "Elimina account"
+	notice.dialog_text = "Account eliminato." if success else "Eliminazione non riuscita. Riprova più tardi."
+	add_child(notice)
+	notice.confirmed.connect(notice.queue_free)
+	notice.canceled.connect(notice.queue_free)
+	notice.popup_centered()
+	if success:
+		# la card Account non ha più senso: si rifà la schermata alla prossima apertura
+		visible = false
+		closed.emit()
 
 
 func _on_volume_changed(value: float) -> void:

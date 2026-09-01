@@ -1,11 +1,13 @@
 # Setup del VPS — server autoritativo Autochess Of Ages
 
-Guida passo-passo per mettere in produzione il server multiplayer su un VPS
-Hetzner, con TLS automatico (Caddy), riavvio automatico (systemd) e backup del
-database.
+Guida passo-passo per mettere in produzione il backend self-hosted su un VPS
+Hetzner: Postgres + PostgREST + master + worker + Caddy su una sola macchina, con
+TLS automatico (Caddy), riavvio automatico (systemd) e backup del database.
+L'unico servizio esterno è Google (login).
 
-Prerequisito: aver già completato **`SETUP_SUPABASE.md`** (progetto Supabase
-creato, schema applicato, chiavi a portata di mano).
+Prerequisito: leggere **`SELFHOST_PLAN.md`** (design) e tenere a portata
+**`SETUP_DB.md`** — i passi 3–6 di quella guida (Postgres, schema, ruoli,
+PostgREST, OAuth Google, `/etc/autochess/env`) si incastrano qui tra il §6 e il §9.
 
 I file di deploy citati qui sono in **`deploy/`** nel repo. Sono bozze
 funzionanti; questa guida spiega come installarli e cosa personalizzare.
@@ -16,8 +18,7 @@ funzionanti; questa guida spiega come installarli e cosa personalizzare.
 |---|---|---|
 | `game.tuodominio.it` | sottodominio dedicato al server di gioco | `game.autochess.it` |
 | `<vps-ip>` | IP pubblico del VPS | `95.217.xxx.xxx` |
-| `<project-ref>` | reference del progetto Supabase | `abcdefghijklmnop` |
-| `<db-password>` | password del database Supabase | — |
+| `<auth-pw>` | password del ruolo Postgres `autochess_auth` | — |
 | `u123456` | id della Hetzner Storage Box | — |
 
 ---
@@ -26,8 +27,7 @@ funzionanti; questa guida spiega come installarli e cosa personalizzare.
 
 1. [console.hetzner.cloud](https://console.hetzner.cloud) → **New Project** → "autochess".
 2. **Add Server**:
-   - **Location**: `Falkenstein` o `Nuremberg` (Germania). ~15–25 ms dall'Italia,
-     stessa area del progetto Supabase Frankfurt.
+   - **Location**: `Falkenstein` o `Nuremberg` (Germania). ~15–25 ms dall'Italia.
    - **Image**: `Ubuntu 24.04`.
    - **Type**: `CPX21` (shared vCPU AMD, 3 vCPU / 4 GB / 80 GB, ~8 €/mese). Basta
      per il lancio: 1 master + 1 worker. Si sale a `CPX41` quando il worker 1
@@ -173,26 +173,25 @@ sudo -u autochess HOME=/opt/autochess /opt/godot/godot --headless --path /opt/au
 
 ---
 
-## 7. Secret
+## 7. Database, PostgREST, OAuth, secret
+
+Qui si esegue **`SETUP_DB.md` §3–§6**:
+
+- §3: `apt install postgresql-16`, `createdb autochess`, listen solo su loopback;
+- §4: `db/apply.sh` applica lo schema, poi `alter role autochess_auth password '<auth-pw>'`;
+- §5: binario PostgREST, `/etc/autochess/postgrest.conf` (con `<auth-pw>`),
+  unit `autochess-postgrest`;
+- §2 + §6: client OAuth Google "Desktop app" e compilazione di `/etc/autochess/env`
+  (`DB_API_URL`, `GOOGLE_CLIENT_ID/SECRET`, `SESSION_TOKEN_SECRET`,
+  `MATCH_TOKEN_SECRET`, `BACKUP_*`).
 
 ```sh
 sudo install -m 600 -o root -g root /opt/autochess/app/deploy/env.example /etc/autochess/env
 sudo nano /etc/autochess/env
 ```
 
-Compila:
-
-| Variabile | Da dove | Note |
-|---|---|---|
-| `SUPABASE_URL` | Supabase → Settings → API → Project URL | `https://<project-ref>.supabase.co` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → `service_role` | ⚠️ bypassa le RLS. **Vive solo qui.** Mai nell'APK, mai in git |
-| `MATCH_TOKEN_SECRET` | genera: `openssl rand -hex 32` | HMAC con cui il master firma i `match_token` per i worker |
-| `SUPABASE_DB_URL` | Supabase → Settings → Database → Connection string (URI) | contiene `<db-password>`. Usata solo da `backup-db.sh` |
-| `BACKUP_SSH_TARGET` | vedi §10 | `u123456@u123456.your-storagebox.de:/home/backups/autochess` |
-
-```sh
-sudo chmod 600 /etc/autochess/env
-```
+Torna qui al §8 quando `curl -s http://127.0.0.1:3000/profiles?select=id` sul VPS
+risponde `[]`.
 
 ---
 
@@ -219,18 +218,23 @@ WebSocket: Caddy v2 fa da proxy ai WebSocket in modo nativo tramite
 
 ---
 
-## 9. systemd — master e worker
+## 9. systemd — PostgREST, master, worker
 
 ```sh
-sudo cp /opt/autochess/app/deploy/autochess-master.service   /etc/systemd/system/
-sudo cp /opt/autochess/app/deploy/autochess-worker@.service  /etc/systemd/system/
+sudo cp /opt/autochess/app/deploy/autochess-postgrest.service /etc/systemd/system/
+sudo cp /opt/autochess/app/deploy/autochess-master.service    /etc/systemd/system/
+sudo cp /opt/autochess/app/deploy/autochess-worker@.service   /etc/systemd/system/
 sudo systemctl daemon-reload
 
+sudo systemctl enable --now autochess-postgrest    # se non già fatto al §7 / SETUP_DB §5
 sudo systemctl enable --now autochess-master
 sudo systemctl enable --now autochess-worker@1
 
-sudo systemctl status autochess-master autochess-worker@1
+sudo systemctl status autochess-postgrest autochess-master autochess-worker@1
 ```
+
+`master` e `worker@1` hanno `Requires=autochess-postgrest.service`: se PostgREST
+non parte, non partono nemmeno loro.
 
 Entrambi devono risultare `active (running)`. Log in tempo reale:
 
@@ -251,13 +255,12 @@ La unit è un template: `@2` ascolta automaticamente su `9002` (`--port=90%i`).
 
 ## 10. Backup del database + prova di restore
 
-I backup interni di Supabase esistono, ma un secondo backup **indipendente e
-sotto il tuo controllo** è la differenza tra un incidente e una catastrofe.
+Questo è **l'unico** backup che esiste: niente più backup interni gestiti. La
+prova di restore qui sotto è **obbligatoria**, non consigliata.
 
 ### Installazione
 
 ```sh
-sudo apt install -y postgresql-client-16
 sudo install -m 700 -o autochess -g autochess /opt/autochess/app/deploy/backup-db.sh /opt/autochess/backup-db.sh
 ```
 
@@ -272,7 +275,7 @@ sudo -u autochess ssh-keygen -t ed25519 -f /opt/autochess/.ssh/id_ed25519 -N ""
 sudo -u autochess ssh -p 23 u123456@u123456.your-storagebox.de mkdir -p /home/backups/autochess
 ```
 
-Metti `BACKUP_SSH_TARGET` e `SUPABASE_DB_URL` in `/etc/autochess/env` (§7).
+Metti `BACKUP_SSH_TARGET` e `BACKUP_DB_URL` in `/etc/autochess/env` (§7).
 
 ### Cron notturno
 
@@ -282,6 +285,7 @@ sudo -u autochess crontab -e
 
 ```
 17 3 * * *  /opt/autochess/backup-db.sh >> /var/log/autochess-backup.log 2>&1
+23 4 * * *  psql -d autochess -c 'select public.purge_expired_sessions();' >/dev/null
 ```
 
 Esegui subito una volta a mano e controlla che il file arrivi sulla Storage Box:
@@ -295,16 +299,17 @@ sudo -u autochess ssh -p 23 u123456@u123456.your-storagebox.de ls -la /home/back
 
 Un backup mai ripristinato non è un backup.
 
-1. Crea un progetto Supabase **scratch** (o un Postgres locale con `docker run`).
+1. Un Postgres scratch in locale: `docker run --rm -p 5433:5432 -e POSTGRES_PASSWORD=x -d postgres:16`.
 2. Scarica l'ultimo dump dalla Storage Box e ripristinalo:
    ```sh
    scp -P 23 u123456@u123456.your-storagebox.de:/home/backups/autochess/autochess-YYYYMMDD-HHMMSS.sql.gz .
-   gunzip -c autochess-*.sql.gz | psql "postgresql://postgres:<pw>@db.<scratch-ref>.supabase.co:5432/postgres"
+   createdb -h localhost -p 5433 -U postgres autochess_restore
+   gunzip -c autochess-*.sql.gz | psql "postgresql://postgres:x@localhost:5433/autochess_restore"
    ```
 3. Verifica: `\dt public.*` mostra `profiles`, `player_stats`, `owned_civs`,
-   `match_history`; `select count(*) from public.match_history;` torna un numero
-   sensato.
-4. Distruggi il progetto scratch.
+   `match_history`, `sessions`; `select count(*) from public.match_history;`
+   torna un numero sensato.
+4. Butta il container.
 
 ---
 
@@ -322,7 +327,8 @@ Caddy parlano.
 
 Prova finale: due dispositivi Android reali, login Google, entrambi in coda,
 partita che parte a 30 s con 2 umani + 6 bot, combattimento identico sui due
-schermi, `player_stats` aggiornate su Supabase a fine partita.
+schermi, `player_stats` aggiornate (`sudo -u postgres psql -d autochess -c
+'select * from player_stats'`) a fine partita.
 
 ---
 
@@ -334,6 +340,7 @@ schermi, `player_stats` aggiornate su Supabase a fine partita.
 cd /opt/autochess/app
 sudo -u autochess git pull
 sudo -u autochess HOME=/opt/autochess /opt/godot/godot --headless --path . --import
+DB_URL=postgresql://postgres@127.0.0.1:5432/autochess db/apply.sh   # migrazioni nuove, se ci sono
 sudo systemctl restart autochess-master autochess-worker@1
 ```
 
@@ -369,8 +376,10 @@ Causa tipica: cache classi stantia → rifai `--import`.
 
 | Voce | Costo/mese |
 |---|---|
-| VPS Hetzner CPX21 | ~8 € |
-| Supabase piano Pro | ~25 $ (~23 €) |
+| VPS Hetzner CPX21 (Postgres + PostgREST + master + worker stanno in 4 GB) | ~8 € |
 | Hetzner Storage Box BX11 | ~3 € |
 | Dominio | ~1 €/mese ammortizzato |
-| **Totale** | **~35–40 €/mese** |
+| **Totale** | **~12 €/mese** |
+
+Rispetto al backend gestito: niente più ~23 €/mese, in cambio di ~5–6 giorni di
+lavoro una tantum e della manutenzione DBA descritta in `SETUP_DB.md`.

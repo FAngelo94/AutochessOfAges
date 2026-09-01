@@ -1,6 +1,6 @@
 extends Node
 
-## Autenticazione dell'account online (Google via Supabase OAuth).
+## Autenticazione dell'account online (Google, backend self-hosted).
 ## Registrato come autoload "Auth" (vedi project.godot).
 ##
 ## Stessa filosofia di monetization/store.gd: è una facciata che degrada a
@@ -9,39 +9,88 @@ extends Node
 ## single-player continua a funzionare identico, senza login e offline.
 ##
 ## Login: flusso loopback + PKCE (RFC 8252). Nessun plugin nativo, nessun
-## deep link, nessun gradle build: si apre il browser di sistema, Supabase
-## redirige su http://127.0.0.1:<porta>/callback, un TCPServer locale cattura
-## il code, che viene scambiato per i token via HTTPRequest.
+## deep link. Si apre il browser di sistema su accounts.google.com; Google
+## redirige su http://127.0.0.1:<porta>/callback; un TCPServer locale cattura il
+## `code`. Lo SCAMBIO del code NON avviene qui: `code` + `code_verifier` vengono
+## inoltrati al MASTER via WebSocket (il master tiene GOOGLE_CLIENT_SECRET e non
+## lo mette mai nell'APK). Il master risponde con AUTH_OK, che porta un token di
+## sessione firmato da lui + un refresh token opaco + il bundle del profilo.
 ##
 ## Gli autoload si prendono con get_node("/root/Auth"), MAI per nome globale:
 ## gli script compilati da riga di comando (test headless) non li risolvono.
 
 signal login_completed(success: bool, reason: String)
 signal logged_out
+## Esito di delete_account(): success=true dopo ACCOUNT_DELETED dal master (segue
+## un logout automatico). success=false se la richiesta è fallita.
+signal account_deletion_completed(success: bool)
 
+const CONFIG_PATH := "res://data/backend.json"
 const TOKEN_PATH := "user://auth.dat"
 const CALLBACK_HTML := "<!doctype html><html><head><meta charset=\"utf-8\"></head><body style=\"font-family:sans-serif;text-align:center;padding-top:3em\"><h2>Login completato</h2><p>Torna al gioco.</p></body></html>"
 
-var _client: SupabaseClient
+const HOST_PLACEHOLDERS := ["tuodominio", "your-", "yourdomain", "example.", "changeme", "placeholder"]
+const CLIENT_ID_PLACEHOLDER := "REPLACE_WITH_GOOGLE_CLIENT_ID"
+
+## Dati di account esposti alla UI (popolati da AUTH_OK). Senza login sono vuoti.
+var username: String = ""
+var owned_civs: PackedStringArray = PackedStringArray()
+var stats: Dictionary = {}
+var favourite_origin: String = ""
+var favourite_hero: String = ""
+
+var _host: String = ""
+var _google_client_id: String = ""
+
 var _access_token: String = ""
 var _refresh_token: String = ""
 var _user_id: String = ""
 
+# --- flusso loopback OAuth ---
 var _server: TCPServer = null
 var _port: int = 0
 var _code_verifier: String = ""
+var _redirect_uri: String = ""
 var _pending: bool = false
 var _deadline: float = 0.0
 var _login_source: String = ""
 
+# --- richieste one-shot al master (WebSocket) ---
+var _ws: WebSocketPeer = null
+var _ws_sent: bool = false
+var _ws_deadline: float = 0.0
+var _ws_current: Dictionary = {}     # {send, reply_types: Array, cb: Callable}
+var _ws_queue: Array = []            # code di richieste in attesa
+
 
 func _ready() -> void:
-	_client = SupabaseClient.new(self)
-	if not _client.is_configured():
+	_load_config()
+	if not is_configured():
 		print("[Auth] backend non configurato: modalità ospite")
 		return
-	print("[Auth] backend: %s" % _client.supabase_url)
+	print("[Auth] backend: %s" % _host)
 	try_restore_session()
+
+
+func _load_config() -> void:
+	if not FileAccess.file_exists(CONFIG_PATH):
+		return
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(CONFIG_PATH))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	_host = String(parsed.get("game_host", "")).strip_edges()
+	_google_client_id = String(parsed.get("google_client_id", "")).strip_edges()
+
+
+## Vero solo se data/backend.json ha valori reali (non i segnaposto tracciati).
+func is_configured() -> bool:
+	if _host == "" or _google_client_id == "" or _google_client_id == CLIENT_ID_PLACEHOLDER:
+		return false
+	var lower := _host.to_lower()
+	for placeholder in HOST_PLACEHOLDERS:
+		if placeholder in lower:
+			return false
+	return true
 
 
 # --------------------------------------------------------------------------
@@ -52,25 +101,31 @@ func is_logged_in() -> bool:
 	return _access_token != ""
 
 
-## Il "sub" del JWT = uuid Supabase dell'utente. "" se sloggato.
+## Uuid del profilo lato server. "" se sloggato.
 func user_id() -> String:
 	return _user_id if is_logged_in() else ""
 
 
-## Access token (JWT) corrente. "" se sloggato.
+## Token di sessione firmato dal master (usato in HELLO). "" se sloggato.
 func access_token() -> String:
 	return _access_token if is_logged_in() else ""
+
+
+## Host del backend da data/backend.json ("" se coi segnaposto). Usato dalla UI
+## per costruire i link a /privacy e /elimina-account.
+func game_host() -> String:
+	return _host if is_configured() else ""
 
 
 # --------------------------------------------------------------------------
 # Comandi
 # --------------------------------------------------------------------------
 
-## Avvia il flusso loopback + PKCE nel browser di sistema.
+## Avvia il flusso loopback + PKCE nel browser di sistema (verso Google).
 func login_google() -> void:
 	if _pending:
 		return
-	if _client == null or not _client.is_configured():
+	if not is_configured():
 		login_completed.emit(false, "backend non configurato")
 		return
 
@@ -88,9 +143,12 @@ func login_google() -> void:
 
 	_code_verifier = _random_verifier()
 	var challenge := _base64url(_sha256(_code_verifier))
-	var redirect := "http://127.0.0.1:%d/callback" % _port
-	var url := "%s/auth/v1/authorize?provider=google&redirect_to=%s&code_challenge=%s&code_challenge_method=S256" % [
-		_client.supabase_url, redirect.uri_encode(), challenge]
+	_redirect_uri = "http://127.0.0.1:%d/callback" % _port
+	var url := "https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&code_challenge=%s&code_challenge_method=S256" % [
+		_google_client_id.uri_encode(),
+		_redirect_uri.uri_encode(),
+		"openid email profile".uri_encode(),
+		challenge]
 
 	_login_source = "login"
 	_pending = true
@@ -102,6 +160,11 @@ func logout() -> void:
 	_access_token = ""
 	_refresh_token = ""
 	_user_id = ""
+	username = ""
+	owned_civs = PackedStringArray()
+	stats = {}
+	favourite_origin = ""
+	favourite_hero = ""
 	var dir := DirAccess.open("user://")
 	if dir != null and dir.file_exists("auth.dat"):
 		dir.remove("auth.dat")
@@ -111,9 +174,7 @@ func logout() -> void:
 ## Chiamato in _ready(): tenta il refresh dal token salvato in user://auth.dat.
 ## In caso di fallimento si resta ospiti senza rumore (nessun login_completed).
 func try_restore_session() -> void:
-	if _client == null or not _client.is_configured():
-		return
-	if not FileAccess.file_exists(TOKEN_PATH):
+	if not is_configured() or not FileAccess.file_exists(TOKEN_PATH):
 		return
 	var f := FileAccess.open(TOKEN_PATH, FileAccess.READ)
 	if f == null:
@@ -123,14 +184,55 @@ func try_restore_session() -> void:
 	if rt == "":
 		return
 	_login_source = "restore"
-	_client.token_from_refresh(rt, _on_token_response)
+	_master_request(
+		Protocol.make(Protocol.AUTH_REFRESH, {"refresh_token": rt}),
+		[Protocol.AUTH_OK, Protocol.AUTH_FAIL],
+		_on_auth_reply.bind("restore"))
+
+
+## Spinge le preferenze di account sul server (PROFILE_SET). No-op da sloggati.
+func push_preferences(origin: String, hero: String) -> void:
+	if not is_logged_in():
+		return
+	favourite_origin = origin
+	favourite_hero = hero
+	_master_request(
+		Protocol.make(Protocol.PROFILE_SET, {
+			"session_token": _access_token,
+			"favourite_origin": origin,
+			"favourite_hero": hero,
+		}),
+		[Protocol.PROFILE_OK, Protocol.AUTH_FAIL],
+		func(_ok: bool, _msg: Dictionary) -> void: pass)
+
+
+## Cancellazione irreversibile dell'account sul server. In caso di successo segue
+## un logout automatico (token e user://auth.dat cancellati). Emette
+## account_deletion_completed(success).
+func delete_account() -> void:
+	if not is_logged_in():
+		account_deletion_completed.emit(false)
+		return
+	_master_request(
+		Protocol.make(Protocol.DELETE_ACCOUNT, {"session_token": _access_token}),
+		[Protocol.ACCOUNT_DELETED, Protocol.AUTH_FAIL],
+		func(ok: bool, msg: Dictionary) -> void:
+			var done := ok and Protocol.message_type(msg) == Protocol.ACCOUNT_DELETED
+			if done:
+				logout()
+			account_deletion_completed.emit(done))
 
 
 # --------------------------------------------------------------------------
-# Loop del callback loopback
+# Pompa
 # --------------------------------------------------------------------------
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_pump_loopback()
+	_pump_ws()
+
+
+func _pump_loopback() -> void:
 	if not _pending or _server == null:
 		return
 	if _now() > _deadline:
@@ -164,43 +266,107 @@ func _process(_delta: float) -> void:
 	if code == "":
 		_fail_login("nessun code nella risposta OAuth")
 		return
-	_client.token_from_pkce(code, _code_verifier, _on_token_response)
+	_master_request(
+		Protocol.make(Protocol.AUTH_GOOGLE, {
+			"code": code,
+			"code_verifier": _code_verifier,
+			"redirect_uri": _redirect_uri,
+		}),
+		[Protocol.AUTH_OK, Protocol.AUTH_FAIL],
+		_on_auth_reply.bind("login"))
 
 
-func _extract_code(request: String) -> String:
-	var lines := request.split("\r\n")
-	if lines.size() == 0:
-		return ""
-	var first := lines[0]
-	var q := first.find("?")
-	if q == -1:
-		return ""
-	var query := first.substr(q + 1).split(" ")[0]
-	for pair in query.split("&"):
-		var kv := pair.split("=")
-		if kv.size() == 2 and kv[0] == "code":
-			return kv[1].uri_decode()
-	return ""
+func _pump_ws() -> void:
+	if _ws == null:
+		if not _ws_queue.is_empty():
+			_ws_current = _ws_queue.pop_front()
+			_open_ws()
+		return
+
+	_ws.poll()
+	match _ws.get_ready_state():
+		WebSocketPeer.STATE_OPEN:
+			if not _ws_sent:
+				_ws.put_packet(Protocol.encode(_ws_current.send))
+				_ws_sent = true
+			while _ws != null and _ws.get_available_packet_count() > 0:
+				var msg := Protocol.decode(_ws.get_packet())
+				if Protocol.message_type(msg) in _ws_current.reply_types:
+					_finish_ws(true, msg)
+					return
+			if _now() > _ws_deadline:
+				_finish_ws(false, {})
+		WebSocketPeer.STATE_CLOSED:
+			_finish_ws(false, {})
+		_:
+			if _now() > _ws_deadline:
+				_finish_ws(false, {})
 
 
-func _on_token_response(success: bool, data: Variant) -> void:
-	var dict: Dictionary = data if data is Dictionary else {}
-	if success and dict.has("access_token"):
-		_access_token = String(dict.get("access_token", ""))
-		_refresh_token = String(dict.get("refresh_token", ""))
-		_user_id = _sub_from_jwt(_access_token)
-		_save_refresh_token()
+func _master_request(send_msg: Dictionary, reply_types: Array, cb: Callable) -> void:
+	_ws_queue.append({"send": send_msg, "reply_types": reply_types, "cb": cb})
+
+
+func _open_ws() -> void:
+	if not is_configured():
+		_finish_ws(false, {})
+		return
+	_ws = WebSocketPeer.new()
+	_ws_sent = false
+	_ws_deadline = _now() + 20.0
+	if _ws.connect_to_url("wss://%s/ws/mm" % _host) != OK:
+		_ws = null
+		var cb: Callable = _ws_current.get("cb", Callable())
+		_ws_current = {}
+		if cb.is_valid():
+			cb.call(false, {})
+
+
+func _finish_ws(ok: bool, msg: Dictionary) -> void:
+	var cb: Callable = _ws_current.get("cb", Callable())
+	if _ws != null:
+		_ws.close()
+		_ws = null
+	_ws_sent = false
+	_ws_current = {}
+	if cb.is_valid():
+		cb.call(ok, msg)
+
+
+# --------------------------------------------------------------------------
+# Esiti auth
+# --------------------------------------------------------------------------
+
+func _on_auth_reply(ok: bool, msg: Dictionary, source: String) -> void:
+	if ok and Protocol.message_type(msg) == Protocol.AUTH_OK:
+		_apply_bundle(msg)
 		_pending = false
 		_cleanup_server()
 		login_completed.emit(true, "")
 		return
 
 	var reason := "sessione non valida"
-	if dict.has("error_description"):
-		reason = String(dict["error_description"])
-	elif dict.has("msg"):
-		reason = String(dict["msg"])
+	if msg.has("reason"):
+		reason = String(msg["reason"])
+	if source == "restore":
+		# refresh fallito: si resta ospiti in silenzio
+		_pending = false
+		_cleanup_server()
+		return
 	_fail_login(reason)
+
+
+func _apply_bundle(msg: Dictionary) -> void:
+	_access_token = String(msg.get("session_token", ""))
+	_refresh_token = String(msg.get("refresh_token", ""))
+	_user_id = String(msg.get("user_id", ""))
+	username = String(msg.get("username", ""))
+	owned_civs = PackedStringArray(msg.get("owned_civs", []))
+	stats = msg.get("stats", {})
+	var prof: Dictionary = msg.get("profile", {})
+	favourite_origin = String(prof.get("favourite_origin", ""))
+	favourite_hero = String(prof.get("favourite_hero", ""))
+	_save_refresh_token()
 
 
 func _fail_login(reason: String) -> void:
@@ -214,6 +380,7 @@ func _fail_login(reason: String) -> void:
 
 # --------------------------------------------------------------------------
 # Utilità
+# --------------------------------------------------------------------------
 
 func _cleanup_server() -> void:
 	if _server != null:
@@ -244,17 +411,19 @@ func _base64url(bytes: PackedByteArray) -> String:
 	return Marshalls.raw_to_base64(bytes).replace("+", "-").replace("/", "_").replace("=", "")
 
 
-func _sub_from_jwt(jwt: String) -> String:
-	var parts := jwt.split(".")
-	if parts.size() < 2:
+func _extract_code(request: String) -> String:
+	var lines := request.split("\r\n")
+	if lines.size() == 0:
 		return ""
-	var payload: String = parts[1].replace("-", "+").replace("_", "/")
-	while payload.length() % 4 != 0:
-		payload += "="
-	var raw := Marshalls.base64_to_raw(payload)
-	var parsed: Variant = JSON.parse_string(raw.get_string_from_utf8())
-	if typeof(parsed) == TYPE_DICTIONARY:
-		return String((parsed as Dictionary).get("sub", ""))
+	var first := lines[0]
+	var q := first.find("?")
+	if q == -1:
+		return ""
+	var query := first.substr(q + 1).split(" ")[0]
+	for pair in query.split("&"):
+		var kv := pair.split("=")
+		if kv.size() == 2 and kv[0] == "code":
+			return kv[1].uri_decode()
 	return ""
 
 

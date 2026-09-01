@@ -1,18 +1,12 @@
--- Seed per lo sviluppo LOCALE (`supabase db reset` lo applica dopo le migrazioni).
+-- Seed per lo sviluppo LOCALE. Applicalo a mano dopo db/apply.sh:
 --
--- Non si possono inserire righe in public.profiles a mano in modo utile: la
--- chiave esterna punta ad auth.users, e il trigger on_auth_user_created crea già
--- profilo + stats + civiltà. Il modo corretto di avere utenti di test in locale:
+--   psql "$DB_URL" -f db/seed.sql
 --
---   1. `supabase start`
---   2. apri Studio su http://localhost:54323 → Authentication → Add user
---      (oppure usa l'endpoint /auth/v1/signup con email+password)
---   3. il trigger popola automaticamente profiles / player_stats / owned_civs
---
--- Questo file resta volutamente quasi vuoto. Aggiungi qui SOLO dati che non
--- dipendono da auth.users (nessuno, per ora).
+-- Non serve un vero login Google per avere dati di prova: si inserisce un
+-- account fittizio come farebbe upsert_google_account().
 
--- esempio: una partita di cronologia fittizia, utile per provare le query
+select public.upsert_google_account('dev-sub-0001', 'dev@example.com', 'Sviluppatore');
+
 insert into public.match_history (match_id, seed, ranked, ended_at, results)
 values ('dev-seed-match-0001', 123456789, false, now(), '[]'::jsonb)
 on conflict (match_id) do nothing;

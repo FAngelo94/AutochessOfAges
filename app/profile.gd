@@ -21,7 +21,7 @@ var favourite_origin: String = ""
 var favourite_hero: String = ""
 var combat_speed: float = 1.0
 ## Volume degli effetti sonori, lineare 0..1. Preferenza di dispositivo come
-## combat_speed: non va su Supabase.
+## combat_speed: non va sul server.
 var sfx_volume: float = 0.8
 ## Ultima modalità scelta nel menu ("cpu" / "pvp"). Vuota al primo avvio. La
 ## stringa non è validata qui: ui/menu.gd la confronta con le proprie costanti e
@@ -35,15 +35,8 @@ var best_placement: int = 0
 var seen_tips: PackedStringArray = PackedStringArray()
 
 
-## Client Supabase per sincronizzare le sole preferenze di account
-## (favourite_origin / favourite_hero). Nullo o non configurato -> tutto
-## resta locale, esattamente come prima.
-var _supabase: SupabaseClient
-
-
 func _ready() -> void:
 	load_profile()
-	_supabase = SupabaseClient.new(self)
 	var auth := get_node_or_null("/root/Auth")
 	if auth != null:
 		auth.login_completed.connect(_on_login_completed)
@@ -54,38 +47,28 @@ func _on_login_completed(success: bool, _reason: String) -> void:
 		_pull_remote_preferences()
 
 
-func _remote_ready() -> bool:
-	var auth := get_node_or_null("/root/Auth")
-	return auth != null and auth.is_logged_in() \
-		and _supabase != null and _supabase.is_configured()
-
-
-## Al login: le preferenze di account vengono da Supabase e vincono su quelle
-## locali. Il resto del profilo (velocità, tip visti) resta di dispositivo.
+## Al login: le preferenze di account arrivano già dentro il bundle AUTH_OK
+## (esposte da Auth), nessuna richiesta di rete. Vincono su quelle locali; il
+## resto del profilo (velocità, tip visti) resta di dispositivo.
 func _pull_remote_preferences() -> void:
-	if not _remote_ready():
-		return
 	var auth := get_node_or_null("/root/Auth")
-	_supabase.get_profile(auth.access_token(), auth.user_id(),
-		func(ok: bool, row: Dictionary) -> void:
-			if not ok:
-				return
-			favourite_origin = String(row.get("favourite_origin", favourite_origin))
-			favourite_hero = String(row.get("favourite_hero", favourite_hero))
-			save_profile()
-			changed.emit())
+	if auth == null or not auth.is_logged_in():
+		return
+	if String(auth.favourite_origin) != "":
+		favourite_origin = String(auth.favourite_origin)
+	if String(auth.favourite_hero) != "":
+		favourite_hero = String(auth.favourite_hero)
+	save_profile()
+	changed.emit()
 
 
-## Al cambio di preferenza, se loggati, si spinge su Supabase. Da sloggati è
-## un no-op e vale solo il salvataggio locale.
+## Al cambio di preferenza, se loggati, si manda PROFILE_SET al master. Da
+## sloggati è un no-op e vale solo il salvataggio locale.
 func _push_remote_preferences() -> void:
-	if not _remote_ready():
-		return
 	var auth := get_node_or_null("/root/Auth")
-	_supabase.update_profile(auth.access_token(), auth.user_id(), {
-		"favourite_origin": favourite_origin,
-		"favourite_hero": favourite_hero,
-	}, func(_ok: bool, _row: Dictionary) -> void: pass)
+	if auth == null or not auth.is_logged_in():
+		return
+	auth.push_preferences(favourite_origin, favourite_hero)
 
 
 func load_profile() -> void:
@@ -143,7 +126,7 @@ func effective_hero() -> String:
 
 
 ## Modalità di partita: preferenza di dispositivo come combat_speed, non di
-## account — non va su Supabase.
+## account — non va sul server.
 func set_match_mode(mode: String) -> void:
 	match_mode = mode
 	save_profile()
@@ -167,7 +150,7 @@ func set_sfx_volume(v: float) -> void:
 func record_match(placement: int, online := false) -> void:
 	if online:
 		# Le statistiche delle partite online le possiede il server (le scrive
-		# su Supabase con la service_role key). Il client non tocca i contatori.
+		# in Postgres via PostgREST). Il client non tocca i contatori.
 		return
 	matches_played += 1
 	if placement > 0 and (best_placement == 0 or placement < best_placement):

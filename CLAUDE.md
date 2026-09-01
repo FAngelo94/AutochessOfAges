@@ -63,21 +63,29 @@ app/            persistent player state (preferences, stats)
 ui/             presentation (reads state, does not mutate it)
 net/            client networking: auth facade, session abstraction, wire protocol
 server/         headless authoritative server: master (matchmaking) + worker (match)
-db/             Supabase Postgres schema + migrations (see db/README.md)
-deploy/         VPS deploy files — Caddy, systemd units, backup (see SETUP_VPS.md)
+db/             self-hosted Postgres schema + migrations + apply.sh (see db/README.md)
+deploy/         VPS deploy files — Caddy, PostgREST, systemd units, backup (see SETUP_VPS.md)
 android/        Kotlin plugin for RevenueCat (see android/README.md)
 web/            JS bridge for the HTML5 export (see web/README.md)
 tests/          headless test suites
 ```
 
-Multiplayer (see `MULTIPLAYER_PLAN.md` for the full design, `SETUP_SUPABASE.md` / `SETUP_VPS.md`
-for infra). `core/` gained pure `to_dict()`/`apply_dict()` serialization and still knows nothing
-about `net/` or `server/`. `ui/main.gd` drives a `MatchSession` (`net/match_session.gd`):
-`LocalSession` owns a real `MatchState` (offline, unchanged behaviour), `RemoteSession` fills its
-`MatchState` only from server snapshots — it never simulates. Online, the client is never
-authoritative and never sees another player's private state (`Player.to_dict(viewer=false)` omits
-shop/gold/bench). Transport is WebSocket (`wss://`, TLS via Caddy), messages are
-`var_to_bytes`-encoded dicts (`net/protocol.gd`), not JSON — preserves `Vector2i`.
+Multiplayer (see `MULTIPLAYER_PLAN.md` for the original design; `SELFHOST_PLAN.md` +
+`SETUP_DB.md` + `SETUP_VPS.md` for the current self-hosted backend — no Supabase). `core/` gained
+pure `to_dict()`/`apply_dict()` serialization and still knows nothing about `net/` or `server/`.
+`ui/main.gd` drives a `MatchSession` (`net/match_session.gd`): `LocalSession` owns a real
+`MatchState` (offline, unchanged behaviour), `RemoteSession` fills its `MatchState` only from
+server snapshots — it never simulates. Online, the client is never authoritative and never sees
+another player's private state (`Player.to_dict(viewer=false)` omits shop/gold/bench). Transport
+is WebSocket (`wss://`, TLS via Caddy), messages are `var_to_bytes`-encoded dicts
+(`net/protocol.gd`), not JSON — preserves `Vector2i`.
+
+**Backend = one VPS.** Postgres + PostgREST (loopback :3000) + master + worker + Caddy on a
+single Hetzner box; the only external service is Google (login). The client never talks HTTP to
+the backend — only `wss://` to the master. Login: the client does the Google loopback+PKCE dance
+and forwards `code` to the master (`AUTH_GOOGLE`); the master holds `GOOGLE_CLIENT_SECRET`,
+exchanges it, and mints its own HMAC **session token** (`server/session_token.gd`) that the client
+presents in `HELLO`. No RLS (PostgREST isn't exposed; role `autochess_app` is least-privilege).
 
 The rule that holds everything else up: **`core/` does not know about `ui/`**. The simulation is
 deterministic and seeded, so the same match can be replayed identically — the prerequisite for
@@ -96,14 +104,18 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `ui/menu.gd` | start screen — **this is the main scene** |
 | `ui/lobby.gd` | matchmaking waiting room (queue count + 30s countdown) |
 | `ui/main.gd` | in-match screen; local mode unchanged, remote mode shows prep timer + PRONTO |
-| `net/auth.gd` | autoload `Auth` — Google Sign-In via Supabase, loopback+PKCE; degrades to guest |
+| `net/auth.gd` | autoload `Auth` — Google loopback+PKCE, forwards `code` to master over a short WS; degrades to guest |
 | `net/match_session.gd` | base class; `LocalSession` / `RemoteSession` back it |
-| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` |
-| `server/master_server.gd` | `SceneTree` script; JWT verify, queue, 30s timer, worker routing |
+| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 2) |
+| `server/master_server.gd` | `SceneTree` script; auth (`AUTH_*`/`PROFILE_SET`), queue, 30s timer, worker routing |
+| `server/session_token.gd` / `session_verifier.gd` | HMAC session token minted by the master + the instance adapter injected into `Matchmaker` |
+| `server/google_oauth.gd` | server-side `code`→`id_token` exchange, validates `aud`/`iss`/`exp` (no JWKS) |
+| `server/account_service.gd` | login/refresh orchestration: OAuth → `upsert_google_account` → mint session + opaque refresh |
+| `server/db_client.gd` | PostgREST calls on `DB_API_URL` (loopback), no auth headers; replaces `supabase_admin.gd` |
 | `server/matchmaker.gd` | socket-free queue core (testable) |
 | `server/game_worker.gd` | `SceneTree` script; `match_id → MatchRunner` |
 | `server/match_runner.gd` | authoritative match: prep timer, 3-level command validation, resolve, targeted logs, reconnect |
-| `server/stats_writer.gd` | writes `match_history` / `player_stats` via Supabase service_role RPC |
+| `server/stats_writer.gd` | writes `match_history` / `player_stats` via PostgREST RPC `record_match_result` |
 | `ui/combat_view.gd` | replays the battle by reading the event log |
 | `ui/unit_slot.gd` | shop/board/bench/collection slot; shows the 3D model |
 | `art/unit_models.gd` | procedural unit figures (see below) |

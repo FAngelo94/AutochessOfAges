@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Token a vita breve firmato dal master (HMAC-SHA256), consegnato al client in
 ## MATCH_ASSIGNED e presentato al worker in JOIN. Il worker verifica solo la
-## firma HMAC col segreto condiviso, senza rifare la verifica del JWT Supabase.
+## firma HMAC col segreto condiviso, senza rifare la verifica del token di sessione.
 ##
 ## Segreto: variabile d'ambiente MATCH_TOKEN_SECRET (vedi deploy, /etc/autochess/env).
 ## In assenza si usa un segreto di sviluppo — NON sicuro in produzione.

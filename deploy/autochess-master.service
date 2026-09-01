@@ -1,13 +1,14 @@
 # /etc/systemd/system/autochess-master.service
 #
-# Master server: verifica JWT, coda di matchmaking, timer 30s, routing
-# least-loaded verso i worker. Ascolta su 127.0.0.1:9000 (esposto da Caddy
-# come /ws/mm). NON aprire la 9000 sul firewall.
+# Master server: login Google (scambio del code + token di sessione), coda di
+# matchmaking, timer 30s, routing verso i worker. Ascolta su 127.0.0.1:9000
+# (esposto da Caddy come /ws/mm). NON aprire la 9000 sul firewall.
 
 [Unit]
 Description=Autochess master server (matchmaking)
-After=network-online.target
+After=network-online.target autochess-postgrest.service
 Wants=network-online.target
+Requires=autochess-postgrest.service
 
 [Service]
 Type=simple

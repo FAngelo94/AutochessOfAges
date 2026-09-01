@@ -1,6 +1,5 @@
 {
-  "_comment": "Configurazione del backend online (Supabase). L'anon key è pubblica per progetto — è pensata per stare nel client e non autorizza nulla senza un JWT valido, perciò il file resta tracciato con valori segnaposto. Lo sviluppatore inserisce i valori reali seguendo SETUP_SUPABASE.md. La service_role key NON va mai messa qui: vive solo sul server.",
-  "supabase_url": "https://YOUR-PROJECT-REF.supabase.co",
-  "anon_key": "REPLACE_WITH_ANON_KEY",
-  "game_host": "game.tuodominio.it"
+  "_comment": "Backend self-hosted (Postgres + PostgREST + master/worker sul VPS). Nessuna chiave segreta qui: il google_client_id è pubblico per definizione e lo scambio del code OAuth lo fa il master. Lo sviluppatore inserisce i valori reali seguendo SETUP_DB.md e SETUP_VPS.md. Con i segnaposto il gioco resta offline/ospite.",
+  "game_host": "game.tuodominio.it",
+  "google_client_id": "REPLACE_WITH_GOOGLE_CLIENT_ID"
 }

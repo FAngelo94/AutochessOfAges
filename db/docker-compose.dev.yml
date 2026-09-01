@@ -1,0 +1,47 @@
+# Sviluppo locale: Postgres + PostgREST, in sostituzione di `supabase start`.
+#
+#   docker compose -f db/docker-compose.dev.yml up -d
+#   DB_URL=postgresql://postgres:postgres@127.0.0.1:5432/autochess db/apply.sh
+#   docker compose -f db/docker-compose.dev.yml down          # -v per azzerare
+#
+# PostgREST locale su http://127.0.0.1:3000 — lo stesso URL del VPS, quindi
+# DB_API_URL=http://127.0.0.1:3000 vale sia in locale sia in produzione.
+#
+# NB: in locale il ruolo di connessione e' `postgres` per comodita'; sul VPS e'
+# `autochess_auth` con una password vera (vedi deploy/postgrest.conf, SETUP_DB.md).
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: autochess
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - autochess_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d autochess"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  postgrest:
+    image: postgrest/postgrest:v12.2.3
+    # parte prima che apply.sh crei il ruolo autochess_app: si riavvia da solo
+    # finché lo schema non è applicato.
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://postgres:postgres@db:5432/autochess
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: autochess_app
+      PGRST_SERVER_HOST: "0.0.0.0"
+      PGRST_SERVER_PORT: "3000"
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  autochess_pgdata:

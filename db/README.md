@@ -1,62 +1,48 @@
 # db/
 
-Schema Postgres di Supabase per il multiplayer (MULTIPLAYER_PLAN.md M1).
+Schema Postgres del backend self-hosted (SELFHOST_PLAN.md). Il database gira sul
+VPS insieme a master, worker e Caddy; il server di gioco lo raggiunge via
+**PostgREST** sul loopback (`127.0.0.1:3000`), mai direttamente.
 
-La **sorgente di verità** è `migrations/`. Non modificare lo schema dal cruscotto
-Supabase senza poi riportare la modifica in una nuova migrazione.
+La **sorgente di verità** è `migrations/`. Non modificare lo schema a mano in
+produzione senza riportare la modifica in una nuova migrazione.
 
 | File | Ruolo |
 |---|---|
-| `config.toml` | configurazione della CLI Supabase (porte locali, provider Google, redirect loopback) |
-| `migrations/0001_initial.sql` | tabelle, trigger di primo login, RPC `record_match_result`, RLS |
-| `seed.sql` | dati di comodo per lo sviluppo locale (quasi vuoto — vedi commenti) |
+| `migrations/0001_initial.sql` | tabelle, funzioni account/sessioni, RPC `record_match_result`, ruoli e grant |
+| `apply.sh` | applica le migrazioni non ancora presenti, traccia in `public.schema_migrations` |
+| `docker-compose.dev.yml` | Postgres + PostgREST in locale, al posto di `supabase start` |
+| `seed.sql` | dati di comodo per lo sviluppo locale |
 
 ## Tabelle
 
 | Tabella | Chi legge | Chi scrive |
 |---|---|---|
-| `profiles` | l'utente, solo la propria riga (RLS) | l'utente (favourite_origin/hero) + trigger |
-| `player_stats` | l'utente, solo la propria (RLS) | **solo il server** (service_role) via `record_match_result` |
-| `owned_civs` | l'utente, solo le proprie (RLS) | **solo il server** (trigger per le default, acquisti in futuro) |
-| `match_history` | nessuno dal client (nessuna policy) | **solo il server** |
+| `profiles` | il server (master) | `favourite_*` via PROFILE_SET; `upsert_google_account` per il resto |
+| `player_stats` | il server (bundle di login) | **solo** `record_match_result` (SECURITY DEFINER) |
+| `owned_civs` | il server (rivalidazione hero, bundle) | `upsert_google_account` per le default |
+| `match_history` | il server | `record_match_result` |
+| `sessions` | — | `store_refresh_token` / `redeem_refresh_token` |
 
-La anon key è nell'APK: la RLS è l'unica protezione. La service_role key
-bypassa la RLS e vive **solo** sul VPS (`/etc/autochess/env`).
+Nessuna Row Level Security: PostgREST è raggiungibile solo dai processi sulla
+stessa macchina e il ruolo `autochess_app` è a privilegio minimo. Se il client
+tornasse mai a parlare HTTP col DB, la RLS va rimessa **prima** (vedi il commento
+in testa a `0001_initial.sql`).
 
 ## Comandi
 
 ```sh
 # locale (richiede Docker)
-supabase start                 # Postgres + Auth + Studio (localhost:54323)
-supabase db reset              # riapplica migrations/ + seed.sql da zero
-supabase stop
+docker compose -f db/docker-compose.dev.yml up -d
+DB_URL=postgresql://postgres:postgres@127.0.0.1:5432/autochess db/apply.sh
+psql "postgresql://postgres:postgres@127.0.0.1:5432/autochess" -f db/seed.sql
+docker compose -f db/docker-compose.dev.yml down          # -v per azzerare il volume
 
-# produzione
-supabase link --project-ref <project-ref>
-supabase db push               # applica le migrazioni non ancora presenti
+# produzione (sul VPS)
+DB_URL=postgresql://postgres@127.0.0.1:5432/autochess db/apply.sh
+
+# nuova migrazione: crea db/migrations/0002_<nome>.sql e rilancia apply.sh
 ```
 
-Procedura completa (creazione progetto, provider Google, chiavi, verifica RLS):
-[`../SETUP_SUPABASE.md`](../SETUP_SUPABASE.md).
-
-## Contratto della RPC `record_match_result`
-
-Invocata da `server/stats_writer.gd` a fine partita con la service_role key:
-
-```
-POST /rest/v1/rpc/record_match_result
-{
-  "p_match_id": "<id assegnato dal master>",
-  "p_seed": <bigint>,
-  "p_ranked": <bool>,
-  "p_results": [
-    {"profile_id": "<uuid>", "placement": 1, "hp": 34, "hero_id": "caesar",
-     "top4": true, "won": true},
-    ...
-  ]
-}
-```
-
-Scrive `match_history` (upsert su `match_id`) e incrementa `matches_played` /
-`wins` / `top4` in `player_stats` per ogni `profile_id`, tutto in una transazione
-server-side. `grant execute` solo a `service_role`.
+Procedura completa (installazione Postgres + PostgREST, ruoli, OAuth Google,
+verifica): [`../SETUP_DB.md`](../SETUP_DB.md).

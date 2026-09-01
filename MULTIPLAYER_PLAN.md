@@ -1,5 +1,15 @@
 # Piano di implementazione — Multiplayer online 8 giocatori
 
+> ⚠️ **Backend cambiato — leggere prima `SELFHOST_PLAN.md`.** Questo documento
+> descrive il backend originale su **Supabase** (Auth GoTrue + PostgREST + RLS, JWT
+> verificati via JWKS). Il backend è stato poi portato a **self-hosted**: Postgres +
+> PostgREST sul loopback del VPS, login Google con scambio del code sul master e
+> token di sessione HMAC (`server/session_token.gd`), niente RLS. Dove qui sotto si
+> legge "Supabase", "service_role", "JWT/JWKS", "anon key", "`supabase db push`",
+> valgono invece: `db/apply.sh`, `DB_API_URL`, `SessionToken`/`SessionVerifier`,
+> `server/db_client.gd`, `SETUP_DB.md`. La logica di matchmaking, worker, protocollo
+> e determinismo (M3–M6) è invariata.
+
 > **Come usare questo documento.** È un piano operativo diviso in 8 milestone sequenziali (M0→M7).
 > Ogni milestone ha: obiettivo, file da toccare, task concreti, e **criteri di accettazione**
 > verificabili. Non passare alla milestone successiva finché i criteri di accettazione della

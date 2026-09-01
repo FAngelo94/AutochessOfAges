@@ -22,6 +22,17 @@ game.tuodominio.it {
 	# --- worker 2: scommentare quando si aggiunge autochess-worker@2 ---
 	# reverse_proxy /ws/w2 127.0.0.1:9002
 
+	# --- pagine statiche obbligatorie per il Play Store / GDPR ---
+	# installare i file: sudo install -d /opt/autochess/www &&
+	#   sudo cp deploy/www/*.html /opt/autochess/www/
+	# personalizzare privacy.html col proprio testo e contatto.
+	@pages path /privacy /elimina-account
+	handle @pages {
+		root * /opt/autochess/www
+		try_files {path}.html
+		file_server
+	}
+
 	# hardening di base delle risposte
 	header {
 		# nasconde la versione del server

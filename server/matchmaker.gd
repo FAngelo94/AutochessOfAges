@@ -7,9 +7,9 @@ extends RefCounted
 ##
 ## Flusso (§M4):
 ##  1. peer connesso -> attende HELLO {protocol_version, access_token};
-##     versione errata -> REJECTED{version} + chiusura;
-##     JWT non valido  -> REJECTED{auth}    + chiusura;
-##     ok              -> WELCOME {user_id, username, stats}.
+##     versione errata     -> REJECTED{version} + chiusura;
+##     token di sessione non valido -> REJECTED{auth} + chiusura;
+##     ok                  -> WELCOME {user_id, username, stats}.
 ##  2. QUEUE_JOIN {hero_id} -> in coda (l'hero andra' rivalidato sul DB: TODO M4).
 ##  3. QUEUE_UPDATE {players, seconds_left} in broadcast ~1/s.
 ##  4. al sigillo (8 giocatori OPPURE 30 s dal primo in coda):
@@ -35,8 +35,8 @@ signal spawn_requested(payload: Dictionary)
 signal sealed
 
 ## Emesso all'ingresso in coda, dopo la sanificazione sincrona dell'hero. Il
-## master può fare un controllo asincrono su owned_civs (service_role) e poi
-## chiamare override_hero() prima del sigillo.
+## master può fare un controllo asincrono su owned_civs (via DbClient/PostgREST)
+## e poi chiamare override_hero() prima del sigillo.
 signal hero_review(uid: String, hero_id: String)
 
 ## Iniettabile: qualunque oggetto con verify(token: String) -> Dictionary.
@@ -56,8 +56,8 @@ var _outbox: Array = []              # [{peers: Array[int], msg: Dictionary, clo
 var _rng := RandomNumberGenerator.new()
 
 
-func _init(jwt_verifier = null) -> void:
-	verifier = jwt_verifier
+func _init(token_verifier = null) -> void:
+	verifier = token_verifier
 	_rng.randomize()
 
 
@@ -169,7 +169,7 @@ func _on_queue_join(peer_id: int, msg: Dictionary) -> void:
 	# Rivalidazione dell'hero. Livello 1, sincrono e sempre attivo: l'id deve
 	# esistere in data/heroes.json, altrimenti il worker andrebbe in errore
 	# assegnandolo. Livello 2, asincrono e opzionale: il master, su hero_review,
-	# rilegge owned_civs con la service_role key e può declassare via
+	# rilegge owned_civs via DbClient (PostgREST) e può declassare via
 	# override_hero() (vedi master_server.gd).
 	var hero_id := _sanitize_hero(String(msg.get("hero_id", "")))
 	_queue.append({
