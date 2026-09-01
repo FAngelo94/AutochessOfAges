@@ -28,6 +28,11 @@ var streak: int = 0
 var last_round_won: bool = false
 var eliminated: bool = false
 var placement: int = 0
+## Timbro monotono dell'ultima perdita di vita (0 = mai colpito). Chi ha perso
+## vita PIÙ TARDI ha il timbro più alto e, a parità di vita, sta più in alto in
+## classifica. Il valore lo assegna chi infligge il danno passandolo a
+## take_damage(): Player non conosce né il round né MatchState.
+var last_damage_stamp: int = 0
 
 ## Unità possedute (panchina + griglia), tutte le UnitInstance.
 var units: Array[UnitInstance] = []
@@ -163,8 +168,12 @@ func reroll_cost() -> int:
 	return int(GameData.balance()["economy"]["reroll_cost"])
 
 
+## Il gate `is_alive()` sta qui e non solo nel server perché il pool è
+## CONDIVISO: un giocatore eliminato che continua a comprare toglie copie a chi
+## è ancora in gioco. Vale quindi come regola di simulazione, non come controllo
+## di rete, e copre offline e online con una riga sola.
 func can_reroll() -> bool:
-	return gold >= reroll_cost()
+	return is_alive() and gold >= reroll_cost()
 
 
 func reroll() -> bool:
@@ -176,6 +185,8 @@ func reroll() -> bool:
 
 
 func can_buy(slot: int) -> bool:
+	if not is_alive():
+		return false  # vedi can_reroll(): il pool è condiviso
 	if slot < 0 or slot >= shop.size() or shop[slot] == null:
 		return false
 	var def: UnitDef = shop[slot]
@@ -242,7 +253,7 @@ func move_to_bench_by_uid(uid: int, slot: int = -1) -> bool:
 func buy_xp() -> bool:
 	var economy: Dictionary = GameData.balance()["economy"]
 	var cost := int(economy["buy_xp_cost"])
-	if gold < cost or is_max_level():
+	if not is_alive() or gold < cost or is_max_level():
 		return false
 	gold -= cost
 	add_xp(int(economy["buy_xp_amount"]))
@@ -306,8 +317,15 @@ func grant_round_income(won: bool) -> Dictionary:
 	}
 
 
-func take_damage(amount: int) -> void:
+## `stamp` viene da MatchState.next_damage_stamp(): serve solo a ordinare due
+## perdite di vita fra loro. Il default 0 tiene validi i chiamanti che non
+## ordinano nulla (test che tolgono vita a mano).
+func take_damage(amount: int, stamp: int = 0) -> void:
+	if amount <= 0:
+		return  # nessun danno, nessun timbro
 	hp = maxi(0, hp - amount)
+	if stamp > last_damage_stamp:
+		last_damage_stamp = stamp
 	if hp == 0:
 		eliminated = true
 	changed.emit()
@@ -470,6 +488,10 @@ func to_dict(viewer: bool) -> Dictionary:
 		"last_round_won": last_round_won,
 		"eliminated": eliminated,
 		"placement": placement,
+		# Pubblico di proposito: serve a OGNI client per ordinare la classifica
+		# di TUTTI i posti allo stesso modo del server. Non rivela nulla di
+		# privato — è un numero d'ordine, non un dato di gioco.
+		"last_damage_stamp": last_damage_stamp,
 	}
 	var board_arr: Array = []
 	for unit in board_units():
@@ -501,6 +523,7 @@ func apply_dict(d: Dictionary) -> void:
 	last_round_won = bool(d.get("last_round_won", last_round_won))
 	eliminated = bool(d.get("eliminated", eliminated))
 	placement = int(d.get("placement", placement))
+	last_damage_stamp = int(d.get("last_damage_stamp", last_damage_stamp))
 	if d.has("gold"):
 		gold = int(d["gold"])
 	if d.has("xp"):

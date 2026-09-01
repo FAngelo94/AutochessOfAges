@@ -25,7 +25,11 @@ func _initialize() -> void:
 	_test_combat_determinism()
 	_test_traits()
 	_test_full_match()
+	_test_live_ranking()
+	_test_eliminated_cannot_shop()
 	_test_rematch_avoidance()
+	_test_ghost_uses_eliminated_formation()
+	_test_spectate_ghost_matchup()
 	_test_replay_log()
 	_test_monetization()
 	_test_serialization_roundtrip()
@@ -689,6 +693,93 @@ func _test_full_match() -> void:
 	print("  (vincitore: %s, round: %d, livello max: %d)" % [standings[0].display_name, rounds, max_level])
 
 
+## La classifica dal vivo: vita decrescente e, a parità, davanti chi l'ha persa
+## più tardi. È l'ordine che vedono sia le card degli avversari sia la schermata
+## di chi è eliminato, quindi una regressione qui si vede in due posti.
+func _test_live_ranking() -> void:
+	section("Classifica dal vivo")
+
+	var ms := MatchState.new(4242, 0)
+	var a: Player = ms.players[0]
+	var b: Player = ms.players[1]
+	var c: Player = ms.players[2]
+
+	# Stessa vita, ma b la perde DOPO a: b sta davanti.
+	a.take_damage(10, ms.next_damage_stamp())
+	b.take_damage(10, ms.next_damage_stamp())
+	check(MatchState.ranks_before(b, a),
+		"a parità di vita sta davanti chi l'ha persa più tardi")
+	check(not MatchState.ranks_before(a, b), "e la relazione non è simmetrica")
+
+	# La vita batte il timbro: c non è mai stato colpito, quindi sta davanti a
+	# entrambi anche se il suo timbro è 0.
+	check(MatchState.ranks_before(c, b), "più vita batte un timbro più recente")
+
+	var ranking := ms.live_ranking()
+	check(ranking.size() == ms.players.size(), "la classifica contiene tutti i giocatori")
+	check(ranking[ranking.size() - 1] == a, "l'ultimo è chi ha meno vita e il timbro più vecchio",
+		ranking[ranking.size() - 1].display_name)
+
+	# rank_of() conta invece di cercare: deve comunque dare la stessa posizione.
+	var consistent := true
+	for i in ranking.size():
+		if ms.rank_of(ranking[i]) != i + 1:
+			consistent = false
+	check(consistent, "rank_of() concorda con l'ordine di live_ranking()")
+
+	# Morti nello stesso round: il piazzamento segue l'ordine temporale, non
+	# quello degli indici. Prima era l'indice del posto — arbitrario.
+	var ms2 := MatchState.new(99, 0)
+	var early: Player = ms2.players[5]   # indice ALTO, muore per PRIMO
+	var late: Player = ms2.players[1]    # indice BASSO, muore per SECONDO
+	early.take_damage(early.hp, ms2.next_damage_stamp())
+	late.take_damage(late.hp, ms2.next_damage_stamp())
+	ms2._apply_eliminations()
+	check(late.placement < early.placement,
+		"fra due morti nello stesso round è piazzato meglio chi è morto dopo",
+		"morto dopo %d°, morto prima %d°" % [late.placement, early.placement])
+
+	# Se muoiono tutti insieme, qualcuno deve comunque risultare primo:
+	# _next_placement parte dal numero di giocatori e scende, quindi l'ultimo
+	# eliminato prende 1 anche senza sopravvissuti.
+	var ms3 := MatchState.new(7, 0)
+	for p in ms3.players:
+		p.take_damage(p.hp, ms3.next_damage_stamp())
+	ms3._apply_eliminations()
+	var winners := 0
+	for p in ms3.players:
+		if p.placement == 1:
+			winners += 1
+	check(winners == 1, "anche senza sopravvissuti esiste un solo primo posto", str(winners))
+
+
+## Il pool è condiviso: un eliminato che continua a comprare toglie copie ai
+## vivi. Il divieto sta in core/, così vale identico offline e online.
+func _test_eliminated_cannot_shop() -> void:
+	section("Eliminato: niente negozio")
+
+	var ms := MatchState.new(31337, 0)
+	var p: Player = ms.players[0]
+	p.gold = 99
+	check(p.can_reroll(), "da vivo si può aggiornare il negozio")
+
+	var pool_before := ms.pool.snapshot()
+	p.take_damage(p.hp, ms.next_damage_stamp())
+	check(not p.is_alive(), "il giocatore è eliminato")
+
+	check(not p.can_reroll(), "da eliminato non si aggiorna il negozio")
+	check(not p.reroll(), "e reroll() rifiuta")
+	check(not p.buy_xp(), "da eliminato non si compra esperienza")
+	var can_buy_any := false
+	for slot in p.shop.size():
+		if p.can_buy(slot):
+			can_buy_any = true
+	check(not can_buy_any, "da eliminato nessuno slot del negozio è acquistabile")
+	check(p.gold == 99, "e l'oro non è stato speso", str(p.gold))
+	check(ms.pool.snapshot() == pool_before,
+		"il pool condiviso non è stato toccato")
+
+
 ## A7 — build_matchups() evita di riproporre gli avversari degli ultimi round.
 func _test_rematch_avoidance() -> void:
 	section("Accoppiamenti — niente rivincite ravvicinate")
@@ -732,6 +823,100 @@ func _matchup_trace(seed_value: int) -> Array:
 			round_pairs.append([m["a"].index, b_idx, m["ghost"]])
 		trace.append(round_pairs)
 	return trace
+
+
+## A7b — con un numero dispari di vivi lo spaiato affronta il fantasma di un
+## eliminato (il suo ultimo schieramento), non la copia di un vivo.
+func _test_ghost_uses_eliminated_formation() -> void:
+	section("Accoppiamenti — il fantasma è un eliminato")
+
+	var ms := MatchState.new(9182, 0)
+
+	# Tre eliminati con una board congelata, cinque vivi -> conta dispari.
+	var dead_indices := {}
+	for i in 3:
+		var victim: Player = ms.players[i]
+		var unit := victim.grant_unit("legionarius")
+		victim.move_to_board(unit, Vector2i(0, 0))
+		victim.take_damage(victim.hp, ms.next_damage_stamp())
+		check(not victim.is_alive(), "il giocatore %d è eliminato" % i)
+		check(not victim.board_units().is_empty(), "e conserva il suo schieramento")
+		dead_indices[i] = true
+
+	check(ms.alive_players().size() == 5, "cinque vivi rimasti")
+
+	var ghost_count := 0
+	var normal_count := 0
+	for m in ms.build_matchups():
+		if m["ghost"]:
+			ghost_count += 1
+			check(m["b"] != null, "il fantasma ha un avversario")
+			check(dead_indices.has(m["b"].index),
+				"l'avversario fantasma è un eliminato (indice %d)" % m["b"].index)
+			check(m["b"].index != m["a"].index, "e non è lo spaiato stesso")
+		else:
+			normal_count += 1
+			check(m["a"].is_alive() and m["b"].is_alive(),
+				"gli scontri normali sono fra vivi")
+
+	check(ghost_count == 1, "esattamente un fantasma")
+	check(normal_count == 2, "e due scontri normali")
+
+
+## Lo scontro contro il fantasma di un eliminato è rivedibile dalla schermata
+## classifica sia cliccando il vivo che ha combattuto sia cliccando l'eliminato
+## di cui è stato usato lo schieramento — stesso replay, lato opposto.
+func _test_spectate_ghost_matchup() -> void:
+	section("Spettatore — il replay contro un fantasma è rivedibile da entrambi i lati")
+
+	var session := LocalSession.new()
+	session.begin(5150)
+	var ms := session.state()
+
+	# Tre bot eliminati con una board congelata -> cinque vivi (dispari).
+	for i in [3, 4, 5]:
+		var victim: Player = ms.players[i]
+		victim.move_to_board(victim.grant_unit("legionarius"), Vector2i(0, 0))
+		victim.take_damage(victim.hp, ms.next_damage_stamp())
+	for p in ms.alive_players():
+		if p.board_units().is_empty():
+			p.move_to_board(p.grant_unit("legionarius"), Vector2i(0, 0))
+
+	var events: Array = []
+	session.spectate_ready.connect(func(idx, combat, team, _hero):
+		events.append({"idx": idx, "combat": combat, "team": team}))
+
+	session.request_ready()  # risolve il round
+
+	var ghost_row := {}
+	for row in ms.last_results():
+		if bool(row.get("ghost", false)) and row.get("opponent") != null:
+			ghost_row = row
+			break
+	check(not ghost_row.is_empty(), "il round ha prodotto un matchup fantasma")
+
+	var live_idx: int = ghost_row["player"].index
+	var dead_idx: int = ghost_row["opponent"].index
+	check(not ms.players[dead_idx].is_alive(), "l'avversario fantasma è un eliminato")
+
+	check(session.can_spectate(live_idx), "si può rivedere dal lato del vivo")
+	check(session.can_spectate(dead_idx), "e dal lato dell'eliminato")
+
+	session.request_spectate(live_idx)
+	session.request_spectate(dead_idx)
+	check(events.size() == 2, "due spectate_ready emessi", str(events.size()))
+	check(events.size() == 2 and not events[0]["combat"].is_empty() \
+		and not events[1]["combat"].is_empty(), "entrambi portano il log di combattimento")
+	check(events.size() == 2 and events[0]["team"] != events[1]["team"],
+		"i due lati dell'arena sono opposti")
+
+	var other_dead := -1
+	for i in [3, 4, 5]:
+		if i != dead_idx and ms.players[i].placement > 0:
+			other_dead = i
+			break
+	check(other_dead != -1 and not session.can_spectate(other_dead),
+		"un eliminato non 'fantasmato' resta non rivedibile")
 
 
 func _test_monetization() -> void:
@@ -828,7 +1013,11 @@ func _test_serialization_roundtrip() -> void:
 	for i in original.players.size():
 		var o: Player = original.players[i]
 		var b: Player = rebuilt.players[i]
-		if o.hp != b.hp or o.level != b.level or o.placement != b.placement or o.streak != b.streak:
+		# last_damage_stamp deve attraversare il filo: se non lo facesse, la
+		# classifica del client si scorderebbe l'ordine temporale e mostrerebbe
+		# un ordine diverso da quello del server.
+		if o.hp != b.hp or o.level != b.level or o.placement != b.placement \
+				or o.streak != b.streak or o.last_damage_stamp != b.last_damage_stamp:
 			fields_ok = false
 		var expected: Array = o.units if i == for_index else o.board_units()
 		if b.units.size() != expected.size():
@@ -836,10 +1025,27 @@ func _test_serialization_roundtrip() -> void:
 			continue
 		for ou in expected:
 			var bu: UnitInstance = b.unit_by_uid(ou.uid)
-			if bu == null or bu.star != ou.star or bu.cell != ou.cell or bu.def.id != ou.def.id:
+			if bu == null or bu.star != ou.star or bu.cell != ou.cell or bu.def.id != ou.def.id \
+					or bu.bench_slot != ou.bench_slot:
 				units_ok = false
 	check(fields_ok, "hp, livello, piazzamento e serie ricostruiti per ogni giocatore")
-	check(units_ok, "ogni unità ricostruita con uid, stella e cella")
+	check(units_ok, "ogni unità ricostruita con uid, stella, cella e slot di panchina")
+
+	# Regressione: senza bench_slot sul filo la panchina tornava tutta a slot -1 e
+	# ui/main.gd:_refresh_bench (che indicizza per slot) disegnava caselle vuote pur
+	# avendo le unità nello stato — le unità comprate "sparivano" dalla panchina.
+	var origin_bench: Array = original.players[for_index].bench_units()
+	var rebuilt_bench: Array = rebuilt.players[for_index].bench_units()
+	var slots_ok := not origin_bench.is_empty() and origin_bench.size() == rebuilt_bench.size()
+	var by_slot := {}
+	for u in rebuilt_bench:
+		by_slot[u.bench_slot] = u
+	for ou in origin_bench:
+		var bu: UnitInstance = by_slot.get(ou.bench_slot)
+		if bu == null or bu.uid != ou.uid:
+			slots_ok = false
+	check(slots_ok, "la panchina è indirizzabile per slot dopo il round-trip",
+		"%d unità in panchina" % origin_bench.size())
 	check(rebuilt.players[for_index].gold == original.players[for_index].gold, "l'oro del ricevente è ricostruito")
 	check(rebuilt.players[for_index].xp == original.players[for_index].xp, "l'esperienza del ricevente è ricostruita")
 
@@ -860,6 +1066,9 @@ func _test_view_filtering() -> void:
 	check(not d.has("xp"), "un avversario non vede l'esperienza")
 	check(not d.has("bench"), "un avversario non vede la panchina")
 	check(d.has("board"), "un avversario vede comunque il tavolo")
+	# Pubblico di proposito: senza, ogni client ordinerebbe la classifica a modo
+	# suo. È un numero d'ordine, non un'informazione di gioco.
+	check(d.has("last_damage_stamp"), "il timbro dell'ultimo danno è pubblico")
 
 
 func _test_replay_log() -> void:

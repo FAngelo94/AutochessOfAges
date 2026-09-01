@@ -124,11 +124,26 @@ func _run() -> void:
 	_check_store_panel(_menu)
 	_menu._store_panel.visible = false
 
-	# Modalità: cpu di default, e si può passare a pvp dalla modale.
-	check(_menu._match_mode == _menu.MODE_CPU, "la modalità predefinita è contro il computer")
+	# Modalità: la scelta si salva sul profilo e si ritrova al rientro nel menu.
+	# Il valore salvato va scritto e ripristinato esplicitamente: leggere lo stato
+	# ambientale di user://profile.cfg renderebbe il test verde una volta sola e
+	# rosso per sempre dopo, come già succede ad altri tre test di questo repo.
+	var saved_mode: String = _profile.match_mode
+
+	_profile.match_mode = ""
+	check(_menu._restored_mode() == _menu.MODE_CPU,
+		"senza una modalità salvata si parte da contro il computer")
+
 	_menu._on_mode_pressed(_menu.MODE_PVP)
 	check(_menu._match_mode == _menu.MODE_PVP, "si può selezionare la modalità contro giocatori")
 	check(not _menu._mode_panel.visible, "selezionare una modalità chiude la modale")
+	check(_profile.match_mode == _menu.MODE_PVP, "la scelta della modalità si salva sul profilo")
+	check(_menu._restored_mode() == _menu.MODE_PVP,
+		"al rientro nel menu si ritrova la modalità salvata")
+
+	_profile.match_mode = "modalita_inventata"
+	check(_menu._restored_mode() == _menu.MODE_CPU,
+		"una modalità salvata sconosciuta ricade su contro il computer")
 
 	# Il ramo PVP non apre più un dialog "in arrivo": da loggati va in lobby, da
 	# sloggati avvia il login Google. Senza backend configurato Auth.login_google()
@@ -146,6 +161,7 @@ func _run() -> void:
 			"da sloggati il tasto Battaglia in PVP non entra in lobby")
 
 	_menu._match_mode = _menu.MODE_CPU
+	_profile.set_match_mode(saved_mode)  # il profilo dell'utente torna com'era
 
 	# Eroe: la selezione è obbligatoria, quindi il menu parte sempre con un id
 	# valido, e sceglierne uno diverso si salva sul profilo.

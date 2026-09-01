@@ -22,6 +22,7 @@ Profile="*res://app/profile.gd"
 Portraits="*res://art/unit_portraits.gd"
 Store="*res://monetization/store.gd"
 Auth="*res://net/auth.gd"
+Sfx="*res://audio/sfx.gd"
 
 [display]
 

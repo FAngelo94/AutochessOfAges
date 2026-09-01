@@ -31,6 +31,7 @@ var _round_label: Label
 var _hp_label: Label
 var _gold_label: Label
 var _level_label: Label
+var _rank_label: Label
 var _stats_label: Label
 var _log_label: RichTextLabel
 var _shop_row: HBoxContainer
@@ -76,7 +77,7 @@ var _combat_bottom_bar: HBoxContainer
 var _combat_bottom_hp: Label
 var _combat_bottom_synergy_row: HBoxContainer
 var _combat_outcome: Label
-var _continue_button: Button
+var _combat_hint: Label
 var _exit_confirm: ConfirmationDialog
 var _spectate_overlay: Panel
 var _spectate_view: CombatView
@@ -84,6 +85,33 @@ var _spectate_title: Label
 ## Risultati del round in attesa: vengono raccontati solo a fine replay, per
 ## non svelare l'esito mentre la battaglia è ancora in corso.
 var _pending_results: Array = []
+
+## Schermata classifica: prende il posto della preparazione per chi è stato
+## eliminato, e fa da riepilogo finale per tutti a partita conclusa.
+var _spectator_screen: Panel
+var _spectator_title: Label
+var _spectator_subtitle: Label
+## Stato dei giocatori ancora in partita: round in corso, fase (preparazione con
+## countdown o battaglia). Visibile solo per chi è eliminato a partita in corso.
+var _spectator_status: Label
+var _spectator_rows: VBoxContainer
+var _spectator_restart: Button
+
+## Attesa prima di lasciare la battaglia da soli: il fascio del risultato più il
+## tempo di leggere l'esito. Una var e non una const perché gli strumenti
+## headless la spostano (tests/screenshot.gd la alza per non farsi chiudere
+## l'overlay sotto lo scatto).
+var result_pause := 1.6
+
+## Conto alla rovescia dell'uscita automatica. < 0 = disarmato. Un contatore in
+## _process invece di un SceneTreeTimer: è ispezionabile dai test headless, si
+## annulla riassegnando, e non lascia una callback in volo dopo un cambio partita.
+var _auto_close_left: float = -1.0
+
+## Classifica finale normalizzata (LocalSession manda Array[Player],
+## RemoteSession Array[Dictionary]). Vuota finché la partita non è decisa.
+var _final_standings: Array = []
+var _match_recorded := false
 
 
 func _ready() -> void:
@@ -230,6 +258,10 @@ func _build_ui() -> void:
 	# l'ordine di disegno, e la battaglia deve poter coprire tutto il resto.
 	_build_info_sheet()
 
+	# La classifica copre la preparazione di chi è fuori; la battaglia copre la
+	# classifica; il replay di un avversario si apre sopra la classifica, ed è
+	# per questo che va aggiunto per ultimo.
+	_build_spectator_screen()
 	_build_combat_overlay()
 	_build_spectate_overlay()
 
@@ -249,9 +281,13 @@ func _build_hud() -> Control:
 	chips.add_theme_constant_override("separation", 8)
 	column.add_child(chips)
 
-	_hp_label = _chip(chips, "❤", Color(0.92, 0.45, 0.45))
-	_gold_label = _chip(chips, "⛁", Style.GOLD)
-	_level_label = _chip(chips, "⬆", Style.BLUE)
+	_hp_label = _chip(chips, _glyph_label("❤", Color(0.92, 0.45, 0.45)))
+	_gold_label = _chip(chips, Style.coin(22.0))
+	# Il livello porta "6  (12/24)": è il contenuto più largo dei quattro e senza
+	# una fetta maggiore va a capo. La posizione è due caratteri, e ne chiede meno.
+	_level_label = _chip(chips, _glyph_label("⬆", Style.BLUE), 1.4)
+	_rank_label = _chip(chips, _glyph_label("🏆", Style.GOLD), 0.7,
+		"Posizione attuale. A parità di vita sta davanti chi l'ha persa più tardi.")
 
 	_stats_label = Label.new()
 	_stats_label.add_theme_font_size_override("font_size", 18)
@@ -261,26 +297,39 @@ func _build_hud() -> Control:
 	return column
 
 
-func _chip(row: HBoxContainer, icon: String, tint: Color) -> Label:
+## Icona testuale per _chip(). Sta a parte perché l'oro non è un carattere ma un
+## cerchio disegnato (Style.coin): _chip prende un Control, non una String.
+func _glyph_label(icon: String, tint: Color) -> Label:
+	var glyph := Label.new()
+	glyph.text = icon
+	glyph.add_theme_font_size_override("font_size", 20)
+	glyph.add_theme_color_override("font_color", tint)
+	glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	return glyph
+
+
+## Una card dell'HUD. `stretch` regola la fetta di riga: le card sono
+## EXPAND_FILL e da tre sono diventate quattro, quindi a fette uguali il livello
+## verrebbe troncato. Restituisce la Label del valore, che il chiamante tiene e
+## aggiorna in _refresh().
+func _chip(row: HBoxContainer, glyph: Control, stretch: float = 1.0, tip: String = "") -> Label:
 	var panel := PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_stretch_ratio = stretch
 	panel.add_theme_stylebox_override("panel", Style.plate(Style.PLATE_DARK, Style.PLATE, 12, 3))
+	if tip != "":
+		panel.tooltip_text = tip
 	row.add_child(panel)
 
 	var box := HBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 8)
+	box.add_theme_constant_override("separation", 6)
 	panel.add_child(box)
 
-	var glyph := Label.new()
-	glyph.text = icon
-	glyph.add_theme_font_size_override("font_size", 22)
-	glyph.add_theme_color_override("font_color", tint)
-	glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	box.add_child(glyph)
 
 	var value := Label.new()
-	value.add_theme_font_size_override("font_size", 22)
+	value.add_theme_font_size_override("font_size", 20)
 	value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	box.add_child(value)
 	return value
@@ -293,11 +342,30 @@ func _chip(row: HBoxContainer, icon: String, tint: Color) -> Label:
 ## parola "oro" — così non serve tenere premuto per scoprirlo.
 func _shop_icon_button(icon: String, action_label: String, cost: int) -> Button:
 	var button := Button.new()
-	button.text = "%s  %d⛁" % [icon, cost]
-	button.tooltip_text = "%s · %d⛁" % [action_label, cost]
+	button.tooltip_text = "%s · %d oro" % [action_label, cost]
 	button.custom_minimum_size = Vector2(84, 56)
-	button.add_theme_font_size_override("font_size", 20)
 	Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 14, 4)
+
+	# Il testo del pulsante resta vuoto: la moneta è un nodo disegnato e il testo
+	# di un Button non può contenerne uno. Dentro ci va una riga con i figli a
+	# MOUSE_FILTER_IGNORE, così i clic arrivano comunque al pulsante — lo stesso
+	# schema delle righe della classifica avversari e di UnitSlot.
+	var inner := HBoxContainer.new()
+	inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	inner.alignment = BoxContainer.ALIGNMENT_CENTER
+	inner.add_theme_constant_override("separation", 4)
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(inner)
+
+	for text in [icon, str(cost)]:
+		var label := Label.new()
+		label.text = text
+		label.add_theme_font_size_override("font_size", 20)
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(label)
+
+	inner.add_child(Style.coin(16.0))
 	return button
 
 
@@ -480,29 +548,21 @@ func _build_combat_overlay() -> void:
 		button.pressed.connect(func() -> void: _combat_view.speed = speed)
 		controls.add_child(button)
 
-	var skip := Button.new()
-	skip.text = "Salta"
-	skip.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-	skip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	skip.add_theme_font_size_override("font_size", 24)
-	Style.apply_plate(skip, Style.PLATE, Style.PLATE_DARK, 16, 5)
-	skip.pressed.connect(func() -> void: _combat_view.skip_to_end())
-	controls.add_child(skip)
-
-	# Continua sostituisce i comandi di riproduzione a battaglia finita: è
-	# l'unica cosa che ha ancora senso premere, e in portrait la fila di quattro
-	# pulsanti più un quinto non ci starebbe comunque.
-	_continue_button = Button.new()
-	_continue_button.text = "CONTINUA"
-	_continue_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-	_continue_button.add_theme_font_size_override("font_size", 22)
-	_continue_button.add_theme_color_override("font_color", Style.INK)
-	_continue_button.add_theme_color_override("font_hover_color", Style.INK)
-	_continue_button.add_theme_color_override("font_pressed_color", Style.INK)
-	Style.apply_plate(_continue_button, Style.GOLD, Style.GOLD_DEEP, 20, 8)
-	_continue_button.visible = false
-	_continue_button.pressed.connect(_on_continue_pressed)
-	box.add_child(_continue_button)
+	# Niente "Salta" e niente "Continua": dalla battaglia non si esce a mano.
+	# Le battaglie di un round durano tempi diversi, e uscire in anticipo voleva
+	# dire trovarsi su una preparazione che il server non aveva ancora riaperto,
+	# col negozio del round prima. Ora si esce da soli quando sono finite tutte —
+	# vedi _request_overlay_close(). Al posto del pulsante, un avviso che dice
+	# cosa si sta aspettando, nella stessa riga così l'altezza non salta.
+	_combat_hint = Label.new()
+	_combat_hint.text = "Si torna alla preparazione…"
+	_combat_hint.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	_combat_hint.add_theme_font_size_override("font_size", 18)
+	_combat_hint.add_theme_color_override("font_color", Style.TEXT_DIM)
+	_combat_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_combat_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_combat_hint.visible = false
+	box.add_child(_combat_hint)
 
 	_combat_controls = controls
 
@@ -603,10 +663,10 @@ func _combat_chip(row: Dictionary) -> Control:
 	return panel
 
 
-## Overlay per rivedere solo lo schieramento iniziale dell'ultimo combattimento
-## di un avversario: niente pulsanti di velocità o "continua", perché non c'è
-## una battaglia da riprodurre né un round da concludere — è solo un'occhiata
-## a come si è schierato, per copiare o correggere la propria formazione.
+## Overlay per RIVEDERE la battaglia dell'ultimo round di un altro giocatore:
+## il log arriva già completo (SPECTATE_DATA porta combat, team e l'eroe
+## avversario), quindi si riproduce come la propria, con i comandi di velocità.
+## Non ha un "continua" perché non c'è un round da concludere: si chiude e basta.
 ## Un CombatView separato da quello della propria battaglia: condividere lo
 ## stesso avrebbe richiesto salvare e ripristinare lo stato del round in corso
 ## ogni volta che si apre e si chiude, per un semplice sguardo a un tabellone.
@@ -640,21 +700,37 @@ func _build_spectate_overlay() -> void:
 	_spectate_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.add_child(_spectate_view)
 
+	var speeds := HBoxContainer.new()
+	speeds.add_theme_constant_override("separation", 8)
+	box.add_child(speeds)
+	for speed in [1.0, 2.0, 4.0]:
+		var button := Button.new()
+		button.text = "×%d" % int(speed)
+		button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.add_theme_font_size_override("font_size", 24)
+		Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 16, 5)
+		button.pressed.connect(func() -> void: _spectate_view.speed = speed)
+		speeds.add_child(button)
+
 	var close := Button.new()
 	close.text = "Chiudi"
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 24)
 	Style.apply_plate(close, Style.PLATE, Style.PLATE_DARK, 16, 5)
-	close.pressed.connect(func() -> void: _spectate_overlay.visible = false)
+	# pause() e non solo visible=false: un CombatView nascosto ma in riproduzione
+	# continua a girare in _process dietro al pannello.
+	close.pressed.connect(func() -> void:
+		_spectate_view.pause()
+		_spectate_overlay.visible = false)
 	box.add_child(close)
 
 
-## Mostra lo schieramento iniziale dell'ultimo combattimento di `pl`, fermo
-## (nessuna chiamata a play()): l'utente ha chiesto di vedere dove ha piazzato
-## le unità, non di rivedere la battaglia intera. Se l'avversario non ha
-## ancora combattuto in questa partita, o il suo ultimo round è stato un
-## fantasma senza schieramento, il tocco non fa nulla: non c'è niente da
-## mostrare.
+## Rivede la battaglia dell'ultimo round di `pl`. Se quel giocatore non ha
+## combattuto (round fantasma, posto già eliminato, o prima battaglia non ancora
+## avvenuta) la sessione non risponde affatto: per questo chi disegna le righe
+## chiede prima _session.can_spectate() e spegne quelle mute, invece di lasciare
+## un tocco che non produce niente.
 func _open_spectate(pl: Player) -> void:
 	# La sessione risponde con spectate_ready: sincrono in locale (il client ha
 	# tutti i log), asincrono in remoto (il worker manda solo il tuo log di
@@ -664,14 +740,16 @@ func _open_spectate(pl: Player) -> void:
 
 func _on_spectate_ready(player_index: int, combat: Dictionary, team: int, opponent_hero_id: String) -> void:
 	if combat.is_empty():
-		return  # niente schieramento da mostrare (round a vuoto / fantasma)
+		return  # niente da mostrare (round a vuoto / fantasma)
 	var pl: Player = null
 	if player_index >= 0 and player_index < match_state.players.size():
 		pl = match_state.players[player_index]
-	_spectate_title.text = "Ultimo schieramento — %s" % (pl.display_name if pl != null else "?")
+	_spectate_title.text = "Ultima battaglia — %s" % (pl.display_name if pl != null else "?")
 	_spectate_view.set_hero_portraits(pl.hero_id if pl != null else "", opponent_hero_id)
+	_spectate_view.speed = float(_profile.combat_speed)
 	_spectate_view.load_combat(combat, team)
 	_spectate_overlay.visible = true
+	_spectate_view.play()
 
 
 ## Riquadro accanto allo schieramento con gli avversari ordinati per vita
@@ -710,61 +788,238 @@ func _refresh_ranking() -> void:
 	for child in _ranking_list.get_children():
 		child.queue_free()
 
-	var opponents: Array[Player] = []
-	for pl in match_state.players:
-		if pl != player():
-			opponents.append(pl)
-	opponents.sort_custom(func(a: Player, b: Player) -> bool: return a.hp > b.hp)
+	# Ordine dell'intera classifica, non solo degli avversari: la posizione
+	# mostrata deve essere quella vera fra otto, quindi si numera live_ranking()
+	# e si saltano le proprie righe invece di ordinare un sottoinsieme.
+	var position := 0
+	for pl in match_state.live_ranking():
+		position += 1
+		if pl == player():
+			continue
+		_standing_row(_ranking_list, pl, position, 15)
 
-	for pl in opponents:
-		# La riga tocca per rivedere l'ultimo schieramento di quell'avversario.
-		# I figli ignorano il mouse, così il clic arriva sempre al pulsante che
-		# li contiene (come in UnitSlot). Non più `flat`: senza uno stato hover
-		# e pressed la riga non sembra toccabile: una piastra minima —
-		# trasparente da ferma, appena illuminata al passaggio, incassata da
-		# premuta — dà l'affordance senza rubare spazio nel riquadro stretto.
-		var row := Button.new()
-		row.custom_minimum_size = Vector2(0, Style.TOUCH_MIN * 0.4)
-		row.tooltip_text = "Rivedi lo schieramento di %s" % pl.display_name
-		_style_ranking_row(row)
+
+## Una riga di classifica: posizione, nome, vita (o teschio) e la lente se c'è
+## davvero una battaglia da rivedere. Condivisa fra il riquadro stretto accanto
+## allo schieramento e la schermata a tutto schermo di chi è eliminato, così le
+## due viste non possono raccontare due ordini diversi.
+##
+## I figli ignorano il mouse, così il clic arriva sempre al pulsante che li
+## contiene (come in UnitSlot). Non `flat`: senza uno stato hover e pressed la
+## riga non sembra toccabile — una piastra minima dà l'affordance senza rubare
+## spazio nel riquadro stretto.
+func _standing_row(parent: Control, pl: Player, position: int, font_size: int) -> void:
+	var out := pl.eliminated or pl.hp <= 0
+	# Una riga che non risponde è peggio di una riga spenta: qui è il tocco
+	# principale della schermata spettatore, e il silenzio della sessione
+	# sarebbe indistinguibile da un tocco perso.
+	var watchable: bool = _session != null and _session.can_spectate(pl.index)
+
+	var row := Button.new()
+	row.custom_minimum_size = Vector2(0, Style.TOUCH_MIN * (0.4 if font_size <= 15 else 0.55))
+	row.disabled = not watchable
+	row.tooltip_text = "Rivedi l'ultima battaglia di %s" % pl.display_name if watchable \
+		else "%s non ha una battaglia da rivedere" % pl.display_name
+	_style_ranking_row(row)
+	if watchable:
 		row.pressed.connect(_open_spectate.bind(pl))
-		_ranking_list.add_child(row)
+	parent.add_child(row)
 
-		var inner := HBoxContainer.new()
-		inner.add_theme_constant_override("separation", 6)
-		inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(inner)
+	var inner := HBoxContainer.new()
+	inner.add_theme_constant_override("separation", 6)
+	inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(inner)
 
-		var name_label := Label.new()
-		name_label.text = pl.display_name
-		name_label.add_theme_font_size_override("font_size", 15)
-		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_label.clip_text = true
-		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		inner.add_child(name_label)
+	var place_label := Label.new()
+	place_label.text = "%d°" % position
+	place_label.add_theme_font_size_override("font_size", font_size)
+	place_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.1))
+	place_label.custom_minimum_size = Vector2(float(font_size) * 1.9, 0)
+	place_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(place_label)
 
-		var hp_label := Label.new()
-		hp_label.add_theme_font_size_override("font_size", 15)
-		hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		inner.add_child(hp_label)
+	var name_label := Label.new()
+	name_label.text = pl.display_name
+	name_label.add_theme_font_size_override("font_size", font_size)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.clip_text = true
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(name_label)
+	if pl == player():
+		name_label.add_theme_color_override("font_color", Style.GOLD)
 
-		# Lente in coda: segnala che la riga apre un dettaglio, senza dover
-		# leggere il tooltip (assente su touch).
-		var peek := Label.new()
-		peek.text = "🔍"
-		peek.add_theme_font_size_override("font_size", 13)
-		peek.add_theme_color_override("font_color", Style.TEXT_DIM)
-		peek.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		inner.add_child(peek)
+	var hp_label := Label.new()
+	hp_label.add_theme_font_size_override("font_size", font_size)
+	hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(hp_label)
 
-		if pl.eliminated or pl.hp <= 0:
-			hp_label.text = "☠"
+	# Lente in coda: segnala che la riga apre un dettaglio, senza dover
+	# leggere il tooltip (assente su touch).
+	var peek := Label.new()
+	peek.text = "🔍" if watchable else " "
+	peek.add_theme_font_size_override("font_size", font_size - 2)
+	peek.add_theme_color_override("font_color", Style.TEXT_DIM)
+	peek.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(peek)
+
+	if out:
+		hp_label.text = "☠"
+		if pl != player():
 			name_label.add_theme_color_override("font_color", Style.TEXT_DIM)
-			hp_label.add_theme_color_override("font_color", Style.TEXT_DIM)
-		else:
-			hp_label.text = str(pl.hp)
-			hp_label.add_theme_color_override("font_color", Color(0.92, 0.45, 0.45))
+		hp_label.add_theme_color_override("font_color", Style.TEXT_DIM)
+	else:
+		hp_label.text = str(pl.hp)
+		hp_label.add_theme_color_override("font_color", Color(0.92, 0.45, 0.45))
+
+
+## Schermata che prende il posto della preparazione per chi è fuori dai giochi:
+## eliminato a metà partita, oppure partita conclusa (allora la vedono tutti,
+## vincitore compreso, come riepilogo finale).
+##
+## Non è un ramo separato del ciclo di gioco: è un pannello che copre la
+## preparazione, quindi _refresh() continua a girare identico sotto e la
+## classifica si aggiorna a ogni round senza codice di sincronizzazione.
+func _build_spectator_screen() -> void:
+	_spectator_screen = Panel.new()
+	_spectator_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_spectator_screen.add_theme_stylebox_override("panel",
+		Style.box(Style.SKY_TOP, Style.SKY_TOP, 0, 0))
+	_spectator_screen.visible = false
+	add_child(_spectator_screen)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 38)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	_spectator_screen.add_child(margin)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	margin.add_child(box)
+
+	_spectator_title = Label.new()
+	_spectator_title.add_theme_font_size_override("font_size", 30)
+	_spectator_title.add_theme_color_override("font_color", Style.GOLD)
+	_spectator_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spectator_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_spectator_title)
+
+	_spectator_subtitle = Label.new()
+	_spectator_subtitle.add_theme_font_size_override("font_size", 18)
+	_spectator_subtitle.add_theme_color_override("font_color", Style.TEXT_DIM)
+	_spectator_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spectator_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_spectator_subtitle)
+
+	_spectator_status = Label.new()
+	_spectator_status.add_theme_font_size_override("font_size", 16)
+	_spectator_status.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
+	_spectator_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spectator_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_spectator_status.visible = false
+	box.add_child(_spectator_status)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+
+	_spectator_rows = VBoxContainer.new()
+	_spectator_rows.add_theme_constant_override("separation", 4)
+	_spectator_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_spectator_rows)
+
+	_spectator_restart = Button.new()
+	_spectator_restart.text = "NUOVA PARTITA"
+	_spectator_restart.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	_spectator_restart.add_theme_font_size_override("font_size", 26)
+	_spectator_restart.add_theme_color_override("font_color", Style.INK)
+	Style.apply_plate(_spectator_restart, Style.GOLD, Style.GOLD_DEEP, 20, 8)
+	_spectator_restart.pressed.connect(_start_new_match)
+	box.add_child(_spectator_restart)
+
+	var leave := Button.new()
+	leave.text = "Torna al menu"
+	leave.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	leave.add_theme_font_size_override("font_size", 24)
+	Style.apply_plate(leave, Style.PLATE, Style.PLATE_DARK, 16, 5)
+	leave.pressed.connect(_on_menu_button_pressed)
+	box.add_child(leave)
+
+
+## Chi è fuori non ha una preparazione da fare: al suo posto la classifica.
+## Unico punto che decide quale delle due schermate si vede — _apply_session_mode_ui()
+## delega qui, così non ci sono due posti che accendono e spengono gli stessi
+## pulsanti con condizioni diverse.
+func _update_spectator_mode() -> void:
+	if _spectator_screen == null:
+		return
+	var finished := match_state.phase == MatchState.Phase.FINISHED
+	var out: bool = finished or not player().is_alive()
+	# Durante il replay comanda la battaglia: la classifica riappare quando
+	# l'overlay si chiude da solo, e _conclude_round richiama _refresh().
+	var show_screen := out and not _combat_overlay.visible
+	_spectator_screen.visible = show_screen
+
+	var remote := session_mode == SessionMode.REMOTE
+	_fight_button.visible = not remote and not out
+	_prep_bar.visible = remote and not out
+
+	if not show_screen:
+		return
+
+	if finished:
+		_spectator_title.text = "PARTITA CONCLUSA"
+		_spectator_subtitle.text = "Il tuo piazzamento: %d° su %d" % [
+			player().placement, match_state.players.size()]
+		_spectator_status.visible = false
+	else:
+		_spectator_title.text = "SEI STATO ELIMINATO"
+		_spectator_subtitle.text = "%d° posto · tocca un giocatore per rivedere la sua ultima battaglia" % \
+			player().placement
+		_spectator_status.text = _remaining_players_status_text()
+		_spectator_status.visible = true
+
+	# NUOVA PARTITA solo offline e a partita finita (online si rientra in coda
+	# dal menu, non da qui).
+	_spectator_restart.visible = not remote and finished
+
+	_refresh_spectator_rows()
+
+
+## Riga di stato dei giocatori ancora in gioco: sono tutti sincronizzati sullo
+## stesso round e sulla stessa fase, quindi una sola riga li descrive tutti.
+## In preparazione mostra il countdown (in remoto scalato localmente da
+## RemoteSession, come il timer del giocatore vivo); in battaglia non c'è un
+## timer lato client — la battaglia è un replay — quindi si dice solo la fase.
+func _remaining_players_status_text() -> String:
+	var alive := 0
+	for pl in match_state.players:
+		if pl.is_alive():
+			alive += 1
+	var phase_txt := ""
+	match match_state.phase:
+		MatchState.Phase.PREPARATION:
+			phase_txt = "in preparazione"
+			if _session is RemoteSession:
+				var left := int(ceil(maxf(0.0, (_session as RemoteSession).prep_seconds_left)))
+				phase_txt += " · %d s al via" % left
+		MatchState.Phase.COMBAT:
+			phase_txt = "in battaglia"
+	return "%d giocatori ancora in gioco · Round %s · %s" % [
+		alive, match_state.round_label(), phase_txt]
+
+
+func _refresh_spectator_rows() -> void:
+	for child in _spectator_rows.get_children():
+		child.queue_free()
+	var position := 0
+	for pl in match_state.live_ranking():
+		position += 1
+		_standing_row(_spectator_rows, pl, position, 20)
 
 
 ## Piastra minima per le righe della classifica avversari: trasparente da
@@ -1004,8 +1259,14 @@ func _spacer(height: int) -> Control:
 func _start_new_match() -> void:
 	_combat_view.pause()
 	_combat_overlay.visible = false
+	_spectate_view.pause()
 	_spectate_overlay.visible = false
+	if _spectator_screen != null:
+		_spectator_screen.visible = false
 	_pending_results = []
+	_auto_close_left = -1.0
+	_final_standings = []
+	_match_recorded = false
 	_fight_button.text = "COMBATTI"
 	selected = null
 
@@ -1015,13 +1276,16 @@ func _start_new_match() -> void:
 	_session.round_concluded.connect(_on_round_concluded)
 	_session.command_rejected.connect(_on_command_rejected)
 	_session.spectate_ready.connect(_on_spectate_ready)
+	_session.match_finished.connect(_on_match_finished)
 
 	if session_mode == SessionMode.REMOTE:
 		_session.round_started.connect(_on_remote_round_started)
 		_session.connection_lost.connect(_on_connection_lost)
-	_apply_session_mode_ui()
 
+	# Prima di _apply_session_mode_ui(): ora quella legge lo stato per decidere
+	# se il giocatore è fuori, e senza match_state non può.
 	match_state = _session.state()
+	_apply_session_mode_ui()
 
 	_log("[b]Nuova partita[/b] (seed %d)" % match_state.seed_value)
 	_log("Civiltà disponibili: %s" % ", ".join(_store.playable_origins()))
@@ -1048,11 +1312,11 @@ func _make_session() -> MatchSession:
 
 
 ## Nasconde/mostra i comandi in base alla modalità: in remoto niente COMBATTI,
-## c'è PRONTO + countdown; in locale il contrario.
+## c'è PRONTO + countdown; in locale il contrario. Delega a
+## _update_spectator_mode(), che è l'unico posto che decide la visibilità dei
+## due pulsanti — un eliminato non deve vedere né l'uno né l'altro.
 func _apply_session_mode_ui() -> void:
-	var remote := session_mode == SessionMode.REMOTE
-	_fight_button.visible = not remote
-	_prep_bar.visible = remote
+	_update_spectator_mode()
 
 
 func _on_ready_pressed() -> void:
@@ -1063,12 +1327,28 @@ func _on_ready_pressed() -> void:
 	_session.request_ready()
 
 
+## Il server ha aperto il round successivo: tutte le battaglie del round sono
+## finite, quindi è il momento in cui gli otto rientrano insieme in preparazione.
 func _on_remote_round_started(_stage: int, _round_index: int) -> void:
 	_ready_button.disabled = false
 	_ready_button.text = "PRONTO"
+	_request_overlay_close(true)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# Prima del guard sulla modalità: l'uscita automatica dalla battaglia vale
+	# anche in locale. Tenere qui solo questo, il resto della funzione è remoto.
+	if _auto_close_left >= 0.0:
+		_auto_close_left -= delta
+		if _auto_close_left <= 0.0:
+			_close_combat_overlay()
+
+	# Countdown fluido della riga di stato per chi guarda da eliminato: senza
+	# questo si aggiornerebbe solo a ogni snapshot del server.
+	if _spectator_status != null and _spectator_status.visible \
+			and match_state.phase != MatchState.Phase.FINISHED:
+		_spectator_status.text = _remaining_players_status_text()
+
 	if session_mode != SessionMode.REMOTE or _prep_label == null:
 		return
 	if _session is RemoteSession and not _combat_overlay.visible:
@@ -1173,6 +1453,8 @@ func _on_command_rejected(reason: String) -> void:
 			_log("[color=#e0a070]Mossa non consentita.[/color]")
 		"identity":
 			_log("[color=#e0a070]Comando rifiutato dal server.[/color]")
+		"eliminated":
+			_log("[color=#e0a070]Sei stato eliminato: non puoi più comprare né aggiornare.[/color]")
 		"not_joined", "no_match", "join_token", "join_seat":
 			_log("[color=#e0a070]Sessione non valida — prova a riconnetterti.[/color]")
 		"oversize":
@@ -1196,8 +1478,9 @@ func _show_combat(own: Dictionary) -> void:
 	]
 	_refresh_combat_info(own)
 	_combat_outcome.text = ""
-	_continue_button.visible = false
+	_combat_hint.visible = false
 	_combat_controls.visible = true
+	_auto_close_left = -1.0
 
 	_combat_view.speed = float(_profile.combat_speed)
 	_combat_view.set_hero_portraits(player().hero_id, opponent.hero_id if opponent != null else "")
@@ -1221,7 +1504,7 @@ func _previous_round_label() -> String:
 func _on_playback_finished() -> void:
 	var own := _own_result(_pending_results)
 	if own.is_empty():
-		_on_continue_pressed()
+		_close_combat_overlay()
 		return
 
 	if bool(own["won"]):
@@ -1230,7 +1513,7 @@ func _on_playback_finished() -> void:
 	else:
 		_combat_outcome.text = "Sconfitta — %d danni alla tua vita" % int(own["damage"])
 		_combat_outcome.add_theme_color_override("font_color", Color(0.9, 0.45, 0.45))
-	_continue_button.visible = true
+	_combat_hint.visible = true
 	_combat_controls.visible = false
 	_tips.queue_tip("combat")
 	# Vista la prima battaglia, il giocatore ha un motivo concreto per aprire il
@@ -1239,8 +1522,20 @@ func _on_playback_finished() -> void:
 	if own.get("opponent") != null and not bool(own.get("ghost", false)):
 		_combat_view.show_result_beam(bool(own["won"]), int(own["damage_dealt"] if bool(own["won"]) else own["damage"]))
 
+	# In locale il ritmo lo detta il client: LocalSession.request_ready() è
+	# sincrona e ha già risolto e riaperto il round, quindi si esce appena il
+	# fascio del risultato ha finito. In remoto il ritmo è del server e si
+	# aspetta ROUND_STARTED, così gli otto rientrano insieme — a meno che la
+	# partita sia finita, e allora un altro round non arriverà mai.
+	if session_mode == SessionMode.LOCAL or not _final_standings.is_empty():
+		_request_overlay_close(false)
 
-func _on_continue_pressed() -> void:
+
+## L'unico modo di lasciare la schermata di battaglia: non c'è più un pulsante.
+func _close_combat_overlay() -> void:
+	_auto_close_left = -1.0
+	if not _combat_overlay.visible:
+		return
 	_combat_view.pause()
 	_combat_overlay.visible = false
 	var results := _pending_results
@@ -1248,19 +1543,25 @@ func _on_continue_pressed() -> void:
 	_conclude_round(results)
 
 
+## Chiede l'uscita dalla battaglia. `immediate` = le battaglie del round sono
+## finite tutte e il round dopo è già aperto (in remoto lo dice il server): si
+## esce subito. Altrimenti si lascia il tempo di vedere il fascio e leggere
+## l'esito prima di sparire.
+func _request_overlay_close(immediate: bool) -> void:
+	if not _combat_overlay.visible:
+		return
+	if immediate:
+		_close_combat_overlay()
+	else:
+		_auto_close_left = result_pause
+
+
 ## Chiude il round: racconto dell'esito, preparazione del successivo.
 func _conclude_round(results: Array) -> void:
 	_report(results)
 
-	if match_state.phase == MatchState.Phase.FINISHED:
-		var standings := match_state.standings()
-		_log("\n[b]Partita conclusa.[/b] Vince %s." % standings[0].display_name)
-		_log("Il tuo piazzamento: %d° su %d." % [player().placement, match_state.players.size()])
-		_fight_button.text = "NUOVA PARTITA"
-		_profile.record_match(player().placement)
-		if session_mode == SessionMode.REMOTE:
-			_ready_button.visible = false
-			_prep_label.text = "Partita conclusa — usa ☰ per uscire"
+	if match_state.phase == MatchState.Phase.FINISHED or not _final_standings.is_empty():
+		_show_match_over()
 	else:
 		# round_index è già stato fatto avanzare da resolve_round(): stage 1,
 		# round 2 è il primo round che il giocatore sta per affrontare dopo
@@ -1270,6 +1571,53 @@ func _conclude_round(results: Array) -> void:
 		if match_state.stage == 1 and match_state.round_index == 2:
 			_tips.queue_tip("economy")
 	_refresh()
+
+
+## La partita è decisa. Il segnale arriva PRIMA del replay in locale
+## (LocalSession.request_ready è sincrona) e può arrivare mentre il replay è in
+## corso in remoto: in nessuno dei due casi l'esito si racconta qui, o si
+## svelerebbe il risultato mentre lo si sta guardando. Si annota e basta; a
+## dirlo sarà _conclude_round(), a battaglia finita.
+func _on_match_finished(standings: Array) -> void:
+	_final_standings = _normalize_standings(standings)
+	if _combat_overlay.visible:
+		_request_overlay_close(false)
+		return
+	_show_match_over()
+
+
+## Le due sessioni mandano forme diverse: LocalSession un Array[Player],
+## RemoteSession un Array[Dictionary] (server/match_runner._standings_data).
+## La UI ne vuole una sola.
+func _normalize_standings(standings: Array) -> Array:
+	var out: Array = []
+	for entry in standings:
+		if entry is Player:
+			var p := entry as Player
+			out.append({
+				"player_index": p.index, "display_name": p.display_name,
+				"placement": p.placement, "hp": p.hp,
+			})
+		elif entry is Dictionary:
+			out.append(entry)
+	return out
+
+
+func _show_match_over() -> void:
+	if _final_standings.is_empty():
+		_final_standings = _normalize_standings(match_state.standings())
+	if not _final_standings.is_empty():
+		_log("\n[b]Partita conclusa.[/b] Vince %s." % _final_standings[0].get("display_name", "?"))
+	_log("Il tuo piazzamento: %d° su %d." % [player().placement, match_state.players.size()])
+	_fight_button.text = "NUOVA PARTITA"
+	# record_match una volta sola: _conclude_round può ripassare di qui se
+	# arrivano altri snapshot dopo la fine.
+	if not _match_recorded:
+		_match_recorded = true
+		_profile.record_match(player().placement, session_mode == SessionMode.REMOTE)
+	if session_mode == SessionMode.REMOTE:
+		_ready_button.visible = false
+		_prep_label.text = "Partita conclusa — usa ☰ per uscire"
 
 
 ## Chiede conferma prima di lasciare il combattimento: uscire abbandona la
@@ -1412,6 +1760,7 @@ func _refresh() -> void:
 	_hp_label.text = str(p.hp)
 	_gold_label.text = str(p.gold)
 	_level_label.text = "%d  (%d/%d)" % [p.level, p.xp, p.xp_to_next_level()]
+	_rank_label.text = "%d°" % match_state.rank_of(p)
 	_stats_label.text = "%s    Unità %d/%d    Serie %+d" % [
 		p.display_name, p.board_count(), p.max_board_units(), p.streak,
 	]
@@ -1424,6 +1773,9 @@ func _refresh() -> void:
 	_refresh_bench()
 	_refresh_synergies()
 	_refresh_ranking()
+	# Ultimo: legge i dati che i refresh sopra hanno appena aggiornato, e decide
+	# se coprire tutto con la classifica.
+	_update_spectator_mode()
 
 	for unit in p.board_units() + p.bench_units():
 		if unit.star >= 2:

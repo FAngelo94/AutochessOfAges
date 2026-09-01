@@ -78,6 +78,9 @@ func to_dict() -> Dictionary:
 		"star": star,
 		"cell": cell,
 		"on_board": is_on_board(),
+		# Senza questo la panchina si ricostruisce tutta a slot -1: la UI indicizza
+		# le caselle per bench_slot (ui/main.gd:_refresh_bench) e non mostra nulla.
+		"bench_slot": bench_slot,
 	}
 
 
@@ -89,5 +92,5 @@ static func from_dict(d: Dictionary) -> UnitInstance:
 	if bool(d.get("on_board", false)):
 		instance.place_on_board(d.get("cell", Vector2i(-1, -1)))
 	else:
-		instance.place_on_bench(-1)
+		instance.place_on_bench(int(d.get("bench_slot", -1)))
 	return instance

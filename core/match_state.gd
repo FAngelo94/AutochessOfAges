@@ -31,6 +31,15 @@ var _rng: SimRNG
 var _last_results: Array[Dictionary] = []
 var _next_placement: int
 
+## Orologio logico dei danni: cresce di uno a ogni colpo alla vita, per tutta la
+## partita. Non consuma SimRNG e non guarda l'orologio di sistema — serve solo a
+## ordinare due perdite di vita fra loro.
+##
+## NON viene serializzato di proposito: il client non simula mai e quindi non
+## assegna timbri, riceve solo i `last_damage_stamp` già decisi qui. Se un
+## giorno il client togliesse vita per conto suo, i timbri si sovrapporrebbero.
+var _damage_clock: int = 0
+
 ## player.index -> Array[int] degli avversari degli ultimi REMATCH_AVOID_WINDOW
 ## round (il più recente in coda). Solo lato server: il client non accoppia.
 var _recent_opponents: Dictionary = {}
@@ -67,6 +76,57 @@ func alive_players() -> Array[Player]:
 		if player.is_alive():
 			result.append(player)
 	return result
+
+
+# --------------------------------------------------------------------------
+# Classifica dal vivo
+# --------------------------------------------------------------------------
+
+## Timbro successivo per una perdita di vita. Lo chiama chi infligge il danno —
+## qui e server/match_runner.gd per la resa — mai Player.
+func next_damage_stamp() -> int:
+	_damage_clock += 1
+	return _damage_clock
+
+
+## Il criterio di classifica, unico in tutto il progetto: vita decrescente e, a
+## parità di vita, davanti chi l'ha persa più tardi.
+##
+## Per gli eliminati (vita 0) la stessa regola diventa "chi è morto dopo sta
+## davanti", che è esattamente l'ordine dei piazzamenti: un solo comparatore
+## copre vivi e morti, la classifica in partita e quella finale.
+static func ranks_before(a: Player, b: Player) -> bool:
+	if a.hp != b.hp:
+		return a.hp > b.hp
+	if a.last_damage_stamp != b.last_damage_stamp:
+		return a.last_damage_stamp > b.last_damage_stamp
+	return a.index < b.index  # ultimo criterio: stabile e deterministico
+
+
+## Tutti i giocatori dal primo all'ultimo secondo ranks_before().
+func live_ranking() -> Array[Player]:
+	var sorted: Array[Player] = players.duplicate()
+	sorted.sort_custom(ranks_before)
+	return sorted
+
+
+## Posizione 1-based di un giocatore. Conta invece di cercare dentro
+## live_ranking(): la HUD la chiede a ogni refresh e così non alloca un array.
+func rank_of(player: Player) -> int:
+	var position := 1
+	for other in players:
+		if other != player and ranks_before(other, player):
+			position += 1
+	return position
+
+
+## Resa: azzera la vita del posto, con timbro — chi si arrende ha perso la vita
+## adesso, quindi a parità di vita sta davanti a chi l'aveva persa prima.
+func apply_surrender(player_index: int) -> void:
+	if player_index < 0 or player_index >= players.size():
+		return
+	var p: Player = players[player_index]
+	p.take_damage(p.hp, next_damage_stamp())
 
 
 func round_label() -> String:
@@ -132,7 +192,8 @@ func start_round() -> void:
 ## poi si accoppia con una scelta greedy che evita gli avversari degli ultimi
 ## REMATCH_AVOID_WINDOW round finché è possibile — con 8 umani veri, ritrovarsi
 ## contro la stessa board 2-3 volte di fila è frustrante. Con un numero dispari
-## uno combatte contro la copia della squadra di un altro (il "fantasma").
+## di vivi, lo spaiato combatte contro un "fantasma": l'ultimo schieramento di
+## un giocatore eliminato se ce n'è uno, altrimenti la copia di un vivo.
 ##
 ## Il consumo dello SimRNG è identico a prima (uno shuffle + al più un pick):
 ## cambia solo QUALE accoppiamento esce, non la posizione dello stream.
@@ -161,7 +222,14 @@ func build_matchups() -> Array[Dictionary]:
 
 	if pending.size() == 1:
 		var odd_one: Player = pending[0]
-		var candidates := living.filter(func(p: Player) -> bool: return p != odd_one)
+		# Il fantasma è, in ordine di preferenza: un giocatore eliminato (si
+		# usa il suo ultimo schieramento, congelato al momento dell'uscita —
+		# così l'esercito di chi è caduto resta in partita e nessun vivo si
+		# vede "prestata" la squadra); in mancanza, la copia di un vivo.
+		var candidates := players.filter(func(p: Player) -> bool:
+			return not p.is_alive() and not p.board_units().is_empty())
+		if candidates.is_empty():
+			candidates = living.filter(func(p: Player) -> bool: return p != odd_one)
 		if candidates.is_empty():
 			matchups.append({"a": odd_one, "b": null, "ghost": true})
 		else:
@@ -233,11 +301,11 @@ func _resolve_matchup(matchup: Dictionary) -> Dictionary:
 	var damage_to_b := 0
 	if b_won:
 		damage_to_a = _compute_damage(sim, 1)
-		player_a.take_damage(damage_to_a)
+		player_a.take_damage(damage_to_a, next_damage_stamp())
 	elif a_won:
 		damage_to_b = _compute_damage(sim, 0)
 		if not matchup.get("ghost", false):
-			player_b.take_damage(damage_to_b)
+			player_b.take_damage(damage_to_b, next_damage_stamp())
 
 	# Il risultato è registrato dal punto di vista del giocatore A; per B viene
 	# aggiunto subito dopo, così ogni giocatore ha una riga sua.
@@ -281,11 +349,21 @@ func _compute_damage(sim: CombatSim, winning_team: int) -> int:
 
 
 func _apply_eliminations() -> void:
+	var fresh: Array[Player] = []
 	for player in players:
 		if player.eliminated and player.placement == 0:
-			player.placement = _next_placement
-			_next_placement -= 1
-			player_eliminated.emit(player)
+			fresh.append(player)
+
+	# I piazzamenti si assegnano a scendere da _next_placement, quindi si parte
+	# dal PEGGIORE: fra due morti nello stesso round prende il numero più alto
+	# chi ha incassato il colpo per primo. Prima l'ordine era quello dell'array
+	# players, cioè l'indice del posto — arbitrario e senza rapporto col gioco.
+	fresh.sort_custom(func(a: Player, b: Player) -> bool: return ranks_before(b, a))
+
+	for player in fresh:
+		player.placement = _next_placement
+		_next_placement -= 1
+		player_eliminated.emit(player)
 
 
 func _advance_round() -> void:
@@ -310,7 +388,9 @@ func standings() -> Array[Player]:
 		var pb := b.placement if b.placement > 0 else 0
 		if pa != pb:
 			return pa < pb
-		return a.hp > b.hp)
+		# Non ancora piazzati (i vivi, a metà partita): stesso criterio della
+		# classifica dal vivo, così le due viste non si contraddicono mai.
+		return ranks_before(a, b))
 	var result: Array[Player] = []
 	for player in sorted:
 		result.append(player)

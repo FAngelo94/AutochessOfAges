@@ -40,6 +40,22 @@ static func origin_color(origin_id: String) -> Color:
 	return ORIGIN.get(origin_id, Color(0.7, 0.7, 0.75))
 
 
+## Ogni pulsante che passa da apply_button/apply_plate — cioè praticamente tutti
+## — suona un click quando premuto. La guardia is_connected regge i ri-styling
+## ripetuti (UnitSlot si ristila a ogni refresh, alcuni pulsanti cambiano
+## piastra a runtime).
+static func _wire_click(button: Button) -> void:
+	if not button.pressed.is_connected(_play_click):
+		button.pressed.connect(_play_click)
+
+
+static func _play_click() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var sfx := tree.root.get_node_or_null("/root/Sfx") if tree != null else null
+	if sfx != null:
+		sfx.play("click")
+
+
 static func box(fill: Color, border: Color, border_width: int = 1, radius: int = 4) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = fill
@@ -57,6 +73,7 @@ static func box(fill: Color, border: Color, border_width: int = 1, radius: int =
 ## rimette il tema predefinito appena il mouse passa sopra e il colore scelto
 ## sparisce proprio mentre lo si guarda.
 static func apply_button(button: Button, fill: Color, border: Color, border_width: int = 1) -> void:
+	_wire_click(button)
 	button.add_theme_stylebox_override("normal", box(fill, border, border_width))
 	button.add_theme_stylebox_override("hover", box(fill.lightened(0.08), border.lightened(0.2), border_width))
 	button.add_theme_stylebox_override("pressed", box(fill.darkened(0.1), border, border_width))
@@ -123,6 +140,7 @@ static func plate(fill: Color, edge: Color, radius: int = 18, lip: int = 6) -> S
 ## Come apply_button ma per le piastre: da premuto la faccia scende sul labbro
 ## inferiore, che è il feedback che su touch sostituisce l'hover inesistente.
 static func apply_plate(button: Button, fill: Color, edge: Color, radius: int = 18, lip: int = 6) -> void:
+	_wire_click(button)
 	button.add_theme_stylebox_override("normal", plate(fill, edge, radius, lip))
 	button.add_theme_stylebox_override("hover", plate(fill.lightened(0.10), edge.lightened(0.12), radius, lip))
 	var down := plate(fill.darkened(0.12), edge, radius, 2)
@@ -152,3 +170,27 @@ static func backdrop(top: Color, bottom: Color) -> TextureRect:
 	rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return rect
+
+
+## Moneta d'oro disegnata: bordo scuro, faccia piena e un riflesso in alto a
+## sinistra — lo stesso trucco dei bracieri del menu, tre draw_circle e nessun
+## asset. Sostituisce il carattere ⛁, che non è un glifo di moneta (è un pezzo
+## della dama) e che fuori dal font di sistema esce come rettangolo vuoto.
+static func draw_coin(canvas: Control, center: Vector2, radius: float) -> void:
+	canvas.draw_circle(center, radius, GOLD_DEEP)
+	canvas.draw_circle(center, radius * 0.78, GOLD)
+	canvas.draw_circle(center - Vector2(radius * 0.28, radius * 0.28),
+		radius * 0.20, GOLD.lightened(0.45))
+
+
+## Un Control quadrato che disegna solo la moneta, da infilare dove servirebbe
+## un glifo. Stesso schema del fondale del castello: draw connesso su un Control
+## nudo, resized -> queue_redraw.
+static func coin(diameter: float = 22.0) -> Control:
+	var node := Control.new()
+	node.custom_minimum_size = Vector2(diameter, diameter)
+	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	node.draw.connect(func() -> void:
+		draw_coin(node, node.size * 0.5, minf(node.size.x, node.size.y) * 0.5))
+	node.resized.connect(node.queue_redraw)
+	return node

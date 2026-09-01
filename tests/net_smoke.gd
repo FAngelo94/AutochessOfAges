@@ -35,7 +35,11 @@ func _initialize() -> void:
 	_test_hero_revalidation()
 	_test_runner_full_match()
 	_test_runner_spectate()
+	_test_runner_spectate_ghost()
 	_test_runner_reject_out_of_phase()
+	_test_runner_reject_eliminated()
+	_test_runner_spectate_requires_join()
+	_test_runner_eliminated_counts_as_ready()
 	_test_runner_reject_wrong_index()
 	_test_runner_disconnect_reconnect()
 	print("\n%d superati, %d falliti" % [_passed, _failed])
@@ -417,6 +421,63 @@ func _test_runner_spectate() -> void:
 		"nessun SPECTATE_DATA per un indice inesistente")
 
 
+## Con i vivi in numero dispari lo spaiato affronta il fantasma di un eliminato:
+## quel replay è chiedibile da entrambi gli endpoint, dal proprio lato dell'arena.
+func _test_runner_spectate_ghost() -> void:
+	section("MatchRunner — SPECTATE_REQUEST su un matchup fantasma")
+
+	var runner := MatchRunner.new(_spawn_payload("mrsg", 424242))
+	var peer := 3
+	_join(runner, peer, "mrsg")
+	var junk: Array = []
+	_drain(runner, junk)
+
+	var state := runner.state()
+	for i in [4, 5, 6]:
+		var v: Player = state.players[i]
+		v.move_to_board(v.grant_unit("legionarius"), Vector2i(0, 0))
+		v.take_damage(v.hp, state.next_damage_stamp())
+	for p in state.alive_players():
+		if p.board_units().is_empty():
+			p.move_to_board(p.grant_unit("legionarius"), Vector2i(0, 0))
+	check(state.alive_players().size() == 5, "cinque vivi -> conta dispari")
+
+	runner.handle_packet(peer, Protocol.encode(Protocol.make(Protocol.READY, {})))
+	runner.tick(60.0)
+	_drain(runner, junk)
+
+	var ghost := {}
+	for row in runner._public_results():
+		if bool(row.get("ghost", false)) and int(row.get("opponent_index", -1)) >= 0:
+			ghost = row
+			break
+	check(not ghost.is_empty(), "il round ha prodotto un matchup fantasma")
+	var live_idx := int(ghost.get("player_index", -1))
+	var dead_idx := int(ghost.get("opponent_index", -1))
+
+	runner.handle_packet(peer, Protocol.encode(Protocol.make(Protocol.SPECTATE_REQUEST,
+		{"player_index": live_idx})))
+	var out_live: Array = []
+	_drain(runner, out_live)
+	var sd_live := _has_type(out_live, Protocol.SPECTATE_DATA)
+	check(not sd_live.is_empty(), "SPECTATE_DATA per il lato vivo")
+
+	runner.handle_packet(peer, Protocol.encode(Protocol.make(Protocol.SPECTATE_REQUEST,
+		{"player_index": dead_idx})))
+	var out_dead: Array = []
+	_drain(runner, out_dead)
+	var sd_dead := _has_type(out_dead, Protocol.SPECTATE_DATA)
+	check(not sd_dead.is_empty(), "SPECTATE_DATA anche per il lato eliminato")
+	check(not sd_live.is_empty() and not sd_dead.is_empty() \
+		and int(sd_dead.get("team", -9)) == 1 - int(sd_live.get("team", -8)),
+		"i due lati dell'arena sono opposti")
+
+	var c: Variant = sd_dead.get("combat", {})
+	var has_log := (c is Dictionary and not (c as Dictionary).is_empty()) \
+		or (c is PackedByteArray and not (c as PackedByteArray).is_empty())
+	check(has_log, "il log di combattimento è incluso")
+
+
 func _test_runner_reject_out_of_phase() -> void:
 	section("MatchRunner — comando fuori fase -> COMMAND_REJECTED")
 
@@ -443,6 +504,88 @@ func _test_runner_reject_out_of_phase() -> void:
 	check(runner.state().players[0].gold == gold_before
 		and runner.state().players[0].level == level_before,
 		"lo stato non e' cambiato")
+
+
+## Il pool e' condiviso: un posto eliminato che continua a comprare toglie copie
+## a chi e' ancora in gioco. Il server lo rifiuta anche se il client insiste.
+func _test_runner_reject_eliminated() -> void:
+	section("MatchRunner — comando da un posto eliminato -> rifiutato")
+
+	var runner := MatchRunner.new(_spawn_payload("mre", 4711))
+	var peer := 5
+	_join(runner, peer, "mre")
+	var junk: Array = []
+	_drain(runner, junk)
+
+	var state := runner.state()
+	var p: Player = state.players[0]
+	p.gold = 99
+	p.take_damage(p.hp, state.next_damage_stamp())
+	check(not p.is_alive(), "il posto 0 e' eliminato")
+
+	var pool_before := state.pool.snapshot()
+	runner.handle_packet(peer, Protocol.encode(Protocol.make(Protocol.CMD_REROLL, {})))
+	var out: Array = []
+	_drain(runner, out)
+	var rej := _has_type(out, Protocol.COMMAND_REJECTED)
+	check(not rej.is_empty() and rej.get("reason") == "eliminated",
+		"CMD da eliminato -> COMMAND_REJECTED{eliminated}", str(rej))
+	check(p.gold == 99, "l'oro non e' stato speso", str(p.gold))
+	check(state.pool.snapshot() == pool_before, "il pool condiviso non e' stato toccato")
+
+
+## _on_spectate non aveva il gate d'identita' che _on_command ha sempre avuto.
+func _test_runner_spectate_requires_join() -> void:
+	section("MatchRunner — SPECTATE_REQUEST da un peer non entrato")
+
+	var runner := MatchRunner.new(_spawn_payload("mrsj", 8080))
+	var joined := 1
+	_join(runner, joined, "mrsj")
+	var junk: Array = []
+	_drain(runner, junk)
+	runner.handle_packet(joined, Protocol.encode(Protocol.make(Protocol.READY, {})))
+	runner.tick(60.0)
+	_drain(runner, junk)
+
+	# Un peer che non ha mai mandato JOIN.
+	runner.handle_packet(99, Protocol.encode(Protocol.make(Protocol.SPECTATE_REQUEST,
+		{"player_index": 1})))
+	var out: Array = []
+	_drain(runner, out)
+	check(_has_type(out, Protocol.SPECTATE_DATA).is_empty(),
+		"nessun SPECTATE_DATA per un peer non entrato")
+	var rej := _has_type(out, Protocol.COMMAND_REJECTED)
+	check(not rej.is_empty() and rej.get("reason") == "not_joined",
+		"e riceve COMMAND_REJECTED{not_joined}", str(rej))
+
+
+## Un eliminato guarda soltanto, ma il suo PRONTO deve contare: se non contasse,
+## chi e' fuori si guarderebbe ogni round a timer pieno.
+func _test_runner_eliminated_counts_as_ready() -> void:
+	section("MatchRunner — un eliminato non blocca il round e riceve gli aggiornamenti")
+
+	var runner := MatchRunner.new(_spawn_payload("mrer", 2024))
+	var peer := 4
+	_join(runner, peer, "mrer")
+	var junk: Array = []
+	_drain(runner, junk)
+
+	var state := runner.state()
+	state.players[0].take_damage(state.players[0].hp, state.next_damage_stamp())
+	check(not state.players[0].is_alive(), "l'unico umano e' eliminato")
+
+	var round_before: int = state.round_index
+	# Un eliminato non ha PRONTO: il round scorre sul timer, non si blocca.
+	runner.handle_packet(peer, Protocol.encode(Protocol.make(Protocol.READY, {})))
+	runner.tick(60.0)  # oltre i 45 s di preparazione
+	runner.tick(120.0)
+	var out: Array = []
+	_drain(runner, out)
+	check(not _has_type(out, Protocol.ROUND_STARTED).is_empty(),
+		"l'eliminato riceve comunque ROUND_STARTED")
+	check(not _has_type(out, Protocol.MATCH_STATE).is_empty(),
+		"e lo snapshot per aggiornare la classifica")
+	check(state.round_index != round_before or state.stage > 1, "il round e' avanzato")
 
 
 func _test_runner_reject_wrong_index() -> void:

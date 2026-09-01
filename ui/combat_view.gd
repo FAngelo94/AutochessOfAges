@@ -32,7 +32,6 @@ const CAST_FLASH := 0.35
 ## da chi guarda, non dal numero della squadra.
 const OWN_COLOR := Color(0.4, 0.8, 0.45)
 const ENEMY_COLOR := Color(0.92, 0.42, 0.38)
-const ORIGIN_MARKS := {"roman": "R", "gaul": "G", "teuton": "T"}
 
 const BAR_SIZE := Vector2(58.0, 8.0)
 const RESULT_BEAM_DURATION := 0.55
@@ -213,6 +212,7 @@ func show_result_beam(winner_is_viewer: bool, damage: int) -> void:
 	}
 
 	_result_animating = true
+	_play_sfx("round_end")
 	set_process(true)
 	queue_redraw()
 
@@ -308,7 +308,7 @@ func pause() -> void:
 ## guardare. Lo stato finale è identico a quello che si otterrebbe aspettando.
 func skip_to_end() -> void:
 	while _event_index < _events.size():
-		_apply_event(_events[_event_index])
+		_apply_event(_events[_event_index], false)
 		_event_index += 1
 	_time = _duration
 	_sync_board()
@@ -333,7 +333,7 @@ func _process(delta: float) -> void:
 	_time += delta * speed
 
 	while _event_index < _events.size() and float(_events[_event_index]["t"]) <= _time:
-		_apply_event(_events[_event_index])
+		_apply_event(_events[_event_index], true)
 		_event_index += 1
 
 	_expire_effects()
@@ -366,7 +366,10 @@ func _expire_effects() -> void:
 # Applicazione degli eventi
 # --------------------------------------------------------------------------
 
-func _apply_event(event: Dictionary) -> void:
+## `live` è vero solo quando l'evento arriva sull'orologio in _process: da
+## skip_to_end() vengono applicati centinaia di eventi in un frame e non devono
+## produrre suono.
+func _apply_event(event: Dictionary, live: bool) -> void:
 	var type := String(event["type"])
 	match type:
 		"move":
@@ -396,6 +399,10 @@ func _apply_event(event: Dictionary) -> void:
 				"born": _time,
 				"crit": bool(event.get("crit", false)),
 			})
+			# Colpo inferto: solo le proprie unità, per non raddoppiare col
+			# suono di "colpo ricevuto" del ramo damage.
+			if live and int(attacker["team"]) == viewer_team:
+				_play_sfx("hit_crit" if bool(event.get("crit", false)) else "hit")
 
 		"damage":
 			var unit: Dictionary = _units.get(int(event["uid"]), {})
@@ -407,6 +414,8 @@ func _apply_event(event: Dictionary) -> void:
 			var amount := int(roundf(float(event["amount"])))
 			if amount > 0:
 				_add_floater(int(event["uid"]), "-%d" % amount, Color(1.0, 0.85, 0.4))
+				if live and int(unit["team"]) == viewer_team:
+					_play_sfx("hurt")
 
 		"heal":
 			var unit: Dictionary = _units.get(int(event["uid"]), {})
@@ -430,6 +439,8 @@ func _apply_event(event: Dictionary) -> void:
 				return
 			unit["cast_time"] = _time
 			_add_floater(int(event["uid"]), String(event.get("name", "")), Color(0.7, 0.8, 1.0), 0.30)
+			if live:
+				_play_sfx("cast")
 
 		"stun":
 			var unit: Dictionary = _units.get(int(event["uid"]), {})
@@ -443,6 +454,8 @@ func _apply_event(event: Dictionary) -> void:
 			unit["alive"] = false
 			unit["hp"] = 0.0
 			unit["death_time"] = _time
+			if live:
+				_play_sfx("death_own" if int(unit["team"]) == viewer_team else "death_enemy")
 
 
 ## `lift` alza il testo nel mondo, non sullo schermo: così il nome di
@@ -505,6 +518,12 @@ func _team_color(team: int) -> Color:
 	return OWN_COLOR if team == viewer_team else ENEMY_COLOR
 
 
+func _play_sfx(clip: String) -> void:
+	var sfx := get_node_or_null("/root/Sfx")
+	if sfx != null:
+		sfx.play(clip)
+
+
 # --------------------------------------------------------------------------
 # Sovrimpressione 2D
 # --------------------------------------------------------------------------
@@ -547,12 +566,6 @@ func _draw_unit_hud(uid: int, unit: Dictionary) -> void:
 	if shield_ratio > 0.0:
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * shield_ratio, 2.0)),
 			Color(0.9, 0.9, 0.95, alpha), true)
-
-	# Iniziale della civiltà: la palette dei modelli distingue già i tre
-	# eserciti, ma con due squadre della stessa civiltà serve un'ancora certa.
-	var mark: String = ORIGIN_MARKS.get(String(unit["origin"]), "?")
-	draw_string(_font, bar.position + Vector2(-17.0, BAR_SIZE.y), mark,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.8, 0.8, 0.88, alpha))
 
 	if _time < float(unit["stun_until"]) and bool(unit["alive"]):
 		draw_string(_font, bar.position + Vector2(bar.size.x + 4.0, BAR_SIZE.y), "!",

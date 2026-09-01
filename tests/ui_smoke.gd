@@ -123,9 +123,15 @@ func _run(main: Control) -> void:
 				and main._combat_view._opponent_hero_portrait != null)
 			main._combat_view.skip_to_end()
 			check_once("a fine battaglia compare l'esito", main._combat_outcome.text != "")
-			check_once("a fine battaglia si può continuare", main._continue_button.visible)
-			main._on_continue_pressed()
-			check_once("continuando si torna alla preparazione", not main._combat_overlay.visible)
+			# Non c'è più un pulsante per uscire: la battaglia si chiude da sola.
+			# Il conto alla rovescia gira in _process, che in questo ciclo
+			# sincrono non scatta mai, quindi il test chiama direttamente ciò che
+			# il timer chiamerebbe.
+			check_once("a fine battaglia l'uscita automatica è armata",
+				main._auto_close_left >= 0.0 or not main._combat_overlay.visible)
+			main._close_combat_overlay()
+			check_once("chiusa la battaglia si torna alla preparazione",
+				not main._combat_overlay.visible)
 		rounds += 1
 	check(battles_watched > 0, "il giocatore assiste alle proprie battaglie", str(battles_watched))
 	check(main.match_state.phase == MatchState.Phase.FINISHED,

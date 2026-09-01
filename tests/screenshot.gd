@@ -53,6 +53,10 @@ func _process(_delta: float) -> bool:
 		7:
 			_save("guida.png")
 			_menu._guide_panel.visible = false
+			_menu._settings_panel.open()
+		8:
+			_save("impostazioni.png")
+			_menu._settings_panel.visible = false
 			_menu._on_collection_pressed()
 			_waiting_portraits = true
 		11:
@@ -89,6 +93,10 @@ func _process(_delta: float) -> bool:
 			_main._tips.dismiss()
 		24:
 			_main._on_fight_pressed()
+			# Dalla battaglia ora si esce da soli. Con una battaglia molto corta
+			# l'overlay si chiuderebbe prima dello scatto del frame 56 e
+			# battaglia.png finirebbe per ritrarre la preparazione.
+			_main.result_pause = 1000.0
 		56:
 			_save("battaglia.png")
 		57:

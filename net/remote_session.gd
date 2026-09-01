@@ -43,6 +43,7 @@ var _local_index: int = 0
 
 var _host: String = ""
 var _hero_id: String = ""
+var _guest_id: String = ""
 
 var _master: WebSocketPeer = null
 var _worker: WebSocketPeer = null
@@ -60,6 +61,11 @@ var _pending_token: String = ""
 ## Ultimo combattimento e lato ricevuti (COMBAT) — riuniti in round_concluded.
 var _own_combat: Dictionary = {}
 var _own_team: int = 0
+
+## Righe pubbliche dell'ultimo ROUND_CONCLUDED, di TUTTI i posti (_synth_results
+## tiene solo la propria). Servono a can_spectate(): dicono chi ha combattuto
+## davvero e chi ha avuto un round fantasma.
+var _last_public_results: Array = []
 
 ## Tempo di preparazione rimasto, scalato localmente per il countdown.
 var prep_seconds_left: float = 0.0
@@ -110,7 +116,7 @@ func _stop_poller() -> void:
 func start_queue(hero_id: String) -> void:
 	_hero_id = hero_id
 	_host = _resolve_host()
-	if _host == "":
+	if _host == "" and not DevNet.enabled():
 		not_configured.emit()
 		connection_lost.emit("not configured")
 		return
@@ -120,10 +126,15 @@ func start_queue(hero_id: String) -> void:
 		var auth: Node = _poller.get_node_or_null("/root/Auth")
 		if auth != null:
 			_pending_token = String(auth.access_token())
+	if _pending_token == "" and DevNet.enabled():
+		if _guest_id == "":
+			_guest_id = "%s%d-%d" % [DevNet.GUEST_PREFIX, OS.get_process_id(), randi() % 100000]
+		_pending_token = _guest_id
 
 	_master = WebSocketPeer.new()
 	_hello_sent = false
-	var err := _master.connect_to_url("wss://%s/ws/mm" % _host)
+	var master_url := DevNet.master_url() if DevNet.enabled() else "wss://%s/ws/mm" % _host
+	var err := _master.connect_to_url(master_url)
 	if err != OK:
 		_master = null
 		connection_lost.emit("master unreachable")
@@ -188,6 +199,18 @@ func request_ready() -> void:
 	_send_worker(Protocol.make(Protocol.READY))
 
 
+func can_spectate(player_index: int) -> bool:
+	for row in _last_public_results:
+		var opp_idx := int(row.get("opponent_index", -1))
+		# opponent_index < 0 == round a vuoto (unico caso senza log di combattimento).
+		if int(row.get("player_index", -1)) == player_index:
+			return opp_idx >= 0
+		# Endpoint eliminato di un matchup fantasma: la battaglia c'è comunque.
+		if bool(row.get("ghost", false)) and opp_idx == player_index:
+			return true
+	return false
+
+
 func request_spectate(player_index: int) -> void:
 	_send_worker(Protocol.make(Protocol.SPECTATE_REQUEST, {"player_index": player_index}))
 
@@ -233,7 +256,9 @@ func _poll(delta: float) -> void:
 				}))
 				_send(_master, Protocol.make(Protocol.QUEUE_JOIN, {"hero_id": _hero_id}))
 				_hello_sent = true
-			while _master.get_available_packet_count() > 0:
+			# Guardia su _master: _handle_master(MATCH_ASSIGNED) chiude il master e
+			# lo azzera, mentre questo ciclo sta ancora iterando.
+			while _master != null and _master.get_available_packet_count() > 0:
 				_handle_master(Protocol.decode(_master.get_packet()))
 		elif ms == WebSocketPeer.STATE_CLOSED:
 			_master = null
@@ -251,7 +276,9 @@ func _poll(delta: float) -> void:
 				}))
 				_join_sent = true
 				_reconnect_attempts = 0
-			while _worker.get_available_packet_count() > 0:
+			# Stessa guardia: un handler (es. MATCH_FINISHED -> leave()) puo'
+			# azzerare _worker durante il ciclo.
+			while _worker != null and _worker.get_available_packet_count() > 0:
 				_handle_worker(Protocol.decode(_worker.get_packet()))
 		elif ws == WebSocketPeer.STATE_CLOSED:
 			_worker = null
@@ -304,14 +331,15 @@ func _handle_master(msg: Dictionary) -> void:
 func _open_worker() -> int:
 	if _host == "":
 		_host = String(_assignment.get("host", _resolve_host()))
-	if _host == "":
+	if _host == "" and not DevNet.enabled():
 		_lost = true
 		connection_lost.emit("not configured")
 		return ERR_CANT_CONNECT
 	_worker = WebSocketPeer.new()
 	_join_sent = false
 	var path := String(_assignment.get("worker_path", "/ws/w1"))
-	var err := _worker.connect_to_url("wss://%s%s" % [_host, path])
+	var worker_url := DevNet.worker_url(path) if DevNet.enabled() else "wss://%s%s" % [_host, path]
+	var err := _worker.connect_to_url(worker_url)
 	if err != OK:
 		_worker = null
 		_lost = true
@@ -344,7 +372,8 @@ func _handle_worker(msg: Dictionary) -> void:
 			_own_combat = _decode_combat(msg)
 		Protocol.ROUND_CONCLUDED:
 			_state.phase = MatchState.Phase.COMBAT
-			round_concluded.emit(_synth_results(msg.get("results", [])))
+			_last_public_results = msg.get("results", [])
+			round_concluded.emit(_synth_results(_last_public_results))
 		Protocol.COMMAND_REJECTED:
 			command_rejected.emit(String(msg.get("reason", "")))
 		Protocol.MATCH_FINISHED:

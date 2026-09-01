@@ -3,7 +3,7 @@
 
   "match": {
     "players": 8,
-    "starting_hp": 100,
+    "starting_hp": 10,
     "board_columns": 5,
     "board_rows": 4,
     "bench_size": 5,

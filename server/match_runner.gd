@@ -203,9 +203,9 @@ func _on_join(peer_id: int, msg: Dictionary) -> void:
 func _on_surrender(peer_id: int) -> void:
 	if not _peer_seat.has(peer_id):
 		return
-	var idx: int = _peer_seat[peer_id]
-	var p: Player = _state.players[idx]
-	p.take_damage(p.hp)  # -> hp 0, eliminated; le classifiche seguono al resolve
+	# -> hp 0, eliminated; le classifiche seguono al resolve. Passa da MatchState
+	# per prendere il timbro: chi si arrende ha perso la vita ADESSO.
+	_state.apply_surrender(_peer_seat[peer_id])
 
 
 # --------------------------------------------------------------------------
@@ -224,6 +224,13 @@ func _on_command(peer_id: int, msg: Dictionary) -> void:
 	# 2. fase — core/ non conosce le fasi: e' il solo gate.
 	if _phase != Phase.PREPARATION:
 		_send(peer_id, Protocol.make(Protocol.COMMAND_REJECTED, {"reason": "phase"}))
+		return
+	# 2b. vita — un posto eliminato non compra e non aggiorna. can_buy/can_reroll
+	#     lo rifiuterebbero comunque (core/player.gd), ma un motivo esplicito da'
+	#     al client un messaggio sensato invece di un generico "mossa non
+	#     consentita". Conta davvero: il pool e' condiviso.
+	if not _state.players[idx].is_alive():
+		_send(peer_id, Protocol.make(Protocol.COMMAND_REJECTED, {"reason": "eliminated"}))
 		return
 	# 3. regole — delegate ai metodi che gia' esistono in core/. Nessuna logica
 	#    di gioco duplicata qui.
@@ -259,20 +266,37 @@ func _on_ready(peer_id: int) -> void:
 
 
 func _on_spectate(peer_id: int, msg: Dictionary) -> void:
+	# Stesso gate d'identita' di _on_command, che qui mancava: i log di
+	# combattimento sono pubblici (tavolo, niente shop/oro), ma un peer che non
+	# e' entrato nel match non deve poter interrogare il worker.
+	if not _peer_seat.has(peer_id):
+		_send(peer_id, Protocol.make(Protocol.COMMAND_REJECTED, {"reason": "not_joined"}))
+		return
 	var target := int(msg.get("player_index", -1))
 	for row in _last_results:
-		if row.get("player") != null and row["player"].index == target:
-			if bool(row.get("ghost", false)) or row.get("combat", {}).is_empty():
-				break  # niente schieramento da mostrare (round a vuoto / fantasma)
-			var opp = row.get("opponent")
-			var fields := {
-				"player_index": target,
-				"team": int(row.get("team", 0)),
-				"opponent_hero_id": (opp.hero_id if opp != null else ""),
-			}
-			_merge_combat(fields, row.get("combat", {}))
-			_send(peer_id, Protocol.make(Protocol.SPECTATE_DATA, fields))
-			return
+		if row.get("combat", {}).is_empty():
+			continue  # round a vuoto: nessuna battaglia da rivedere
+		var p = row.get("player")
+		var opp = row.get("opponent")
+		var team := -1
+		var opp_hero := ""
+		if p != null and p.index == target:
+			team = int(row.get("team", 0))
+			opp_hero = opp.hero_id if opp != null else ""
+		elif bool(row.get("ghost", false)) and opp != null and opp.index == target:
+			# Endpoint eliminato di un matchup fantasma: stessa battaglia, lato opposto.
+			team = 1 - int(row.get("team", 0))
+			opp_hero = p.hero_id if p != null else ""
+		else:
+			continue
+		var fields := {
+			"player_index": target,
+			"team": team,
+			"opponent_hero_id": opp_hero,
+		}
+		_merge_combat(fields, row.get("combat", {}))
+		_send(peer_id, Protocol.make(Protocol.SPECTATE_DATA, fields))
+		return
 
 
 # --------------------------------------------------------------------------
@@ -288,18 +312,25 @@ func _open_preparation(first: bool) -> void:
 		"round_index": _state.round_index,
 		"prep_seconds": _prep_left,
 	})
+	# Lo snapshot PRIMA di ROUND_STARTED: start_round() ha appena rigenerato i
+	# negozi, e il client ridisegna la schermata di preparazione gia' su
+	# ROUND_STARTED. Nell'ordine inverso si vedeva il negozio del round passato
+	# finche' non arrivava il MATCH_STATE. Stesso ordine di _on_join().
 	for idx in _seat_peer:
-		_send(_seat_peer[idx], msg)
 		_send(_seat_peer[idx], _match_state_msg(idx))
+		_send(_seat_peer[idx], msg)
 
 
+## Chi "cancella" il timer di preparazione: gli umani collegati ancora vivi. Gli
+## eliminati non hanno un PRONTO (schermata spettatore) e non devono bloccare il
+## round: se restano a guardare, il timer scorre comunque per conto suo.
 func _all_live_humans_ready() -> bool:
 	var gating: Array = []
 	for s in _slots:
 		if String(s.get("kind", "")) != "human":
 			continue
 		var idx := int(s.get("index", 0))
-		if _state.players[idx].is_alive() and _seat_peer.has(idx):
+		if _seat_peer.has(idx) and _state.players[idx].is_alive():
 			gating.append(idx)
 	if gating.is_empty():
 		return false
@@ -410,6 +441,7 @@ func _standings_data() -> Array:
 			"hero_id": p.hero_id,
 			"display_name": p.display_name,
 			"is_bot": p.is_bot,
+			"last_damage_stamp": p.last_damage_stamp,
 		})
 	return out
 

@@ -31,7 +31,7 @@ func _ready() -> void:
 	_build()
 
 	var auth := get_node_or_null("/root/Auth")
-	if auth == null or not auth.is_logged_in():
+	if not DevNet.enabled() and (auth == null or not auth.is_logged_in()):
 		# Difensivo: in lobby non ci si arriva da sloggati.
 		get_tree().change_scene_to_file(MENU_SCENE)
 		return

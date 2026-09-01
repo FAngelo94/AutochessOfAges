@@ -86,15 +86,41 @@ func request_ready() -> void:
 	state_changed.emit()
 
 
+func can_spectate(player_index: int) -> bool:
+	return not _spectate_row_for(player_index).is_empty()
+
+
 func request_spectate(player_index: int) -> void:
+	var found := _spectate_row_for(player_index)
+	if found.is_empty():
+		return
+	spectate_ready.emit(player_index, found["combat"], int(found["team"]),
+		String(found["opponent_hero_id"]))
+
+
+## Individua la battaglia rivedibile per `idx`, sia come endpoint vivo
+## (row["player"]) sia come endpoint eliminato di un matchup fantasma
+## (row["opponent"], lato invertito). Ritorna {} se non c'è nulla da mostrare:
+## round a vuoto, prima battaglia non ancora avvenuta, giocatore non coinvolto.
+func _spectate_row_for(idx: int) -> Dictionary:
 	for row in _state.last_results():
-		if row.get("player") != null and row["player"].index == player_index:
-			if bool(row.get("ghost", false)) or row.get("combat", {}).is_empty():
-				return
-			var opp: Player = row.get("opponent")
-			spectate_ready.emit(player_index, row["combat"], int(row.get("team", 0)),
-				opp.hero_id if opp != null else "")
-			return
+		if row.get("combat", {}).is_empty():
+			continue
+		var p: Player = row.get("player")
+		var opp: Player = row.get("opponent")
+		if p != null and p.index == idx:
+			return {
+				"combat": row["combat"],
+				"team": int(row.get("team", 0)),
+				"opponent_hero_id": opp.hero_id if opp != null else "",
+			}
+		if bool(row.get("ghost", false)) and opp != null and opp.index == idx:
+			return {
+				"combat": row["combat"],
+				"team": 1 - int(row.get("team", 0)),
+				"opponent_hero_id": p.hero_id if p != null else "",
+			}
+	return {}
 
 
 func leave() -> void:

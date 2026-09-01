@@ -84,6 +84,14 @@ func request_spectate(_player_index: int) -> void:
 	pass
 
 
+## Se quel giocatore ha una battaglia da rivedere nell'ultimo round. Serve alla
+## UI per spegnere le righe su cui request_spectate() non risponderebbe: un
+## round fantasma o un posto gia' eliminato non hanno un log, e il silenzio
+## sarebbe indistinguibile da un tocco perso.
+func can_spectate(_player_index: int) -> bool:
+	return false
+
+
 ## Abbandona la partita.
 func leave() -> void:
 	pass

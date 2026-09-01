@@ -137,9 +137,13 @@ func _on_hello(peer_id: int, msg: Dictionary) -> void:
 	if int(msg.get("protocol_version", 0)) != Protocol.PROTOCOL_VERSION:
 		_send(peer_id, Protocol.make(Protocol.REJECTED, {"reason": "version"}), true)
 		return
+	var token := String(msg.get("access_token", ""))
 	var claims: Dictionary = {}
 	if verifier != null:
-		claims = verifier.verify(String(msg.get("access_token", "")))
+		claims = verifier.verify(token)
+	if claims.is_empty() and OS.get_environment("MASTER_DEV_GUEST") == "1" \
+			and token.begins_with(DevNet.GUEST_PREFIX):
+		claims = {"sub": token, "username": "Ospite-" + token.substr(DevNet.GUEST_PREFIX.length())}
 	if claims.is_empty():
 		_send(peer_id, Protocol.make(Protocol.REJECTED, {"reason": "auth"}), true)
 		return

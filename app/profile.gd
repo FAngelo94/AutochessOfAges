@@ -20,6 +20,14 @@ var favourite_origin: String = ""
 ## effective_hero() per leggere sempre un id valido (default Cesare).
 var favourite_hero: String = ""
 var combat_speed: float = 1.0
+## Volume degli effetti sonori, lineare 0..1. Preferenza di dispositivo come
+## combat_speed: non va su Supabase.
+var sfx_volume: float = 0.8
+## Ultima modalità scelta nel menu ("cpu" / "pvp"). Vuota al primo avvio. La
+## stringa non è validata qui: ui/menu.gd la confronta con le proprie costanti e
+## ricade su "contro il computer" se non la riconosce, così app/ non deve
+## conoscere i valori della UI e un profilo vecchio o alterato non rompe il menu.
+var match_mode: String = ""
 var matches_played: int = 0
 var best_placement: int = 0
 ## Id dei suggerimenti one-shot già mostrati (TipBubble). Una volta visto, un
@@ -88,6 +96,8 @@ func load_profile() -> void:
 	favourite_origin = String(config.get_value("preferences", "favourite_origin", ""))
 	favourite_hero = String(config.get_value("preferences", "favourite_hero", ""))
 	combat_speed = float(config.get_value("preferences", "combat_speed", 1.0))
+	sfx_volume = float(config.get_value("preferences", "sfx_volume", 0.8))
+	match_mode = String(config.get_value("preferences", "match_mode", ""))
 	matches_played = int(config.get_value("stats", "matches_played", 0))
 	best_placement = int(config.get_value("stats", "best_placement", 0))
 	# Assente nei profili salvati prima di questa funzionalità: il default
@@ -101,6 +111,8 @@ func save_profile() -> void:
 	config.set_value("preferences", "favourite_origin", favourite_origin)
 	config.set_value("preferences", "favourite_hero", favourite_hero)
 	config.set_value("preferences", "combat_speed", combat_speed)
+	config.set_value("preferences", "sfx_volume", sfx_volume)
+	config.set_value("preferences", "match_mode", match_mode)
 	config.set_value("stats", "matches_played", matches_played)
 	config.set_value("stats", "best_placement", best_placement)
 	config.set_value("tutorial", "seen_tips", seen_tips)
@@ -130,8 +142,22 @@ func effective_hero() -> String:
 	return favourite_hero if favourite_hero != "" else GameData.DEFAULT_HERO_ID
 
 
+## Modalità di partita: preferenza di dispositivo come combat_speed, non di
+## account — non va su Supabase.
+func set_match_mode(mode: String) -> void:
+	match_mode = mode
+	save_profile()
+	changed.emit()
+
+
 func set_combat_speed(speed: float) -> void:
 	combat_speed = speed
+	save_profile()
+	changed.emit()
+
+
+func set_sfx_volume(v: float) -> void:
+	sfx_volume = clampf(v, 0.0, 1.0)
 	save_profile()
 	changed.emit()
 

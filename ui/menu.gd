@@ -49,6 +49,7 @@ var _store_panel: StorePanel
 var _collection_panel: CollectionPanel
 var _guide_panel: GuidePanel
 var _guide_button: Button
+var _settings_panel: SettingsPanel
 var _mode_panel: Panel
 var _mode_button: Button
 var _mode_option_buttons: Dictionary = {}
@@ -83,6 +84,7 @@ func _ready() -> void:
 	_store = get_node("/root/Store")
 	_profile = get_node("/root/Profile")
 	_selected_hero = _profile.effective_hero()
+	_match_mode = _restored_mode()
 	_build()
 
 	# I ritratti 3D si generano un fotogramma per unità: farlo qui, mentre il
@@ -150,6 +152,9 @@ func _build() -> void:
 
 	_guide_panel = GuidePanel.new()
 	add_child(_guide_panel)
+
+	_settings_panel = SettingsPanel.new()
+	add_child(_settings_panel)
 
 	_build_mode_panel()
 	_update_mode_button()
@@ -868,6 +873,16 @@ func _nav_bar() -> Control:
 		button.pressed.connect(entry[1] as Callable)
 		row.add_child(button)
 
+	# Solo icona: non toglie larghezza alle tre voci accanto.
+	var settings_button := Button.new()
+	settings_button.text = "⚙️"
+	settings_button.custom_minimum_size = Vector2(Style.TOUCH_MIN, Style.TOUCH_MIN)
+	settings_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	settings_button.add_theme_font_size_override("font_size", 20)
+	Style.apply_plate(settings_button, Style.PLATE, Style.PLATE_DARK, 18, 6)
+	settings_button.pressed.connect(func() -> void: _settings_panel.open())
+	row.add_child(settings_button)
+
 	return row
 
 
@@ -939,6 +954,10 @@ func _on_play_pressed() -> void:
 ## avvia il login Google e si prosegue al suo completamento. Senza l'autoload
 ## Auth (edge headless) si ricade sul vecchio avviso "in arrivo".
 func _start_pvp() -> void:
+	if DevNet.enabled():
+		# Sviluppo locale: niente login, master/worker headless su 127.0.0.1.
+		get_tree().change_scene_to_file(LOBBY_SCENE)
+		return
 	var auth := get_node_or_null("/root/Auth")
 	if auth == null:
 		_show_pvp_unavailable("La modalità contro giocatori arriva in un prossimo aggiornamento.")
@@ -976,8 +995,16 @@ func _on_store_pressed() -> void:
 	_store_panel.open()
 
 
+## La modalità salvata, o "contro il computer" se il profilo non ne ha ancora
+## una (primo avvio) o ne ha una che questa versione non conosce.
+func _restored_mode() -> String:
+	var saved := String(_profile.match_mode)
+	return saved if saved == MODE_CPU or saved == MODE_PVP else MODE_CPU
+
+
 func _on_mode_pressed(mode: String) -> void:
 	_match_mode = mode
+	_profile.set_match_mode(mode)
 	_update_mode_button()
 	_mode_panel.visible = false
 
