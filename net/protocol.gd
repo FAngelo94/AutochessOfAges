@@ -62,6 +62,10 @@ const ROUND_CONCLUDED := "ROUND_CONCLUDED"  # {results[]}
 const COMMAND_REJECTED := "COMMAND_REJECTED"# {reason} — non disconnette
 const MATCH_FINISHED := "MATCH_FINISHED"    # {standings[]}
 const SPECTATE_DATA := "SPECTATE_DATA"      # {combat, player_index}
+## Arriva dopo MATCH_FINISHED, con ritardo: l'mmr lo scrive Postgres via RPC
+## (asincrona), non lo sa ancora il worker quando manda gli standings. Solo per
+## i posti umani di un match ranked — vedi server/stats_writer.gd.
+const RANK_UPDATE := "RANK_UPDATE"          # {mmr, delta, matches_played, wins, top4}
 
 
 static func encode(msg: Dictionary) -> PackedByteArray:

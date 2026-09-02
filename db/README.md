@@ -10,6 +10,7 @@ produzione senza riportare la modifica in una nuova migrazione.
 | File | Ruolo |
 |---|---|
 | `migrations/0001_initial.sql` | tabelle, funzioni account/sessioni, RPC `record_match_result`, ruoli e grant |
+| `migrations/0002_rank_mmr.sql` | `record_match_result` calcola anche l'mmr a piazzamento e ritorna i delta per client |
 | `apply.sh` | applica le migrazioni non ancora presenti, traccia in `public.schema_migrations` |
 | `docker-compose.dev.yml` | Postgres + PostgREST in locale, al posto di `supabase start` |
 | `seed.sql` | dati di comodo per lo sviluppo locale |

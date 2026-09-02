@@ -26,6 +26,10 @@ signal match_finished(standings: Array)
 signal command_rejected(reason: String)
 ## La connessione col server e' caduta (solo modalita' remota).
 signal connection_lost(reason: String)
+## Arriva dopo match_finished, con ritardo (l'mmr lo scrive il DB in modo
+## asincrono): solo online e solo per un match ranked. Mai emesso da
+## LocalSession — offline non c'e' nessun mmr da aggiornare.
+signal rank_updated(mmr: int, delta: int)
 ## E' pronto lo schieramento dell'ultimo combattimento di un altro giocatore,
 ## chiesto con request_spectate(). combat vuoto = niente da mostrare.
 signal spectate_ready(player_index: int, combat: Dictionary, team: int, opponent_hero_id: String)

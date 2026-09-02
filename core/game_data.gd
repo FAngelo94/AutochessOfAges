@@ -204,3 +204,18 @@ static func tip(tip_id: String) -> Dictionary:
 	ensure_loaded()
 	var tips: Dictionary = _tutorial.get("tips", {})
 	return tips.get(tip_id, {})
+
+
+## Grado corrispondente a un mmr: {name, index}. L'mmr in sé lo calcola e lo
+## possiede solo il server (db/migrations/0002_rank_mmr.sql); questa è solo
+## l'etichetta, data-driven come tutto il resto — data/balance.json["ranks"].
+## index cresce coi gradi (0 = il più basso), utile alla UI per un colore o
+## un'icona proporzionale senza confrontare stringhe.
+static func rank_for_mmr(mmr: int) -> Dictionary:
+	var tiers: Array = balance().get("ranks", {}).get("tiers", [])
+	var best := {"name": "—", "index": 0}
+	for i in tiers.size():
+		var tier: Dictionary = tiers[i]
+		if mmr >= int(tier.get("min_mmr", 0)):
+			best = {"name": String(tier.get("name", "—")), "index": i}
+	return best

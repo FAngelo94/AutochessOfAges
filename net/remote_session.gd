@@ -380,12 +380,31 @@ func _handle_worker(msg: Dictionary) -> void:
 			_finished = true
 			_state.phase = MatchState.Phase.FINISHED
 			match_finished.emit(msg.get("standings", []))
+		Protocol.RANK_UPDATE:
+			_apply_rank_update(msg)
+			rank_updated.emit(int(msg.get("mmr", 0)), int(msg.get("delta", 0)))
 		Protocol.SPECTATE_DATA:
 			spectate_ready.emit(
 				int(msg.get("player_index", -1)),
 				_decode_combat(msg),
 				int(msg.get("team", 0)),
 				String(msg.get("opponent_hero_id", "")))
+
+
+## Aggiorna Auth.stats (se l'autoload c'e' — non nei test headless) cosi' il
+## grado mostrato nel menu è già quello nuovo la prossima volta che lo si apre,
+## senza aspettare un altro login. Stesso pattern di get_node_or_null usato in
+## start_queue() per l'access token.
+func _apply_rank_update(msg: Dictionary) -> void:
+	if _poller == null or not is_instance_valid(_poller):
+		return
+	var auth: Node = _poller.get_node_or_null("/root/Auth")
+	if auth == null:
+		return
+	auth.stats["mmr"] = int(msg.get("mmr", 0))
+	auth.stats["matches_played"] = int(msg.get("matches_played", 0))
+	auth.stats["wins"] = int(msg.get("wins", 0))
+	auth.stats["top4"] = int(msg.get("top4", 0))
 
 
 ## I bot / gli altri umani non contano lato client: l'unico "umano" e' il posto

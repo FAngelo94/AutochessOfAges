@@ -20,7 +20,7 @@ Il codice è completo: la cancellazione account è stata implementata
 - [X] Hardening base del VPS (utente non-root, SSH, `ufw`, `fail2ban`) — [SETUP_VPS §2](SETUP_VPS.md#2-primo-accesso-e-hardening-di-base)
 - [X] Installare **Godot headless** sul VPS — [SETUP_VPS §5](SETUP_VPS.md#5-godot-headless)
 - [ ] `git clone` del repo + `--import` + sanity check dei test — [SETUP_VPS §6](SETUP_VPS.md#6-deploy-del-codice)
-- [ ] Installare **Postgres 16**, `createdb autochess`, verificare `listen_addresses = localhost` — [SETUP_DB §3](SETUP_DB.md#3-postgres-sul-vps)
+- [X] Installare **Postgres 16**, `createdb autochess`, verificare `listen_addresses = localhost` — [SETUP_DB §3](SETUP_DB.md#3-postgres-sul-vps)
 - [ ] Applicare lo schema con `db/apply.sh`, poi impostare la password di `autochess_auth` — [SETUP_DB §4](SETUP_DB.md#4-applicare-lo-schema) + [§3 (ruolo)](SETUP_DB.md#ruolo-di-connessione-di-postgrest)
 - [ ] Installare il binario **PostgREST**, `/etc/autochess/postgrest.conf`, unit `autochess-postgrest` — [SETUP_DB §5](SETUP_DB.md#5-postgrest)
 - [ ] Creare il **client OAuth Google "Desktop app"** su Google Cloud Console — [SETUP_DB §2](SETUP_DB.md#2-google-cloud-console--oauth-client-id)

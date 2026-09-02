@@ -17,13 +17,25 @@ extends RefCounted
 ## POST /rpc/record_match_result: gira interamente server-side in una singola
 ## transazione implicita. Se la RPC fallisce, _fallback_insert() inserisce almeno
 ## match_history (non atomico, ma nessuna perdita di dati di cronologia).
+##
+## --- Risposta della RPC ---
+## record_match_result (db/migrations/0002_rank_mmr.sql) torna un jsonb con un
+## oggetto per ogni umano aggiornato: {profile_id, mmr, delta, matches_played,
+## wins, top4}. on_result, se passata, viene chiamata una volta per riga — la
+## usa server/match_runner.gd per spedire un RANK_UPDATE al peer giusto. Niente
+## "Prefer: return=minimal" sulla RPC: quello serve invece per _fallback_insert,
+## dove il corpo della risposta non interessa a nessuno.
 
 const RPC_PATH := "/rpc/record_match_result"
 const HISTORY_PATH := "/match_history"
 
 
 ## standings: [{player_index, uid, placement, hp, hero_id, display_name, is_bot}]
-static func write_match(owner: Node, match_id: String, seed_value: int, ranked: bool, standings: Array) -> void:
+## on_result(update: Dictionary): opzionale, chiamata per ogni riga della
+## risposta della RPC (vedi sopra). Non chiamata affatto se la RPC fallisce o
+## se il match non è ranked (la RPC torna [] in quel caso).
+static func write_match(owner: Node, match_id: String, seed_value: int, ranked: bool,
+		standings: Array, on_result: Callable = Callable()) -> void:
 	var url := OS.get_environment("DB_API_URL").rstrip("/")
 	if url == "":
 		print("StatsWriter: DB_API_URL assente — no-op. ",
@@ -39,16 +51,15 @@ static func write_match(owner: Node, match_id: String, seed_value: int, ranked: 
 		"p_ranked": ranked,
 		"p_results": _human_results(standings),
 	}
-	var headers := PackedStringArray([
-		"Content-Type: application/json",
-		"Prefer: return=minimal",
-	])
+	var headers := PackedStringArray(["Content-Type: application/json"])
 
 	var http := HTTPRequest.new()
 	owner.add_child(http)
 	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
 		if code >= 200 and code < 300:
 			print("StatsWriter: match %s registrato (RPC)" % match_id)
+			if on_result.is_valid():
+				_dispatch_updates(body, on_result)
 		else:
 			push_warning("StatsWriter: RPC fallita (result=%d code=%d) — fallback match_history. %s" % [
 				result, code, body.get_string_from_utf8()])
@@ -58,6 +69,15 @@ static func write_match(owner: Node, match_id: String, seed_value: int, ranked: 
 	if err != OK:
 		push_warning("StatsWriter: HTTPRequest.request err %d" % err)
 		http.queue_free()
+
+
+static func _dispatch_updates(body: PackedByteArray, on_result: Callable) -> void:
+	var parsed = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(parsed) != TYPE_ARRAY:
+		return  # match non ranked (la RPC torna []) o corpo inatteso: niente da fare
+	for entry in parsed:
+		if typeof(entry) == TYPE_DICTIONARY:
+			on_result.call(entry)
 
 
 static func _fallback_insert(owner: Node, url: String, match_id: String,

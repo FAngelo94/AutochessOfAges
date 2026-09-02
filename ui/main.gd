@@ -1281,6 +1281,7 @@ func _start_new_match() -> void:
 	if session_mode == SessionMode.REMOTE:
 		_session.round_started.connect(_on_remote_round_started)
 		_session.connection_lost.connect(_on_connection_lost)
+		_session.rank_updated.connect(_on_rank_updated)
 
 	# Prima di _apply_session_mode_ui(): ora quella legge lo stato per decidere
 	# se il giocatore è fuori, e senza match_state non può.
@@ -1618,6 +1619,17 @@ func _show_match_over() -> void:
 	if session_mode == SessionMode.REMOTE:
 		_ready_button.visible = false
 		_prep_label.text = "Partita conclusa — usa ☰ per uscire"
+
+
+## L'mmr arriva in ritardo rispetto a MATCH_FINISHED (RANK_UPDATE — vedi
+## net/remote_session.gd), quasi sempre quando la schermata di fine partita è
+## già a video: si limita ad aggiungere una riga al log, non a ridisegnare
+## nulla. Auth.stats è già aggiornato a questo punto (lo fa RemoteSession),
+## cosa che serve al menu, non a questa schermata.
+func _on_rank_updated(mmr: int, delta: int) -> void:
+	var rank := GameData.rank_for_mmr(mmr)
+	var sign := "+" if delta >= 0 else ""
+	_log("Grado: %s (%d mmr, %s%d)" % [rank.get("name", "—"), mmr, sign, delta])
 
 
 ## Chiede conferma prima di lasciare il combattimento: uscire abbandona la

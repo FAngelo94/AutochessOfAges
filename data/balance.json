@@ -89,5 +89,16 @@
     "rounds_per_stage": 5,
     "preparation_seconds": 30.0,
     "first_round_preparation_seconds": 45.0
+  },
+
+  "ranks": {
+    "_comment": "Gradi mostrati al giocatore per il proprio mmr (db/migrations/0002_rank_mmr.sql calcola l'mmr; qui vive solo l'etichetta). L'mmr parte a 1000: un account nuovo apre già in Argento, non nell'ultimo gradino. Soglie ordinate crescenti, min_mmr inclusivo.",
+    "tiers": [
+      { "name": "Bronzo", "min_mmr": 0 },
+      { "name": "Argento", "min_mmr": 950 },
+      { "name": "Oro", "min_mmr": 1050 },
+      { "name": "Platino", "min_mmr": 1175 },
+      { "name": "Diamante", "min_mmr": 1350 }
+    ]
   }
 }

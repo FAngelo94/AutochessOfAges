@@ -55,6 +55,11 @@ var _mode_button: Button
 var _mode_option_buttons: Dictionary = {}
 var _match_mode: String = MODE_CPU
 
+## Grado online (mmr) di chi ha fatto login. Assente per chi gioca da ospite —
+## l'mmr esiste solo per un account, calcolato server-side dopo ogni partita
+## classificata (db/migrations/0002_rank_mmr.sql).
+var _rank_label: Label
+
 var _hero_panel: Panel
 var _hero_button: Button
 var _hero_option_buttons: Dictionary = {}
@@ -86,6 +91,13 @@ func _ready() -> void:
 	_selected_hero = _profile.effective_hero()
 	_match_mode = _restored_mode()
 	_build()
+	_refresh_rank_label()
+	var auth := get_node_or_null("/root/Auth")
+	if auth != null:
+		# Copre sia il login fatto da qui (bottone PVP) sia il rientro al menu
+		# dopo un login gia' avvenuto: _ready() da solo vedrebbe Auth.stats solo
+		# se il login e' concluso PRIMA che questa scena si costruisca.
+		auth.login_completed.connect(func(_ok: bool, _reason: String) -> void: _refresh_rank_label())
 
 	# I ritratti 3D si generano un fotogramma per unità: farlo qui, mentre il
 	# giocatore guarda il menu, fa sì che collezione e partita li trovino già
@@ -128,6 +140,8 @@ func _build() -> void:
 	column.add_child(_banner())
 	column.add_child(_grow())
 	column.add_child(_hero_display())
+	_rank_label = _rank_readout()
+	column.add_child(_rank_label)
 	column.add_child(_spacer(6))
 	column.add_child(_battle_row())
 	column.add_child(_nav_bar())
@@ -513,6 +527,36 @@ func _on_hero_viewport_input(event: InputEvent) -> void:
 		_hero_drag_last_x = mm.position.x
 		if _hero_model_root != null:
 			_hero_model_root.rotate_y(deg_to_rad(delta_x) * 0.6)
+
+
+## Etichetta vuota e nascosta finché _refresh_rank_label() non trova uno stato
+## di login con un mmr da mostrare — costruita comunque qui, sotto l'eroe,
+## perché il layout ha già lo spazio riservato quando arriva il dato.
+func _rank_readout() -> Label:
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", Style.GOLD.darkened(0.1))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.visible = false
+	return label
+
+
+## Auth.stats["mmr"] arriva col login (bundle AUTH_OK) e viene tenuto
+## aggiornato in partita da RemoteSession (RANK_UPDATE) — qui si legge soltanto,
+## mai calcolato: il grado in sé lo assegna GameData.rank_for_mmr() dai nomi in
+## data/balance.json. Da ospite (niente Auth, o non loggato) resta nascosta:
+## un mmr non esiste finché non esiste un account.
+func _refresh_rank_label() -> void:
+	if _rank_label == null:
+		return
+	var auth := get_node_or_null("/root/Auth")
+	if auth == null or not auth.is_logged_in() or not auth.stats.has("mmr"):
+		_rank_label.visible = false
+		return
+	var mmr := int(auth.stats.get("mmr", 0))
+	var rank := GameData.rank_for_mmr(mmr)
+	_rank_label.text = "🏅 %s · %d mmr" % [rank.get("name", "—"), mmr]
+	_rank_label.visible = true
 
 
 func _refresh_hero_model() -> void:

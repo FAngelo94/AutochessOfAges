@@ -382,7 +382,31 @@ func _finish_match() -> void:
 	var standings := _standings_data()
 	for idx in _seat_peer:
 		_send(_seat_peer[idx], Protocol.make(Protocol.MATCH_FINISHED, {"standings": standings}))
-	StatsWriter.write_match(_stats_owner, match_id, seed_value, ranked, standings)
+	# La RPC che calcola l'mmr è asincrona (StatsWriter.write_match) e torna
+	# tipicamente uno o più tick dopo che questo runner è "finito": il worker lo
+	# tiene in vita per una breve grazia proprio per lasciare arrivare questa
+	# callback e drenare push_rank_update() nell'outbox (server/game_worker.gd).
+	StatsWriter.write_match(_stats_owner, match_id, seed_value, ranked, standings, _on_rank_update)
+
+
+## Chiamata da StatsWriter per ogni riga della RPC (una per umano in un match
+## ranked). Se quel giocatore ha ancora un peer agganciato (non se n'è già
+## andato) gli manda l'esito — un umano disconnesso a fine partita perde solo
+## la notifica, non l'aggiornamento: l'mmr sul server è già scritto.
+func _on_rank_update(update: Dictionary) -> void:
+	var uid := String(update.get("profile_id", ""))
+	if not _uid_to_seat.has(uid):
+		return
+	var idx: int = _uid_to_seat[uid]
+	if not _seat_peer.has(idx):
+		return
+	_send(_seat_peer[idx], Protocol.make(Protocol.RANK_UPDATE, {
+		"mmr": int(update.get("mmr", 0)),
+		"delta": int(update.get("delta", 0)),
+		"matches_played": int(update.get("matches_played", 0)),
+		"wins": int(update.get("wins", 0)),
+		"top4": int(update.get("top4", 0)),
+	}))
 
 
 # --------------------------------------------------------------------------

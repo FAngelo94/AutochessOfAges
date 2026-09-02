@@ -15,8 +15,17 @@ extends SceneTree
 
 const DEFAULT_PORT := 9001
 
+## Un runner "finito" resta comunque in _runners per questa finestra: la RPC
+## che calcola l'mmr (StatsWriter, via record_match_result) è asincrona e la
+## sua risposta arriva quasi sempre dopo che tick() ha già visto FINISHED. Se
+## si cancellasse il runner subito, push_rank_update() (server/match_runner.gd)
+## scriverebbe in un outbox che nessuno drena più più. tick() su un runner
+## finito è un no-op, quindi tenerlo qualche secondo in più costa nulla.
+const FINISH_GRACE_MS := 8000
+
 var _peer := WebSocketMultiplayerPeer.new()
 var _runners: Dictionary = {}        # match_id -> MatchRunner
+var _finished_at: Dictionary = {}    # match_id -> Time.get_ticks_msec() di quando è finito
 var _peer_match: Dictionary = {}     # peer_id -> match_id
 var _pump: Node
 
@@ -51,7 +60,11 @@ func _process(delta: float) -> bool:
 		runner.tick(delta)
 		_flush(runner)
 		if runner.is_finished():
-			_runners.erase(match_id)
+			if not _finished_at.has(match_id):
+				_finished_at[match_id] = Time.get_ticks_msec()
+			elif Time.get_ticks_msec() - int(_finished_at[match_id]) >= FINISH_GRACE_MS:
+				_runners.erase(match_id)
+				_finished_at.erase(match_id)
 	return false
 
 
