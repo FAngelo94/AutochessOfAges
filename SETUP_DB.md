@@ -82,16 +82,27 @@ migrazioni (passo 4), imposta la password vera:
 sudo -u postgres psql -d autochess -c "alter role autochess_auth password '<auth-pw>';"
 ```
 
+Gli **apici singoli** attorno alla password sono obbligatori: senza, `psql` dà
+errore di sintassi. Genera un valore casuale (`openssl rand -hex 24`), conservalo
+in un password manager e **non scriverlo in questo file** — è tracciato da git.
+Lo stesso valore va poi nel `db-uri` di `/etc/autochess/postgrest.conf` (§5).
+
 ---
 
 ## 4. Applicare lo schema
 
 ```sh
 sudo -u autochess git -C /opt/autochess/app pull    # se non già fatto
-DB_URL=postgresql://postgres@127.0.0.1:5432/autochess /opt/autochess/app/db/apply.sh
+sudo -u postgres env DB_URL=postgresql:///autochess /opt/autochess/app/db/apply.sh
 ```
 
-Deve stampare `apply 0001_initial.sql` e `migrazioni allineate`. Poi la password
+`postgresql:///autochess` (tre slash, senza host) usa il socket Unix e l'auth
+`peer`: nessuna password. Il ruolo `postgres` di default **non ha** una password,
+quindi connettersi via TCP (`127.0.0.1:5432`) fallirebbe con un prompt infinito.
+
+Deve stampare `apply 0001_initial.sql`, `apply 0002_rank_mmr.sql` e `migrazioni
+allineate` (una riga `apply` per ogni file nuovo in `db/migrations/`, `skip` per
+quelli già applicati se rilanci lo script). Poi la password
 del ruolo (passo 3). Controllo:
 
 ```sh
@@ -110,14 +121,21 @@ tar -xJf postgrest-v12.2.3-linux-static-x64.tar.xz
 sudo install -o root -g root -m 755 postgrest /usr/local/bin/postgrest
 postgrest --version
 
-sudo install -m 600 -o root -g root /opt/autochess/app/deploy/postgrest.conf /etc/autochess/postgrest.conf
-sudo nano /etc/autochess/postgrest.conf     # metti <auth-pw> in db-uri
+sudo install -m 640 -o root -g autochess /opt/autochess/app/deploy/postgrest.conf /etc/autochess/postgrest.conf
+sudo nano /etc/autochess/postgrest.conf     # sostituisci CHANGE_ME con <auth-pw> in db-uri
 
 sudo cp /opt/autochess/app/deploy/autochess-postgrest.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now autochess-postgrest
 sudo systemctl status autochess-postgrest    # active (running)
 ```
+
+> **Permessi**: l'unit gira come `User=autochess`, quindi la config **non** può
+> essere `600 root:root` — PostgREST fallirebbe con
+> `Error in config /etc/autochess/postgrest.conf: openFile: permission denied`.
+> Serve `640 root:autochess` (root scrive, il gruppo legge, nessun altro).
+> `/etc/autochess/env` invece resta `600 root:root`: lo legge systemd come root
+> prima di scendere all'utente di servizio.
 
 Verifica (dal VPS):
 
@@ -150,6 +168,11 @@ Compila:
 | `BACKUP_SSH_TARGET` / `BACKUP_SSH_PORT` | Storage Box (vedi `SETUP_VPS.md` §10) |
 
 Poi (ri)avvia master e worker: `sudo systemctl restart autochess-master autochess-worker@1`.
+
+> Se rispondono `Unit autochess-master.service not found`, le unit non sono
+> ancora installate: si installano in **`SETUP_VPS.md` §9**. Questa guida è una
+> subroutine di `SETUP_VPS.md` (§3–§6 qui = §7 là), non un percorso autonomo —
+> torna là e prosegui dal §8.
 
 ---
 

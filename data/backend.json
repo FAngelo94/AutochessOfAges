@@ -1,5 +1,5 @@
 {
   "_comment": "Backend self-hosted (Postgres + PostgREST + master/worker sul VPS). Nessuna chiave segreta qui: il google_client_id è pubblico per definizione e lo scambio del code OAuth lo fa il master. Lo sviluppatore inserisce i valori reali seguendo SETUP_DB.md e SETUP_VPS.md. Con i segnaposto il gioco resta offline/ospite.",
-  "game_host": "game.tuodominio.it",
-  "google_client_id": "REPLACE_WITH_GOOGLE_CLIENT_ID"
+  "game_host": "game.autochessofages.win",
+  "google_client_id": "323977415357-obh26uglhnleq9n5hqhta30l23ebh5m9.apps.googleusercontent.com"
 }

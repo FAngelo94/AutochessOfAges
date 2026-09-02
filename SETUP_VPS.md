@@ -152,9 +152,8 @@ sudo install -o autochess -g autochess -m 755 "Godot_v${VER}_linux.x86_64" /opt/
 ## 6. Deploy del codice
 
 ```sh
-sudo -u autochess git clone https://github.com/<tuo-utente>/AtuochessOfAges.git /opt/autochess/app
+sudo -u autochess git clone https://github.com/FAngelo94/AutochessOfAges.git /opt/autochess/app
 cd /opt/autochess/app
-sudo -u autochess git checkout feature/multiplayer
 ```
 
 Import una tantum della cache risorse/classi (ripetere **ogni volta** che si
@@ -219,6 +218,15 @@ WebSocket: Caddy v2 fa da proxy ai WebSocket in modo nativo tramite
 ---
 
 ## 9. systemd — PostgREST, master, worker
+
+**Prerequisito**: l'`--import` del §6 dev'essere stato eseguito, altrimenti la
+cache globale dei `class_name` non esiste e master/worker muoiono all'avvio con
+`Parse Error: Identifier "Protocol" not declared in the current scope`. Nel
+dubbio rilancialo (è idempotente):
+
+```sh
+sudo -u autochess HOME=/opt/autochess /opt/godot/godot --headless --path /opt/autochess/app --import
+```
 
 ```sh
 sudo cp /opt/autochess/app/deploy/autochess-postgrest.service /etc/systemd/system/
@@ -355,6 +363,41 @@ sudo journalctl -u autochess-master --since "1 hour ago"
 sudo journalctl -u autochess-worker@1 -f
 sudo tail -f /var/log/caddy/game.access.log | jq .
 ```
+
+### `wscat` risponde `Unexpected server response: 404`
+
+Il certificato TLS funziona (altrimenti l'errore sarebbe sul TLS) ma Caddy non
+instrada verso il master. Causa quasi certa: nel `Caddyfile` le route sono
+direttive nude (`reverse_proxy /ws/mm ...`) insieme a un `respond /* ... 404`
+finale. Caddy v2 ordina le direttive internamente e `respond` **precede**
+`reverse_proxy`, quindi il 404 vince su tutto. Vedi il `deploy/Caddyfile`
+aggiornato: ogni route va in un blocco `handle`.
+
+```sh
+sudo cp /opt/autochess/app/deploy/Caddyfile /etc/caddy/Caddyfile
+sudo sed -i 's/game\.tuodominio\.it/game.iltuodominio.tld/' /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+### PostgREST in crash loop: `openFile: permission denied`
+
+```
+postgrest: FatalError {fatalErrorMessage = "Error in config
+/etc/autochess/postgrest.conf: openFile: permission denied"}
+```
+
+L'unit gira come `User=autochess` ma la config è `600 root:root`:
+
+```sh
+sudo chown root:autochess /etc/autochess/postgrest.conf
+sudo chmod 640 /etc/autochess/postgrest.conf
+sudo systemctl restart autochess-postgrest
+```
+
+Attenzione all'effetto domino: master e worker hanno
+`Requires=autochess-postgrest.service`, quindi se PostgREST fallisce **falliscono
+anche loro** — l'errore vero è sempre in `journalctl -u autochess-postgrest`.
 
 ### Caddy non ottiene il certificato
 

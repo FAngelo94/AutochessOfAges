@@ -60,6 +60,14 @@ const ARCHETYPE_PRIORITY := ["cavalry", "siege", "archer", "druid", "berserker",
 ## presenza di alcuni modelli reali non deve rompere quelle senza.
 const MODELS_DIR := "res://models/"
 
+## Ritocco fine della taglia dei modelli d'artista, applicato sopra la
+## normalizzazione all'altezza dell'archetipo. Un .glb largo e basso (il carro
+## falcato) può sembrare troppo ingombrante nella cella pur essendo "alto
+## giusto": qui lo si rimpicciolisce un filo. 1.0 (assente) = nessun ritocco.
+const CUSTOM_MODEL_SCALE := {
+	"chariot": 0.85,
+}
+
 ## Materiali riusati fra tutte le istanze: un esercito è fatto di poche tinte
 ## ripetute, e allocarne una copia per ogni cubo sprecherebbe draw call.
 static var _materials: Dictionary = {}
@@ -79,7 +87,8 @@ static func build(unit_id: String, origin: String) -> Node3D:
 
 	var custom := _load_custom_model(unit_id)
 	if custom != null:
-		_normalize_custom_model(custom, height_of(unit_id))
+		var tuned: float = height_of(unit_id) * float(CUSTOM_MODEL_SCALE.get(unit_id, 1.0))
+		_normalize_custom_model(custom, tuned)
 		_recolor_custom_model(custom, palette)
 		root.add_child(custom)
 		return root
@@ -165,20 +174,49 @@ static func _local_aabb(node: Node, xform: Transform3D) -> AABB:
 
 
 ## Tinte per un .glb esportato senza colori (ogni materiale grigio uniforme):
-## si indovina il ruolo dal nome del materiale — la convenzione è nominarli in
-## italiano come nel resto del progetto — e si applica la palette della civiltà,
-## così lo stesso modello serve romani, galli e teutoni. Un materiale il cui
-## nome non combacia con nessuna parola chiave resta com'è.
+## si indovina il RUOLO dal nome del materiale — la convenzione è nominarli in
+## italiano come nel resto del progetto, con o senza prefisso `MAT_` — e si
+## applica la palette della civiltà, così lo stesso modello serve romani, galli
+## e teutoni.
+##
+## Le parole chiave sono confrontate come sottostringhe: elencare sia il
+## singolare che il plurale quando differiscono ("asta"/"aste", "punta"/"punte").
+## La prima regola che combacia vince, quindi le più specifiche (metallo, cuoio)
+## stanno prima delle più generiche (legno). Un materiale che non combacia con
+## nessuna regola NON resta bianco: ricade su `cloth` e stampa un avviso, così
+## il buco nel vocabolario si vede nei log invece che a schermo.
 const _RECOLOR_KEYWORDS: Array = [
-	[["bordo"], "secondary"],
-	[["cintura", "cuoio", "belt"], "wood"],
-	[["metallo", "ferro", "metal", "iron", "acciaio", "lama", "elmo", "punta"], "metal"],
-	[["legno", "wood", "asta", "lancia", "scudo", "manico"], "wood"],
-	[["pelle", "skin", "viso", "faccia", "mani", "braccia"], "skin"],
-	[["capelli", "hair", "baffi", "barba", "calce", "biondo", "crine"], "hair"],
-	[["bracae", "braghe", "pantaloni", "breeches", "scacchi", "gambe"], "breeches"],
-	[["mantello", "cloak", "ocra", "rosso", "cappa"], "cloak"],
-	[["verde", "gallico", "tunica", "tunic", "corpo", "busto", "veste", "primary"], "primary"],
+	[["occhi", "occhio", "iride", "pupilla", "sopraccigli"], "eyes"],
+	[["labbra", "bocca"], "lips"],
+	[["pelle", "skin", "incarnato", "viso", "faccia", "mani", "braccia"], "skin"],
+	[["capelli", "capello", "hair", "baffi", "barba", "chioma", "crine",
+		"biondo", "bionda", "calce", "ramati", "ramato", "rossicci"], "hair"],
+	[["pelliccia", "pelo", "fur", "lupo", "orso"], "fur"],
+	[["foglie", "foglia", "fogliame", "muschio", "muschi", "vischio", "edera",
+		"alloro", "fronde", "ramoscelli"], "foliage"],
+	[["avorio", "osso", "ossa", "corna", "corno", "teschio", "cranio", "zanna"], "bone"],
+	[["rame", "gemme", "gemma", "bacche", "bacca", "ambra", "smalto"], "copper"],
+	[["pietra", "sasso", "roccia", "selce", "ciottolo"], "stone"],
+	[["corda", "lino", "spago", "fibra", "canapa", "treccia"], "rope"],
+	[["piume", "piuma", "penna", "penne", "cenere", "impennaggio"], "feather"],
+	[["bordo", "orlo", "giallo", "gialla", "oro", "dorato", "dorata", "gold",
+		"bronzo", "fregi", "torque", "torc"], "secondary"],
+	[["metallo", "metal", "ferro", "iron", "acciaio", "steel", "lama", "spada",
+		"coltello", "pugnale", "elmo", "elmetto", "punta", "punte", "cuspide",
+		"rinforz", "borchie", "falci", "falce", "mozzo", "lorica", "cotta"], "metal"],
+	[["cuoio", "cintura", "cinture", "belt", "cinghia", "cinghie", "bisaccia",
+		"faretra", "redini", "briglie", "frombola", "fionda", "stivali", "stivale",
+		"sandali", "calzari", "guanti", "bretelle", "finimenti"], "leather"],
+	[["legno", "wood", "asta", "aste", "lancia", "lance", "scudo", "manico",
+		"arco", "bastone", "palo", "picca", "carro", "ruota", "ruote", "timone",
+		"mozzo_legno", "freccia", "frecce", "giavellotto"], "wood"],
+	[["mantello", "cloak", "cappa", "cappuccio", "cappotto", "manto", "ocra",
+		"tabarro"], "cloak"],
+	[["bracae", "brache", "braghe", "pantaloni", "breeches", "scacchi",
+		"gambali", "gambe", "calzoni"], "breeches"],
+	[["verde", "gallico", "gallica", "tunica", "tunic", "casacca", "veste",
+		"gonna", "corpo", "busto", "torso", "abito", "primary", "rosso", "rossa",
+		"blu"], "primary"],
 ]
 
 
@@ -195,22 +233,49 @@ static func _recolor_custom_model(node: Node, palette: Dictionary) -> void:
 		var mat_name := source.resource_name.to_lower() if source != null else ""
 		if mat_name.is_empty():
 			mat_name = String(mesh_instance.name).to_lower()
-		var color: Variant = _recolor_pick(mat_name, palette)
-		if color == null:
+		if _material_already_tinted(source):
 			continue
-		mesh_instance.set_surface_override_material(surface, _material(color))
+		mesh_instance.set_surface_override_material(surface, _material(_recolor_pick(mat_name, palette)))
 
 
-static func _recolor_pick(mat_name: String, palette: Dictionary) -> Variant:
+## Un .glb che porta già i suoi colori (materiale non grigio uniforme) va
+## lasciato com'è: si ridipinge solo l'export "tutto grigio" che si affida ai
+## nomi. Soglia larga perché l'export senza colori esce con un grigio ~0.9.
+static func _material_already_tinted(mat: Material) -> bool:
+	if not (mat is StandardMaterial3D):
+		return false
+	if (mat as StandardMaterial3D).albedo_texture != null:
+		return true
+	var c := (mat as StandardMaterial3D).albedo_color
+	var grey_ish: bool = abs(c.r - c.g) < 0.03 and abs(c.g - c.b) < 0.03 and c.r > 0.75
+	return not grey_ish
+
+
+static func _recolor_pick(mat_name: String, palette: Dictionary) -> Color:
 	for rule in _RECOLOR_KEYWORDS:
 		for keyword in rule[0]:
 			if mat_name.contains(keyword):
-				match rule[1]:
-					"hair": return palette["secondary"].lightened(0.35)
-					"breeches": return palette["primary"].darkened(0.35)
-					"cloak": return Color(0.60, 0.28, 0.20)
-					_: return palette[rule[1]]
-	return null
+				return _role_color(rule[1], palette)
+	push_warning("unit_models: materiale '%s' senza regola di ricolorazione, uso 'cloth'" % mat_name)
+	return palette["cloth"].darkened(0.1)
+
+
+static func _role_color(role: String, palette: Dictionary) -> Color:
+	match role:
+		"eyes": return Color(0.16, 0.13, 0.11)
+		"lips": return palette["skin"].lerp(Color(0.55, 0.24, 0.22), 0.55)
+		"hair": return palette["secondary"].lightened(0.30)
+		"fur": return palette["cloth"].lerp(palette["wood"], 0.35)
+		"foliage": return palette["primary"].lerp(Color(0.16, 0.30, 0.14), 0.5).darkened(0.1)
+		"bone": return Color(0.90, 0.85, 0.72)
+		"copper": return Color(0.72, 0.45, 0.20)
+		"stone": return Color(0.52, 0.52, 0.55)
+		"rope": return Color(0.80, 0.72, 0.53)
+		"feather": return palette["cloth"].lightened(0.1)
+		"leather": return palette["wood"].darkened(0.15)
+		"cloak": return palette["primary"].lerp(palette["wood"], 0.45).darkened(0.05)
+		"breeches": return palette["primary"].darkened(0.35)
+		_: return palette[role]
 
 
 ## Archetipo di un'unità, letto dalle sue classi. Serve sia a scegliere il
@@ -234,16 +299,24 @@ static func height_of(unit_id: String) -> float:
 		_: return 0.85
 
 
-## Modello di un eroe. Gli eroi non sono unità: non passano da GameData.unit(),
-## non hanno un file .glb dedicato e non ricadono mai sull'archetipo generico —
-## ogni eroe ha la propria figura, per restare riconoscibile nel ritratto
-## grande del menu e negli angoli della battaglia.
+## Modello di un eroe. Gli eroi non sono unità: non passano da GameData.unit()
+## e non ricadono mai sull'archetipo generico — ogni eroe ha la propria figura,
+## per restare riconoscibile nel ritratto grande del menu e negli angoli della
+## battaglia. Come per le unità, un file res://models/<hero_id>.glb ha la
+## precedenza sulla figura procedurale.
 static func build_hero(hero_id: String) -> Node3D:
 	var hdef := GameData.hero(hero_id)
 	var origin := hdef.origin if hdef != null else "roman"
 	var palette: Dictionary = PALETTES.get(origin, PALETTES["roman"])
 	var root := Node3D.new()
 	root.name = "Hero_%s" % hero_id
+
+	var custom := _load_custom_model(hero_id)
+	if custom != null:
+		_normalize_custom_model(custom, height_of_hero(hero_id))
+		_recolor_custom_model(custom, palette)
+		root.add_child(custom)
+		return root
 
 	match hero_id:
 		"cesare": _build_cesare(root, palette)

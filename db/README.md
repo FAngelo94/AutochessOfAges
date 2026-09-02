@@ -39,8 +39,8 @@ DB_URL=postgresql://postgres:postgres@127.0.0.1:5432/autochess db/apply.sh
 psql "postgresql://postgres:postgres@127.0.0.1:5432/autochess" -f db/seed.sql
 docker compose -f db/docker-compose.dev.yml down          # -v per azzerare il volume
 
-# produzione (sul VPS)
-DB_URL=postgresql://postgres@127.0.0.1:5432/autochess db/apply.sh
+# produzione (sul VPS) — socket Unix + auth peer, nessuna password
+sudo -u postgres env DB_URL=postgresql:///autochess /opt/autochess/app/db/apply.sh
 
 # nuova migrazione: crea db/migrations/0002_<nome>.sql e rilancia apply.sh
 ```

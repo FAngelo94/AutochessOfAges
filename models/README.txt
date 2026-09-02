@@ -14,6 +14,11 @@ Id delle 21 unita' attuali (nome file atteso):
   chariot.glb            shieldmaiden.glb        seeress.glb
   battering_ram.glb      arminius.glb
 
+Vale anche per i 2 eroi selezionabili nel menu (non sono unita', ma
+build_hero() carica allo stesso modo res://models/<hero_id>.glb se presente):
+
+  cesare.glb             vercingetorige.glb
+
 Orientamento: il modello base deve guardare verso +Z (asse Z positivo), come
 le figure procedurali (vedi FORWARD in art/unit_models.gd) -- e' cosi' che
 BattleBoard3D orienta le unita' verso il lato giusto del campo.

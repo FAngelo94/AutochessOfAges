@@ -7,20 +7,32 @@
 # reverse_proxy — nessuna direttiva speciale, nessun blocco di header manuale
 # per l'Upgrade. Basta indirizzare la route al backend.
 #
-# Le route sono STATICHE: un worker in piu' = una riga in piu' qui
-# (es. reverse_proxy /ws/w2 127.0.0.1:9002) + `systemctl enable --now
+# Le route sono STATICHE: un worker in piu' = un blocco in piu' qui
+# (es. handle /ws/w2 { reverse_proxy 127.0.0.1:9002 }) + `systemctl enable --now
 # autochess-worker@2`. Caddy NON viene ricaricato a ogni partita.
+#
+# TUTTE le route stanno in blocchi `handle`, DI PROPOSITO. Caddy v2 non valuta
+# le direttive nell'ordine in cui sono scritte ma secondo un ordine interno
+# fisso, in cui `respond` precede `reverse_proxy`: con direttive nude, il
+# `respond ... 404` finale intercetterebbe anche /ws/mm e /ws/w1 (404 su tutto).
+# I blocchi `handle` sono invece mutuamente esclusivi e in ordine di scrittura.
 
 game.tuodominio.it {
 
 	# --- master (matchmaking) ---
-	reverse_proxy /ws/mm 127.0.0.1:9000
+	handle /ws/mm {
+		reverse_proxy 127.0.0.1:9000
+	}
 
 	# --- worker 1 (match autoritativo) ---
-	reverse_proxy /ws/w1 127.0.0.1:9001
+	handle /ws/w1 {
+		reverse_proxy 127.0.0.1:9001
+	}
 
 	# --- worker 2: scommentare quando si aggiunge autochess-worker@2 ---
-	# reverse_proxy /ws/w2 127.0.0.1:9002
+	# handle /ws/w2 {
+	#	reverse_proxy 127.0.0.1:9002
+	# }
 
 	# --- pagine statiche obbligatorie per il Play Store / GDPR ---
 	# installare i file: sudo install -d /opt/autochess/www &&
@@ -47,8 +59,12 @@ game.tuodominio.it {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	}
 
-	# qualsiasi altra route non e' prevista: 404 secco
-	respond /* "not found" 404
+	# qualsiasi altra route non e' prevista: 404 secco.
+	# `handle` senza matcher = catch-all, valutato solo se nessun handle
+	# precedente ha gia' preso la richiesta.
+	handle {
+		respond "not found" 404
+	}
 
 	log {
 		output file /var/log/caddy/game.access.log {
