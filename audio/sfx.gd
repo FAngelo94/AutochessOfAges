@@ -39,6 +39,7 @@ func _ready() -> void:
 		"death_enemy": _death(true),
 		"cast": _cast(),
 		"round_end": _round_end(),
+		"berserk": _berserk(),
 	}
 
 	for _i in POOL_SIZE:
@@ -191,6 +192,25 @@ func _cast() -> AudioStreamWAV:
 		var tone := sin(TAU * lerpf(300.0, 900.0, prog) * t)
 		var shimmer := randf_range(-1.0, 1.0) * 0.15 * (1.0 - prog)
 		out[i] = (tone * 0.5 + shimmer) * _env(i, n, 0.15) * 0.3
+	return _wav(out)
+
+
+## Berserk: corno di guerra grave e lungo, con la quinta sopra a ingrossarlo e
+## un ringhio di rumore sotto. Deve leggersi come "adesso si accelera" sopra il
+## fracasso di una battaglia già in corso, quindi è più lungo e più forte di
+## ogni altra clip — è l'unica che suona una volta sola per battaglia.
+func _berserk() -> AudioStreamWAV:
+	var n := _samples(1.1)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var prog := clampf(t / 1.1, 0.0, 1.0)
+		# La fondamentale sale di poco verso la fine: un corno che "tira".
+		var f := lerpf(98.0, 132.0, prog * prog)
+		var horn := sin(TAU * f * t) * 0.55 + sin(TAU * f * 1.5 * t) * 0.3
+		var growl := randf_range(-1.0, 1.0) * 0.12 * (1.0 - prog)
+		out[i] = clampf(horn + growl, -1.0, 1.0) * _env(i, n, 0.06) * 0.5
 	return _wav(out)
 
 

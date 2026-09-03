@@ -20,6 +20,8 @@ const RPC_UPSERT_ACCOUNT := "/rpc/upsert_google_account"
 const RPC_STORE_REFRESH := "/rpc/store_refresh_token"
 const RPC_REDEEM_REFRESH := "/rpc/redeem_refresh_token"
 const RPC_DELETE_ACCOUNT := "/rpc/delete_account"
+const RPC_REGISTER_EMAIL := "/rpc/register_email_account"
+const RPC_LOGIN_EMAIL := "/rpc/login_email_account"
 const OWNED_CIVS_PATH := "/owned_civs"
 const PROFILES_PATH := "/profiles"
 
@@ -80,6 +82,24 @@ static func redeem_refresh_token(owner: Node, token_hash: String, cb: Callable) 
 static func delete_account(owner: Node, uid: String, cb: Callable) -> void:
 	_rpc(owner, RPC_DELETE_ACCOUNT, JSON.stringify({"p_id": uid}),
 		func(ok: bool, _d: Variant) -> void: cb.call(ok))
+
+
+## register_email_account(p_email, p_password, p_username) -> bundle, oppure
+## {"error": "email_taken"|"invalid"}. cb.call(ok: bool, row: Dictionary)
+static func register_email_account(owner: Node, email: String, password: String,
+		username: String, cb: Callable) -> void:
+	var body := JSON.stringify({"p_email": email, "p_password": password, "p_username": username})
+	_rpc(owner, RPC_REGISTER_EMAIL, body, func(ok: bool, data: Variant) -> void:
+		cb.call(ok and data is Dictionary, data if data is Dictionary else {}))
+
+
+## login_email_account(p_email, p_password) -> bundle, oppure null se le
+## credenziali non tornano. cb.call(ok: bool, row: Dictionary); ok=false anche
+## quando la password e' sbagliata (la RPC ritorna null, che non e' un Dictionary).
+static func login_email_account(owner: Node, email: String, password: String, cb: Callable) -> void:
+	var body := JSON.stringify({"p_email": email, "p_password": password})
+	_rpc(owner, RPC_LOGIN_EMAIL, body, func(ok: bool, data: Variant) -> void:
+		cb.call(ok and data is Dictionary, data if data is Dictionary else {}))
 
 
 ## PATCH profiles: aggiorna solo favourite_origin / favourite_hero. cb.call(ok: bool)

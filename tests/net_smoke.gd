@@ -69,7 +69,7 @@ func _test_protocol() -> void:
 	check(round_trip.get("n") == 7, "encode->decode conserva i campi scalari")
 	check(round_trip.get("cell") == Vector2i(3, 4), "encode->decode conserva Vector2i")
 
-	check(Protocol.PROTOCOL_VERSION == 2, "PROTOCOL_VERSION == 2")
+	check(Protocol.PROTOCOL_VERSION == 3, "PROTOCOL_VERSION == 3")
 
 
 func _test_match_token() -> void:
@@ -122,13 +122,13 @@ func _test_hello_rejects() -> void:
 		"protocol_version errata -> REJECTED{version}")
 
 	mm.handle_connect(2)
-	mm.handle_packet(2, Protocol.encode({"t": "HELLO", "protocol_version": 2, "access_token": "bogus"}))
+	mm.handle_packet(2, Protocol.encode({"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": "bogus"}))
 	var r2 := _first_to(mm.pending_outbox(), 2)
 	check(r2.get("t") == Protocol.REJECTED and r2.get("reason") == "auth",
 		"JWT non valido -> REJECTED{auth}")
 
 	mm.handle_connect(3)
-	mm.handle_packet(3, Protocol.encode({"t": "HELLO", "protocol_version": 2, "access_token": "good"}))
+	mm.handle_packet(3, Protocol.encode({"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": "good"}))
 	var w := _first_to(mm.pending_outbox(), 3)
 	check(w.get("t") == Protocol.WELCOME and w.get("user_id") == "uid-x",
 		"HELLO valido -> WELCOME con user_id")
@@ -150,7 +150,7 @@ func _test_matchmaking_seal() -> void:
 	for pair in [[10, "tok-a"], [11, "tok-b"], [12, "tok-c"]]:
 		mm.handle_connect(pair[0])
 		mm.handle_packet(pair[0], Protocol.encode({
-			"t": "HELLO", "protocol_version": 2, "access_token": pair[1]}))
+			"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": pair[1]}))
 		mm.handle_packet(pair[0], Protocol.encode({
 			"t": "QUEUE_JOIN", "hero_id": "vercingetorige"}))
 
@@ -203,7 +203,7 @@ func _test_matchmaking_seal() -> void:
 	# Caso limite: 1 umano + 7 bot -> ranked = false.
 	var mm2 := Matchmaker.new(fv)
 	mm2.handle_connect(20)
-	mm2.handle_packet(20, Protocol.encode({"t": "HELLO", "protocol_version": 2, "access_token": "tok-a"}))
+	mm2.handle_packet(20, Protocol.encode({"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": "tok-a"}))
 	mm2.handle_packet(20, Protocol.encode({"t": "QUEUE_JOIN", "hero_id": "cesare"}))
 	mm2.tick(31.0)
 	check(mm2.last_seal().ranked == false, "1 umano + 7 bot -> ranked = false")
@@ -215,7 +215,7 @@ func _test_matchmaking_seal() -> void:
 		var t := "t%d" % i
 		fv3.add(t, "uid%d" % i)
 		mm3.handle_connect(100 + i)
-		mm3.handle_packet(100 + i, Protocol.encode({"t": "HELLO", "protocol_version": 2, "access_token": t}))
+		mm3.handle_packet(100 + i, Protocol.encode({"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": t}))
 		mm3.handle_packet(100 + i, Protocol.encode({"t": "QUEUE_JOIN", "hero_id": ""}))
 	check(mm3.is_sealed(), "8 giocatori sigillano la lobby immediatamente")
 	check(mm3.last_seal().ranked == true, "8 umani -> ranked = true")
@@ -233,7 +233,7 @@ func _test_matchmaking_relobby() -> void:
 	mm.sealed.connect(func() -> void: seals[0] += 1)
 
 	mm.handle_connect(1)
-	mm.handle_packet(1, Protocol.encode({"t": "HELLO", "protocol_version": 2, "access_token": "x"}))
+	mm.handle_packet(1, Protocol.encode({"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": "x"}))
 	mm.handle_packet(1, Protocol.encode({"t": "QUEUE_JOIN", "hero_id": "cesare"}))
 	mm.tick(31.0)
 	check(mm.is_sealed(), "prima lobby sigillata")
@@ -243,7 +243,7 @@ func _test_matchmaking_relobby() -> void:
 	var mm2 := Matchmaker.new(fv)
 	fv.add("y", "uid-y")
 	mm2.handle_connect(2)
-	mm2.handle_packet(2, Protocol.encode({"t": "HELLO", "protocol_version": 2, "access_token": "y"}))
+	mm2.handle_packet(2, Protocol.encode({"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": "y"}))
 	mm2.handle_packet(2, Protocol.encode({"t": "QUEUE_JOIN", "hero_id": "cesare"}))
 	check(mm2.size() == 1 and not mm2.is_sealed(), "la seconda lobby accetta il nuovo peer")
 	mm2.tick(31.0)
@@ -262,7 +262,7 @@ func _test_spawn_signature() -> void:
 	var spawns: Array = []
 	mm.spawn_requested.connect(func(p: Dictionary) -> void: spawns.append(p))
 	mm.handle_connect(1)
-	mm.handle_packet(1, Protocol.encode({"t": "HELLO", "protocol_version": 2, "access_token": "t"}))
+	mm.handle_packet(1, Protocol.encode({"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": "t"}))
 	mm.handle_packet(1, Protocol.encode({"t": "QUEUE_JOIN", "hero_id": "cesare"}))
 	mm.tick(31.0)
 
@@ -298,7 +298,7 @@ func _test_hero_revalidation() -> void:
 		reviews.append([uid, hero_id]))
 
 	mm.handle_connect(1)
-	mm.handle_packet(1, Protocol.encode({"t": "HELLO", "protocol_version": 2, "access_token": "t"}))
+	mm.handle_packet(1, Protocol.encode({"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": "t"}))
 	mm.handle_packet(1, Protocol.encode({"t": "QUEUE_JOIN", "hero_id": "eroe_inventato_dal_client"}))
 
 	var entry: Dictionary = mm.entries()[0]
@@ -310,7 +310,7 @@ func _test_hero_revalidation() -> void:
 	# override_hero (chiamato dal master dopo il controllo asincrono su owned_civs).
 	fv.add("t2", "uid-b")
 	mm.handle_connect(2)
-	mm.handle_packet(2, Protocol.encode({"t": "HELLO", "protocol_version": 2, "access_token": "t2"}))
+	mm.handle_packet(2, Protocol.encode({"t": "HELLO", "protocol_version": Protocol.PROTOCOL_VERSION, "access_token": "t2"}))
 	mm.handle_packet(2, Protocol.encode({"t": "QUEUE_JOIN", "hero_id": "vercingetorige"}))
 	mm.override_hero("uid-b", "cesare")
 	var entry_b := {}

@@ -82,10 +82,21 @@ is WebSocket (`wss://`, TLS via Caddy), messages are `var_to_bytes`-encoded dict
 
 **Backend = one VPS.** Postgres + PostgREST (loopback :3000) + master + worker + Caddy on a
 single Hetzner box; the only external service is Google (login). The client never talks HTTP to
-the backend — only `wss://` to the master. Login: the client does the Google loopback+PKCE dance
-and forwards `code` to the master (`AUTH_GOOGLE`); the master holds `GOOGLE_CLIENT_SECRET`,
-exchanges it, and mints its own HMAC **session token** (`server/session_token.gd`) that the client
-presents in `HELLO`. No RLS (PostgREST isn't exposed; role `autochess_app` is least-privilege).
+the backend — only `wss://` to the master. Identity is Google **or** email/password (added in
+`db/migrations/0003_email_password.sql`), never both required: `profiles.google_sub` is nullable,
+an account has `google_sub`, `password_hash`, or both. Login: for Google, the client does the
+loopback+PKCE dance and forwards `code` to the master (`AUTH_GOOGLE`); the master holds
+`GOOGLE_CLIENT_SECRET`, exchanges it, and mints its own HMAC **session token**
+(`server/session_token.gd`) that the client presents in `HELLO`. For email/password, the client
+sends `AUTH_EMAIL_LOGIN`/`AUTH_EMAIL_SIGNUP` and the master calls the matching Postgres RPC
+(`login_email_account`/`register_email_account`, bcrypt via `pgcrypto`) — both paths converge on
+the same `AccountService._issue_session()` and the same `AUTH_OK` bundle. No RLS (PostgREST isn't
+exposed; role `autochess_app` is least-privilege).
+
+`ui/login.tscn` is the actual main scene (`project.godot`): it gates the home behind a login —
+Google, email/password, or "gioca come ospite" (offline, no multiplayer/stats, remembered in
+`Profile.guest_mode`) — and falls straight through to `ui/menu.tscn` when the backend is
+unconfigured, already logged in, or already a guest. `PROTOCOL_VERSION` is 3.
 
 The rule that holds everything else up: **`core/` does not know about `ui/`**. The simulation is
 deterministic and seeded, so the same match can be replayed identically — the prerequisite for
@@ -101,12 +112,14 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `core/combat_sim.gd` | fixed-step battle resolver, produces an event log |
 | `core/match_state.gd` | rounds, pairings, damage, eliminations |
 | `core/bot_brain.gd` | opponent prep AI |
-| `ui/menu.gd` | start screen — **this is the main scene** |
+| `ui/login.gd` | login screen — **this is the main scene**: Google, email/password, or guest |
+| `ui/menu.gd` | start screen, reached only after login/guest |
+| `ui/castle_backdrop.gd` | `class_name CastleBackdrop` — the runtime-drawn castle facade, shared by login and menu |
 | `ui/lobby.gd` | matchmaking waiting room (queue count + 30s countdown) |
 | `ui/main.gd` | in-match screen; local mode unchanged, remote mode shows prep timer + PRONTO |
-| `net/auth.gd` | autoload `Auth` — Google loopback+PKCE, forwards `code` to master over a short WS; degrades to guest |
+| `net/auth.gd` | autoload `Auth` — Google loopback+PKCE and email/password, forwards to master over a short WS; degrades to guest |
 | `net/match_session.gd` | base class; `LocalSession` / `RemoteSession` back it |
-| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 2) |
+| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 3) |
 | `server/master_server.gd` | `SceneTree` script; auth (`AUTH_*`/`PROFILE_SET`), queue, 30s timer, worker routing |
 | `server/session_token.gd` / `session_verifier.gd` | HMAC session token minted by the master + the instance adapter injected into `Matchmaker` |
 | `server/google_oauth.gd` | server-side `code`→`id_token` exchange, validates `aud`/`iss`/`exp` (no JWKS) |
@@ -117,6 +130,7 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `server/match_runner.gd` | authoritative match: prep timer, 3-level command validation, resolve, targeted logs, reconnect |
 | `server/stats_writer.gd` | writes `match_history` / `player_stats` via PostgREST RPC `record_match_result` |
 | `ui/combat_view.gd` | replays the battle by reading the event log |
+| `ui/phase_bar.gd` | `PhaseBar` — time bar shared by preparation and battle |
 | `ui/unit_slot.gd` | shop/board/bench/collection slot; shows the 3D model |
 | `art/unit_models.gd` | procedural unit figures (see below) |
 | `art/unit_portraits.gd` | renders each model once, keeps the texture (autoload `Portraits`) |
@@ -131,10 +145,37 @@ Autoloads (project.godot): `Profile`, `Portraits`, `Store`.
 ### Combat replay
 
 `combat_sim.gd` doesn't just return a winner: it produces the initial deployment plus an event
-log (`move`, `attack`, `damage`, `heal`, `cast`, `stun`, `death`, `periodic`). `combat_view.gd`
-replays that log without simulating anything, at ×1/×2/×4 or skip-to-end. A test asserts that
-replaying the log reproduces **exactly** the simulation's final state — the same mechanism that
-will let an online client show a server-decided battle.
+log (`move`, `attack`, `damage`, `heal`, `cast`, `stun`, `death`, `periodic`, `berserk`).
+`combat_view.gd` replays that log without simulating anything. A test asserts that replaying the
+log reproduces **exactly** the simulation's final state — the same mechanism that will let an
+online client show a server-decided battle.
+
+Own battles play at ×1 only: the pace is a rule of the game, not a viewer setting, and a
+multiplier would contradict the round bar. The ×1/×2/×4 buttons survive **only** in the spectate
+view, which has no bar.
+
+### Round clock and berserk
+
+A round is capped at `combat.max_duration_seconds` and `combat_sim.gd` keeps **two clocks**:
+
+- `time` — the simulation clock. Units read it for cooldowns, timed effects and stuns.
+- `elapsed` — the round clock, 0 → `max_duration_seconds`, always at real speed. It ends the
+  battle, stamps every event (`_log`), and is the `duration` returned to the view.
+
+From `combat.berserk_at_seconds` on, `step()` runs `combat.berserk_time_scale` sub-steps per
+round tick, so everything — attacks, movement, cooldowns, DoTs — runs that many times faster
+while `elapsed` advances normally. Sub-steps keep `tick_delta` intact on purpose: scaling the
+step itself would coarsen the simulation exactly in the decisive seconds and change outcomes
+instead of just accelerating them. Because events are stamped on `elapsed`, they bunch up in the
+final seconds and the replay *visibly* speeds up with no work from the view.
+
+When `elapsed` runs out it is **always** `Outcome.DRAW` — no remaining-HP tie-break — and
+`match_state.gd` applies damage only when there is a winner, so neither player loses life.
+
+`ui/phase_bar.gd` (`PhaseBar`) draws that clock, and the *same* widget is used for the
+preparation phase at the bottom of the screen. In local mode the preparation countdown lives in
+`ui/main.gd` (`_tick_preparation` / `_restart_preparation_timer`) and fires `request_ready()` at
+zero, so single-player has the same rhythm as online instead of waiting forever on COMBATTI.
 
 ### Adding a civilization
 
@@ -162,9 +203,12 @@ the "saved" copy too, silently defeating the test's own restore step.
 
 ### Screens
 
-`ui/menu.tscn` is the main scene; from it you enter a match, and from a match you return via
-**Menu**. Keeping them as separate scenes (instead of overlapping panels) guarantees every match
-starts from a clean state, since the scene change destroys the previous one.
+`ui/login.tscn` is the main scene; it gates `ui/menu.tscn` behind a login (Google, email/password,
+or guest) and is skipped straight to the menu when the backend is unconfigured, already logged in,
+or already guest — see `tests/auth_smoke.gd` for the invariant. From the menu you enter a match,
+and from a match you return via **Menu** (not back through login). Keeping these as separate
+scenes (instead of overlapping panels) guarantees every match starts from a clean state, since the
+scene change destroys the previous one.
 
 Favorite civilization in the menu is a **visual hint only** (highlights that civ in the shop, no
 gameplay advantage, since the pool is shared). Picking an unowned civilization opens the store

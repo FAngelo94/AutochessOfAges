@@ -53,6 +53,8 @@ func _build() -> void:
 	var auth := get_node_or_null("/root/Auth")
 	if auth != null and auth.is_logged_in():
 		column.add_child(_account_card(auth))
+	elif auth != null and auth.is_configured() and auth.is_guest():
+		column.add_child(_guest_card())
 	if auth != null and auth.game_host() != "":
 		column.add_child(_privacy_link(auth.game_host()))
 
@@ -136,6 +138,16 @@ func _account_card(auth: Node) -> Control:
 	who.add_theme_color_override("font_color", Style.TEXT_DIM)
 	inner.add_child(who)
 
+	var logout := Button.new()
+	logout.text = "Esci dall'account"
+	logout.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	logout.add_theme_font_size_override("font_size", 20)
+	Style.apply_plate(logout, Style.BLUE, Style.BLUE_DEEP, 14, 4)
+	logout.pressed.connect(func() -> void:
+		auth.logout()
+		get_tree().change_scene_to_file("res://ui/login.tscn"))
+	inner.add_child(logout)
+
 	var delete := Button.new()
 	delete.text = "Elimina account"
 	delete.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
@@ -144,6 +156,42 @@ func _account_card(auth: Node) -> Control:
 	Style.apply_plate(delete, Color(0.70, 0.20, 0.22), Color(0.45, 0.12, 0.14), 14, 4)
 	delete.pressed.connect(_confirm_delete_account.bind(auth))
 	inner.add_child(delete)
+
+	return card
+
+
+## Card visibile solo da ospiti (Auth configurato ma nessun login): senza,
+## chi ha scelto "ospite" — una scelta persistita — resterebbe ospite per
+## sempre, non avendo più modo di tornare alla schermata di login.
+func _guest_card() -> Control:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 8)
+	card.add_child(inner)
+
+	var name_label := Label.new()
+	name_label.text = "Account"
+	name_label.add_theme_font_size_override("font_size", 20)
+	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
+	inner.add_child(name_label)
+
+	var who := Label.new()
+	who.text = "Stai giocando come ospite"
+	who.add_theme_font_size_override("font_size", 16)
+	who.add_theme_color_override("font_color", Style.TEXT_DIM)
+	inner.add_child(who)
+
+	var login := Button.new()
+	login.text = "Accedi"
+	login.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	login.add_theme_font_size_override("font_size", 20)
+	login.add_theme_color_override("font_color", Style.INK)
+	Style.apply_plate(login, Style.GOLD, Style.GOLD_DEEP, 14, 4)
+	login.pressed.connect(func() -> void:
+		get_tree().change_scene_to_file("res://ui/login.tscn"))
+	inner.add_child(login)
 
 	return card
 

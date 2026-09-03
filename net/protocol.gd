@@ -8,7 +8,7 @@ extends RefCounted
 ## 4.7 e var_to_bytes preserva Vector2i nativamente (serve all'event log del
 ## combattimento). decode() non decodifica mai oggetti: accetta solo dati puri.
 
-const PROTOCOL_VERSION := 2
+const PROTOCOL_VERSION := 3
 const MAX_PACKET_BYTES := 262144        # 256 KiB: pacchetti piu' grandi -> scartati
 
 ## Chiave del tipo di messaggio.
@@ -20,6 +20,9 @@ const KEY_TYPE := "t"
 ## server/account_service.gd.
 const AUTH_GOOGLE := "AUTH_GOOGLE"      # {code, code_verifier, redirect_uri}
 const AUTH_REFRESH := "AUTH_REFRESH"    # {refresh_token}
+## Account con email e password, alternativa a Google. Vedi server/account_service.gd.
+const AUTH_EMAIL_LOGIN := "AUTH_EMAIL_LOGIN"    # {email, password}
+const AUTH_EMAIL_SIGNUP := "AUTH_EMAIL_SIGNUP"  # {email, password, username}
 const PROFILE_SET := "PROFILE_SET"      # {session_token, favourite_origin, favourite_hero}
 const DELETE_ACCOUNT := "DELETE_ACCOUNT"# {session_token} — cancellazione GDPR / requisito Play Store
 
@@ -30,6 +33,8 @@ const QUEUE_LEAVE := "QUEUE_LEAVE"      # {}
 
 # --- Master -> Client --------------------------------------------------------
 const AUTH_OK := "AUTH_OK"              # {session_token, refresh_token, user_id, username, profile, stats, owned_civs}
+## reason: google|db|invalid|email_taken|invalid_credentials|rate_limited (auth), oltre a
+## version|auth|banned|oversize per REJECTED su HELLO.
 const AUTH_FAIL := "AUTH_FAIL"          # {reason}
 const PROFILE_OK := "PROFILE_OK"        # {}
 const ACCOUNT_DELETED := "ACCOUNT_DELETED" # {}

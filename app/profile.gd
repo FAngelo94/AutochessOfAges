@@ -33,6 +33,9 @@ var best_placement: int = 0
 ## Id dei suggerimenti one-shot già mostrati (TipBubble). Una volta visto, un
 ## suggerimento non ricompare più — a meno di reset_tips().
 var seen_tips: PackedStringArray = PackedStringArray()
+## Chi ha scelto "gioca come ospite" non deve rivedere la schermata di login a
+## ogni avvio. Si azzera al logout, che è l'unico modo per tornarci.
+var guest_mode: bool = false
 
 
 func _ready() -> void:
@@ -86,6 +89,7 @@ func load_profile() -> void:
 	# Assente nei profili salvati prima di questa funzionalità: il default
 	# vuoto fa sì che un profilo esistente continui a caricarsi senza errori.
 	seen_tips = PackedStringArray(config.get_value("tutorial", "seen_tips", PackedStringArray()))
+	guest_mode = bool(config.get_value("preferences", "guest_mode", false))
 	changed.emit()
 
 
@@ -96,6 +100,7 @@ func save_profile() -> void:
 	config.set_value("preferences", "combat_speed", combat_speed)
 	config.set_value("preferences", "sfx_volume", sfx_volume)
 	config.set_value("preferences", "match_mode", match_mode)
+	config.set_value("preferences", "guest_mode", guest_mode)
 	config.set_value("stats", "matches_played", matches_played)
 	config.set_value("stats", "best_placement", best_placement)
 	config.set_value("tutorial", "seen_tips", seen_tips)
@@ -129,6 +134,12 @@ func effective_hero() -> String:
 ## account — non va sul server.
 func set_match_mode(mode: String) -> void:
 	match_mode = mode
+	save_profile()
+	changed.emit()
+
+
+func set_guest_mode(value: bool) -> void:
+	guest_mode = value
 	save_profile()
 	changed.emit()
 

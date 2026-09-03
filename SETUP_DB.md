@@ -100,9 +100,12 @@ sudo -u postgres env DB_URL=postgresql:///autochess /opt/autochess/app/db/apply.
 `peer`: nessuna password. Il ruolo `postgres` di default **non ha** una password,
 quindi connettersi via TCP (`127.0.0.1:5432`) fallirebbe con un prompt infinito.
 
-Deve stampare `apply 0001_initial.sql`, `apply 0002_rank_mmr.sql` e `migrazioni
-allineate` (una riga `apply` per ogni file nuovo in `db/migrations/`, `skip` per
-quelli già applicati se rilanci lo script). Poi la password
+Deve stampare `apply 0001_initial.sql`, `apply 0002_rank_mmr.sql`,
+`apply 0003_email_password.sql` e `migrazioni allineate` (una riga `apply` per
+ogni file nuovo in `db/migrations/`, `skip` per quelli già applicati se rilanci
+lo script). `0003` aggiunge gli account con email e password accanto a Google
+(`register_email_account`/`login_email_account`, bcrypt via `pgcrypto`, già
+installata da `0001`). Poi la password
 del ruolo (passo 3). Controllo:
 
 ```sh

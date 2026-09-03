@@ -46,6 +46,14 @@ var _sell_button: Button
 var _prep_bar: VBoxContainer
 var _prep_label: Label
 var _ready_button: Button
+## Barra del tempo di preparazione, in fondo allo schermo. In remoto rispecchia
+## il countdown del server; in locale è un conto alla rovescia nostro che allo
+## scadere fa partire il round da solo, così le due modalità hanno lo stesso
+## ritmo invece di una che aspetta all'infinito.
+var _prep_phase_bar: PhaseBar
+## Secondi che restano alla preparazione locale. < 0 = disarmato (battaglia in
+## corso, partita finita, o giocatore eliminato).
+var _prep_left: float = -1.0
 var _reconnect_panel: Panel
 
 ## I controlli di negozio, griglia e panchina hanno numero fisso: vengono
@@ -60,6 +68,12 @@ var _store: Node
 var _profile: Node
 var _combat_overlay: Control
 var _combat_controls: Control
+## Barra del tempo della battaglia. Scorre sull'orologio reale, non su quello
+## della riproduzione: quando la propria battaglia finisce prima del limite
+## continua ad avanzare finché non si torna in preparazione — è il segnale che
+## si sta aspettando gli altri scontri, non che il gioco si è piantato.
+var _combat_bar: PhaseBar
+var _combat_bar_elapsed: float = 0.0
 var _info_sheet: Panel
 var _synergy_detail: Control
 var _synergy_detail_backdrop: ColorRect
@@ -426,6 +440,16 @@ func _build_action_bar() -> Control:
 	_ready_button.pressed.connect(_on_ready_pressed)
 	_prep_bar.add_child(_ready_button)
 
+	# La stessa barra della battaglia, in fondo alla schermata: le due fasi
+	# durano lo stesso tempo, e mostrarle con lo stesso oggetto è ciò che lo
+	# rende leggibile a colpo d'occhio. Vive fuori da _prep_bar perché quello è
+	# il blocco della sola modalità remota, mentre la barra vale anche in
+	# locale — dove allo scadere il round parte da sé.
+	_prep_phase_bar = PhaseBar.new()
+	_prep_phase_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_prep_phase_bar.show_remaining = true
+	column.add_child(_prep_phase_bar)
+
 	return column
 
 
@@ -534,19 +558,17 @@ func _build_combat_overlay() -> void:
 	_combat_outcome.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_combat_outcome)
 
-	var controls := HBoxContainer.new()
-	controls.add_theme_constant_override("separation", 8)
+	# Al posto dei vecchi ×1/×2/×4, la barra del tempo del round. La battaglia
+	# si guarda alla velocità a cui è stata combattuta: l'accelerazione non è
+	# più una scelta di chi guarda ma una regola del gioco, e negli ultimi
+	# secondi arriva da sé (vedi il berserk in core/combat_sim.gd).
+	var controls := VBoxContainer.new()
+	controls.add_theme_constant_override("separation", 4)
 	box.add_child(controls)
 
-	for speed in [1.0, 2.0, 4.0]:
-		var button := Button.new()
-		button.text = "×%d" % int(speed)
-		button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 24)
-		Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 16, 5)
-		button.pressed.connect(func() -> void: _combat_view.speed = speed)
-		controls.add_child(button)
+	_combat_bar = PhaseBar.new()
+	_combat_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	controls.add_child(_combat_bar)
 
 	# Niente "Salta" e niente "Continua": dalla battaglia non si esce a mano.
 	# Le battaglie di un round durano tempi diversi, e uscire in anticipo voleva
@@ -951,6 +973,12 @@ func _build_spectator_screen() -> void:
 
 
 ## Chi è fuori non ha una preparazione da fare: al suo posto la classifica.
+## Fuori dai giochi: partita finita o giocatore eliminato. Chi è fuori non ha
+## una preparazione da fare, quindi non vede né i pulsanti né la barra del tempo.
+func _is_out_of_match() -> bool:
+	return match_state.phase == MatchState.Phase.FINISHED or not player().is_alive()
+
+
 ## Unico punto che decide quale delle due schermate si vede — _apply_session_mode_ui()
 ## delega qui, così non ci sono due posti che accendono e spengono gli stessi
 ## pulsanti con condizioni diverse.
@@ -958,7 +986,7 @@ func _update_spectator_mode() -> void:
 	if _spectator_screen == null:
 		return
 	var finished := match_state.phase == MatchState.Phase.FINISHED
-	var out: bool = finished or not player().is_alive()
+	var out := _is_out_of_match()
 	# Durante il replay comanda la battaglia: la classifica riappare quando
 	# l'overlay si chiude da solo, e _conclude_round richiama _refresh().
 	var show_screen := out and not _combat_overlay.visible
@@ -1290,6 +1318,7 @@ func _start_new_match() -> void:
 
 	_log("[b]Nuova partita[/b] (seed %d)" % match_state.seed_value)
 	_log("Civiltà disponibili: %s" % ", ".join(_store.playable_origins()))
+	_restart_preparation_timer()
 	_refresh()
 	_tips.queue_tip("shop")
 
@@ -1344,6 +1373,9 @@ func _process(delta: float) -> void:
 		if _auto_close_left <= 0.0:
 			_close_combat_overlay()
 
+	_tick_combat_bar(delta)
+	_tick_preparation(delta)
+
 	# Countdown fluido della riga di stato per chi guarda da eliminato: senza
 	# questo si aggiornerebbe solo a ogni snapshot del server.
 	if _spectator_status != null and _spectator_status.visible \
@@ -1355,6 +1387,63 @@ func _process(delta: float) -> void:
 	if _session is RemoteSession and not _combat_overlay.visible:
 		var left: float = (_session as RemoteSession).prep_seconds_left
 		_prep_label.text = "Preparazione: %d s" % int(ceil(maxf(0.0, left)))
+
+
+## La barra della battaglia avanza sull'orologio reale, non su quello della
+## riproduzione: quando la propria battaglia finisce prima del limite continua
+## a scorrere mentre si aspettano gli altri scontri, e si ferma da sé al limite
+## del round. È il senso della barra — dice quanto dura il round, non quanto
+## dura la propria battaglia.
+func _tick_combat_bar(delta: float) -> void:
+	if _combat_bar == null or not _combat_overlay.visible:
+		return
+	_combat_bar_elapsed += delta
+	_combat_bar.set_elapsed(_combat_bar_elapsed)
+
+
+## Conto alla rovescia della preparazione. In remoto il tempo è del server e la
+## barra si limita a rispecchiarlo; in locale lo teniamo qui e allo scadere si
+## fa partire il round come se fosse stato premuto COMBATTI.
+func _tick_preparation(delta: float) -> void:
+	if _prep_phase_bar == null:
+		return
+
+	var running := not _combat_overlay.visible \
+		and match_state.phase == MatchState.Phase.PREPARATION \
+		and not _is_out_of_match()
+	_prep_phase_bar.visible = running
+	if not running:
+		return
+
+	if _session is RemoteSession:
+		var total := _prep_phase_bar.total
+		_prep_phase_bar.set_elapsed(total - (_session as RemoteSession).prep_seconds_left)
+		return
+
+	if _prep_left < 0.0:
+		return
+	_prep_left -= delta
+	_prep_phase_bar.set_elapsed(_prep_phase_bar.total - _prep_left)
+	if _prep_left <= 0.0:
+		# Disarmato prima di risolvere: request_ready() è sincrona in locale e
+		# porta dritti alla battaglia, che riarmerà il conto alla rovescia da
+		# _close_combat_overlay(). Senza questo si rientrerebbe qui il frame dopo.
+		_prep_left = -1.0
+		_session.request_ready()
+
+
+## Riarma il conto alla rovescia della preparazione all'inizio di ogni round.
+## Il primo round e i successivi possono durare diversamente (data/balance.json),
+## quindi la durata si rilegge ogni volta invece di essere memorizzata.
+func _restart_preparation_timer() -> void:
+	if _prep_phase_bar == null:
+		return
+	var rounds: Dictionary = GameData.balance()["rounds"]
+	var first := match_state.stage <= 1 and match_state.round_index <= 1
+	var total := float(rounds["first_round_preparation_seconds"] if first else rounds["preparation_seconds"])
+	_prep_phase_bar.configure(total)
+	# In remoto il countdown è quello del server: la barra lo rispecchia e basta.
+	_prep_left = -1.0 if _session is RemoteSession else total
 
 
 ## La connessione col worker è caduta: pannello modale con riconnessione manuale
@@ -1483,7 +1572,17 @@ func _show_combat(own: Dictionary) -> void:
 	_combat_controls.visible = true
 	_auto_close_left = -1.0
 
-	_combat_view.speed = float(_profile.combat_speed)
+	var combat: Dictionary = GameData.balance()["combat"]
+	_combat_bar.configure(
+		float(combat["max_duration_seconds"]),
+		float(own["combat"].get("berserk_at", combat["berserk_at_seconds"]))
+	)
+	_combat_bar_elapsed = 0.0
+
+	# La propria battaglia si guarda sempre a velocità reale: è la barra a dire
+	# quanto dura il round, e un moltiplicatore la smentirebbe. L'accelerazione
+	# che si vede negli ultimi secondi è dentro il log, non nella riproduzione.
+	_combat_view.speed = 1.0
 	_combat_view.set_hero_portraits(player().hero_id, opponent.hero_id if opponent != null else "")
 	_combat_view.load_combat(own["combat"], int(own.get("team", 0)))
 	_combat_overlay.visible = true
@@ -1571,6 +1670,9 @@ func _conclude_round(results: Array) -> void:
 		# server): qui resta solo il suggerimento sull'economia.
 		if match_state.stage == 1 and match_state.round_index == 2:
 			_tips.queue_tip("economy")
+	# Unico punto in cui riparte il conto alla rovescia della preparazione: ci
+	# si passa sia uscendo dal replay sia quando non c'era nulla da guardare.
+	_restart_preparation_timer()
 	_refresh()
 
 

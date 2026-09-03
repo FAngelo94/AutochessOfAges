@@ -108,6 +108,33 @@ func _run(main: Control) -> void:
 	main._on_buy_xp_pressed()
 	check(player.gold < 50, "aggiornare e comprare esperienza costano oro")
 
+	# Il tempo di preparazione vale anche in singolo: allo scadere il round parte
+	# da solo, senza che nessuno prema COMBATTI. Il conto alla rovescia gira in
+	# _process, che in questo test sincrono non scatta mai, quindi lo si chiama
+	# a mano con un passo lungo quanto tutta la fase.
+	check(main._prep_left > 0.0, "in locale la preparazione ha un conto alla rovescia",
+		"%.1f s" % main._prep_left)
+	check(is_equal_approx(main._prep_phase_bar.total,
+			float(GameData.balance()["rounds"]["preparation_seconds"])),
+		"la barra dura quanto la fase", "%.1f s" % main._prep_phase_bar.total)
+	main._process(main._prep_phase_bar.total * 0.5)
+	# Tolleranza: anche il motore chiama _process, e i suoi fotogrammi si
+	# sommano a quello simulato qui.
+	check(absf(main._prep_phase_bar.ratio() - 0.5) < 0.05,
+		"a metà fase la barra è a metà", "%.3f" % main._prep_phase_bar.ratio())
+
+	var round_before: int = main.match_state.round_index
+	main._process(main._prep_left + 0.1)
+	check(main._prep_left < 0.0, "scaduto il tempo il conto alla rovescia si disarma",
+		"%.1f" % main._prep_left)
+	check(main.match_state.round_index != round_before or main._combat_overlay.visible,
+		"allo scadere il round parte da solo")
+	if main._combat_overlay.visible:
+		main._combat_view.skip_to_end()
+		main._close_combat_overlay()
+	check(main._prep_left > 0.0, "il round successivo riarma il conto alla rovescia",
+		"%.1f s" % main._prep_left)
+
 	# Gioca la partita fino alla fine premendo "Combatti". Quando compare la
 	# battaglia la si salta, come farebbe chi ha fretta.
 	var rounds := 0

@@ -23,6 +23,7 @@ func _initialize() -> void:
 	_test_heroes()
 	_test_economy()
 	_test_combat_determinism()
+	_test_combat_time_limit()
 	_test_traits()
 	_test_full_match()
 	_test_live_ranking()
@@ -248,7 +249,7 @@ func _test_tutorial_data() -> void:
 	# Ogni segnaposto {chiave} nei testi deve corrispondere a una chiave che
 	# TutorialText.expand sa risolvere: altrimenti resterebbe "{chiave}"
 	# letterale a schermo.
-	var known_placeholders := ["players", "interest_per", "max_interest", "reroll_cost", "buy_xp_cost"]
+	var known_placeholders := TutorialText.values().keys()
 	var all_texts: Array[String] = []
 	for entry in sections:
 		all_texts.append(String(entry.get("body", "")))
@@ -588,18 +589,21 @@ func _simulate_reference_battle(battle_seed: int) -> Dictionary:
 	sim.setup(player_a.board_units(), player_b.board_units())
 	var result := sim.run()
 
-	# Riassume il log in un intero: due battaglie identiche devono avere lo
-	# stesso valore, e qualunque divergenza lo cambia.
-	var digest := 0
-	for event in result["events"]:
-		digest = (digest * 31 + hash(event)) & 0x7FFFFFFF
-
 	return {
 		"outcome": result["outcome"],
 		"duration": result["duration"],
 		"events": result["events"].size(),
-		"hash": digest,
+		"hash": _hash_events(result["events"]),
 	}
+
+
+## Riassume il log in un intero: due battaglie identiche devono avere lo stesso
+## valore, e qualunque divergenza lo cambia.
+func _hash_events(events: Array) -> int:
+	var digest := 0
+	for event in events:
+		digest = (digest * 31 + hash(event)) & 0x7FFFFFFF
+	return digest
 
 
 ## Schiera abbastanza arcieri da attivare la sinergia del critico: serve un
@@ -615,11 +619,88 @@ func _simulate_crit_battle(battle_seed: int) -> Dictionary:
 	var sim := CombatSim.new(SimRNG.new(battle_seed))
 	sim.setup(archers.board_units(), targets.board_units())
 	var result := sim.run()
+	return {"outcome": result["outcome"], "hash": _hash_events(result["events"])}
 
-	var digest := 0
-	for event in result["events"]:
-		digest = (digest * 31 + hash(event)) & 0x7FFFFFFF
-	return {"outcome": result["outcome"], "hash": digest}
+
+## Il tempo del round, il berserk finale e il pareggio allo scadere. Sono tre
+## facce della stessa regola: una battaglia non può durare più di
+## `max_duration_seconds`, negli ultimi secondi accelera per provare a
+## chiudersi, e se nemmeno così si decide non ha vinto nessuno.
+func _test_combat_time_limit() -> void:
+	section("Limite di tempo e berserk")
+
+	var combat: Dictionary = GameData.balance()["combat"]
+	var limit := float(combat["max_duration_seconds"])
+	var berserk_at := float(combat["berserk_at_seconds"])
+	var scale := int(combat["berserk_time_scale"])
+
+	var stalled := _simulate_stalemate()
+	var sim: CombatSim = stalled["sim"]
+	var result: Dictionary = stalled["result"]
+
+	check(is_equal_approx(float(result["duration"]), limit),
+		"una battaglia bloccata dura esattamente il tempo del round",
+		"%.2f s" % float(result["duration"]))
+	check(result["outcome"] == CombatSim.Outcome.DRAW,
+		"allo scadere è pareggio, senza guardare la salute residua",
+		str(result["outcome"]))
+
+	# La salute residua non deve più contare: qui le due squadre arrivano allo
+	# scadere ben diverse fra loro, e il verdetto resta comunque pareggio.
+	var hp_a := 0.0
+	var hp_b := 0.0
+	for unit in sim.units:
+		if unit.team == 0:
+			hp_a += maxf(0.0, unit.hp)
+		else:
+			hp_b += maxf(0.0, unit.hp)
+	check(not is_equal_approx(hp_a, hp_b),
+		"le due squadre arrivano allo scadere con salute diversa",
+		"%.0f vs %.0f" % [hp_a, hp_b])
+
+	# L'orologio della simulazione supera quello del round esattamente dello
+	# scarto prodotto dal berserk: i secondi finali valgono `scale` volte tanto.
+	var expected_time := berserk_at + (limit - berserk_at) * float(scale)
+	check(is_equal_approx(sim.time, expected_time),
+		"negli ultimi secondi la simulazione scorre %d volte più in fretta" % scale,
+		"orologio simulazione %.1f s, atteso %.1f s" % [sim.time, expected_time])
+
+	var berserk_events := sim.events.filter(func(e): return String(e["type"]) == "berserk")
+	check(berserk_events.size() == 1,
+		"il berserk viene annunciato una volta sola", str(berserk_events.size()))
+	check(berserk_events.size() == 1 and is_equal_approx(float(berserk_events[0]["t"]), berserk_at),
+		"il berserk è annunciato alla soglia", str(berserk_events[0]["t"]) if berserk_events.size() == 1 else "-")
+
+	# Nessun evento può cadere fuori dalla durata dichiarata: è la durata su cui
+	# si basano sia la riproduzione sia la barra che la accompagna.
+	var overflow := sim.events.filter(func(e): return float(e["t"]) > limit + 0.0001)
+	check(overflow.is_empty(),
+		"nessun evento cade oltre la durata dichiarata", str(overflow.size()))
+
+	# La riproducibilità vale anche per la battaglia accelerata: se il berserk
+	# introducesse un solo passo dipendente dall'ordine, il multiplayer
+	# autoritativo cadrebbe proprio sulle battaglie più combattute.
+	var again := _simulate_stalemate()
+	check(_hash_events(sim.events) == _hash_events((again["sim"] as CombatSim).events),
+		"la battaglia con berserk resta identica a ogni esecuzione")
+
+
+## Due squadre che si curano a vicenda: nessuna delle due riesce a chiudere, ed
+## è l'unico modo affidabile di far scadere il tempo del round.
+func _simulate_stalemate() -> Dictionary:
+	var pool := UnitPool.new()
+	var player_a := Player.new(pool, SimRNG.new(1))
+	var player_b := Player.new(pool, SimRNG.new(2))
+
+	# Due difensori diversi fra loro (così arrivano in fondo con salute diversa)
+	# affiancati ciascuno da una guaritrice: le cure superano il danno che
+	# riescono a infliggersi, e nemmeno il berserk basta a spezzare la parità.
+	_deploy(player_a, ["shieldmaiden", "vestalis"], 0)
+	_deploy(player_b, ["battering_ram", "vestalis"], 0)
+
+	var sim := CombatSim.new(SimRNG.new(4242))
+	sim.setup(player_a.board_units(), player_b.board_units())
+	return {"sim": sim, "result": sim.run()}
 
 
 func _simulate_asymmetric_battle(battle_seed: int) -> int:

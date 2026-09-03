@@ -20,6 +20,9 @@ extends Node
 ## gli script compilati da riga di comando (test headless) non li risolvono.
 
 signal login_completed(success: bool, reason: String)
+## Emesso quando try_restore_session() ha finito, in entrambi gli esiti. La
+## schermata di login lo aspetta prima di decidere se mostrarsi.
+signal session_restore_finished(success: bool)
 signal logged_out
 ## Esito di delete_account(): success=true dopo ACCOUNT_DELETED dal master (segue
 ## un logout automatico). success=false se la richiesta è fallita.
@@ -54,6 +57,7 @@ var _redirect_uri: String = ""
 var _pending: bool = false
 var _deadline: float = 0.0
 var _login_source: String = ""
+var _restoring: bool = false
 
 # --- richieste one-shot al master (WebSocket) ---
 var _ws: WebSocketPeer = null
@@ -99,6 +103,26 @@ func is_configured() -> bool:
 
 func is_logged_in() -> bool:
 	return _access_token != ""
+
+
+## Vero mentre try_restore_session() è in volo. La schermata di login lo usa per
+## mostrare "Accesso in corso…" invece dei campi finché non arriva l'esito.
+func restore_pending() -> bool:
+	return _restoring
+
+
+## Modalità ospite: si gioca offline contro i bot, niente multiplayer né
+## statistiche. La scelta si ricorda in Profile, altrimenti la schermata di
+## login tornerebbe a ogni avvio a chi ha già detto di no.
+func continue_as_guest() -> void:
+	var profile := get_node_or_null("/root/Profile")
+	if profile != null:
+		profile.set_guest_mode(true)
+
+
+func is_guest() -> bool:
+	var profile := get_node_or_null("/root/Profile")
+	return profile != null and profile.guest_mode
 
 
 ## Uuid del profilo lato server. "" se sloggato.
@@ -156,6 +180,31 @@ func login_google() -> void:
 	OS.shell_open(url)
 
 
+## Login con email e password. Emette login_completed(success, reason) come
+## login_google(): la UI non deve distinguere il provider.
+func login_email(email: String, password: String) -> void:
+	if not is_configured():
+		login_completed.emit(false, "backend non configurato")
+		return
+	_login_source = "login"
+	_master_request(
+		Protocol.make(Protocol.AUTH_EMAIL_LOGIN, {"email": email, "password": password}),
+		[Protocol.AUTH_OK, Protocol.AUTH_FAIL],
+		_on_auth_reply.bind("login"))
+
+
+func register_email(email: String, password: String, username_in: String) -> void:
+	if not is_configured():
+		login_completed.emit(false, "backend non configurato")
+		return
+	_login_source = "login"
+	_master_request(
+		Protocol.make(Protocol.AUTH_EMAIL_SIGNUP,
+			{"email": email, "password": password, "username": username_in}),
+		[Protocol.AUTH_OK, Protocol.AUTH_FAIL],
+		_on_auth_reply.bind("login"))
+
+
 func logout() -> void:
 	_access_token = ""
 	_refresh_token = ""
@@ -168,6 +217,11 @@ func logout() -> void:
 	var dir := DirAccess.open("user://")
 	if dir != null and dir.file_exists("auth.dat"):
 		dir.remove("auth.dat")
+	# Un logout deve poter far ricomparire la schermata di login anche a chi
+	# aveva scelto "ospite".
+	var profile := get_node_or_null("/root/Profile")
+	if profile != null:
+		profile.set_guest_mode(false)
 	logged_out.emit()
 
 
@@ -184,6 +238,7 @@ func try_restore_session() -> void:
 	if rt == "":
 		return
 	_login_source = "restore"
+	_restoring = true
 	_master_request(
 		Protocol.make(Protocol.AUTH_REFRESH, {"refresh_token": rt}),
 		[Protocol.AUTH_OK, Protocol.AUTH_FAIL],
@@ -342,6 +397,9 @@ func _on_auth_reply(ok: bool, msg: Dictionary, source: String) -> void:
 		_apply_bundle(msg)
 		_pending = false
 		_cleanup_server()
+		if source == "restore":
+			_restoring = false
+			session_restore_finished.emit(true)
 		login_completed.emit(true, "")
 		return
 
@@ -352,6 +410,8 @@ func _on_auth_reply(ok: bool, msg: Dictionary, source: String) -> void:
 		# refresh fallito: si resta ospiti in silenzio
 		_pending = false
 		_cleanup_server()
+		_restoring = false
+		session_restore_finished.emit(false)
 		return
 	_fail_login(reason)
 
@@ -424,6 +484,19 @@ func _extract_code(request: String) -> String:
 		var kv := pair.split("=")
 		if kv.size() == 2 and kv[0] == "code":
 			return kv[1].uri_decode()
+	return ""
+
+
+static func email_looks_valid(email: String) -> bool:
+	var e := email.strip_edges()
+	var at := e.find("@")
+	return at > 0 and e.find(".", at) > at + 1 and not e.contains(" ") and not e.ends_with(".")
+
+
+## "" se la password va bene, altrimenti il messaggio da mostrare.
+static func password_problem(password: String) -> String:
+	if password.length() < 8:
+		return "La password deve avere almeno 8 caratteri."
 	return ""
 
 

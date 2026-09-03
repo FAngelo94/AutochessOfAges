@@ -28,6 +28,13 @@ const FLOATER_DURATION := 0.9
 const DEATH_FADE := 0.45
 const CAST_FLASH := 0.35
 
+## Annuncio del berserk: compare quando la simulazione passa a velocità tripla e
+## si dissolve nell'arco di BERSERK_BANNER_FADE secondi. La durata è quella
+## chiesta a schermo, non ha rapporto con la finestra accelerata, che è più lunga.
+const BERSERK_BANNER := "Berserker Time"
+const BERSERK_BANNER_FADE := 3.0
+const BERSERK_COLOR := Color(0.98, 0.36, 0.28)
+
 ## Verde per la propria squadra, rosso per l'avversaria: l'assegnazione dipende
 ## da chi guarda, non dal numero della squadra.
 const OWN_COLOR := Color(0.4, 0.8, 0.45)
@@ -78,6 +85,10 @@ var _flashes: Array[Dictionary] = []
 ## _floaters/_flashes che proiettano da BattleBoard3D.
 var _hero_beam: Dictionary = {}
 var _hero_floater: Dictionary = {}
+## Istante di riproduzione in cui il berserk è stato annunciato. < 0 = non
+## ancora, ed è la simulazione a dirlo con un evento: la vista non conosce la
+## soglia e non la ricalcola.
+var _berserk_time: float = -1.0
 ## Orologio dedicato all'animazione di fine round: separato da _time, che
 ## smette di avanzare quando la riproduzione finisce.
 var _result_time: float = 0.0
@@ -252,6 +263,7 @@ func load_combat(combat: Dictionary, team: int = 0) -> void:
 	_result_animating = false
 	_hero_beam = {}
 	_hero_floater = {}
+	_berserk_time = -1.0
 
 	_board.configure(_columns, _rows, _flip, viewer_team)
 	_board.clear_units()
@@ -447,6 +459,14 @@ func _apply_event(event: Dictionary, live: bool) -> void:
 			if not unit.is_empty():
 				unit["stun_until"] = _time + 1.0
 
+		"berserk":
+			# Da qui in poi gli eventi sono marcati su un tempo di round che
+			# scorre più lento della simulazione: si addensano, e la battaglia
+			# si vede accelerare senza che la vista cambi nulla.
+			_berserk_time = _time
+			if live:
+				_play_sfx("berserk")
+
 		"death":
 			var unit: Dictionary = _units.get(int(event["uid"]), {})
 			if unit.is_empty():
@@ -536,6 +556,7 @@ func _draw() -> void:
 	for floater in _floaters:
 		_draw_floater(floater)
 	_draw_clock()
+	_draw_berserk_banner()
 	if _result_animating:
 		_draw_hero_beam()
 		_draw_hero_floater()
@@ -615,7 +636,41 @@ func _draw_hero_floater() -> void:
 		HORIZONTAL_ALIGNMENT_CENTER, 0, 22, color)
 
 
+## Annuncio del berserk al centro dello schermo, in dissolvenza. Disegnato qui
+## e non come nodo Label perché deve stare sopra la battaglia senza entrare nel
+## layout, e perché vive tre secondi: un nodo da aggiungere e rimuovere per
+## ogni round sarebbe più codice per lo stesso pixel.
+func _draw_berserk_banner() -> void:
+	if _berserk_time < 0.0:
+		return
+	var age := _time - _berserk_time
+	if age < 0.0 or age >= BERSERK_BANNER_FADE:
+		return
+
+	var progress := age / BERSERK_BANNER_FADE
+	var alpha := 1.0 - progress * progress
+	# Una spinta di scala solo all'inizio: entra con un colpo e poi si posa.
+	var punch: float = 1.0 + 0.18 * maxf(0.0, 1.0 - age / 0.25)
+	var font_size := int(roundf(46.0 * punch))
+	var width := _font.get_string_size(BERSERK_BANNER, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var at := Vector2((size.x - width) * 0.5, size.y * 0.42)
+
+	# Contorno scuro: la scritta cade su un campo di battaglia colorato e senza
+	# stacco si perderebbe proprio nel momento in cui deve farsi leggere.
+	var shadow := Color(0.05, 0.02, 0.02, alpha * 0.8)
+	for offset in [Vector2(2, 2), Vector2(-2, 2), Vector2(2, -2), Vector2(-2, -2)]:
+		draw_string(_font, at + offset, BERSERK_BANNER, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, shadow)
+	var color := BERSERK_COLOR
+	color.a = alpha
+	draw_string(_font, at, BERSERK_BANNER, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+
+
 func _draw_clock() -> void:
 	var y := size.y - 10.0
-	draw_string(_font, Vector2(6, y), "%.1fs / %.1fs   ×%.0f" % [minf(_time, _duration), _duration, speed],
+	# Il moltiplicatore compare solo dove esiste ancora un comando per cambiarlo
+	# (la vista spettatore): nella propria battaglia il tempo lo racconta la barra.
+	var text := "%.1fs / %.1fs" % [minf(_time, _duration), _duration]
+	if not is_equal_approx(speed, 1.0):
+		text += "   ×%.0f" % speed
+	draw_string(_font, Vector2(6, y), text,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.72, 0.72, 0.80))

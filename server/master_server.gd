@@ -33,6 +33,13 @@ var _pump: Node
 var _bootstrapped := false
 var _pending_close: Array = []
 
+## Tentativi di login falliti per email. Serve a rendere inutile provare le
+## password a raffica: la chiave e' l'email e non il peer perche' il client apre
+## una connessione nuova a ogni richiesta (net/auth.gd).
+const LOGIN_MAX_FAILS := 8
+const LOGIN_WINDOW := 300.0
+var _login_fails: Dictionary = {}     # email_lower -> {count: int, first: float}
+
 
 func _initialize() -> void:
 	GameData.ensure_loaded()
@@ -93,6 +100,7 @@ func _process(delta: float) -> bool:
 		var pre := Protocol.decode(bytes)
 		var pt := Protocol.message_type(pre)
 		if pt == Protocol.AUTH_GOOGLE or pt == Protocol.AUTH_REFRESH \
+				or pt == Protocol.AUTH_EMAIL_LOGIN or pt == Protocol.AUTH_EMAIL_SIGNUP \
 				or pt == Protocol.PROFILE_SET or pt == Protocol.DELETE_ACCOUNT:
 			_handle_auth(from, pt, pre)
 			continue
@@ -135,6 +143,17 @@ func _tick_sealed(delta: float) -> void:
 				if _peer_mm[pid] == entry.mm:
 					_peer_mm[pid] = _mm
 			_sealed_mms.remove_at(i)
+	_purge_login_fails()
+
+
+## Stessa manutenzione periodica delle lobby sigillate: evita che il dizionario
+## dei tentativi falliti cresca senza limite.
+func _purge_login_fails() -> void:
+	var now := _now()
+	for key in _login_fails.keys():
+		var entry: Dictionary = _login_fails[key]
+		if now - float(entry["first"]) > LOGIN_WINDOW:
+			_login_fails.erase(key)
 
 
 func _on_mm_sealed(mm: Matchmaker) -> void:
@@ -204,6 +223,21 @@ func _handle_auth(peer_id: int, msg_type: String, msg: Dictionary) -> void:
 		Protocol.AUTH_REFRESH:
 			AccountService.refresh(_pump, String(msg.get("refresh_token", "")),
 				func(ok: bool, bundle: Dictionary) -> void: _reply_auth(peer_id, ok, bundle))
+		Protocol.AUTH_EMAIL_LOGIN:
+			var email := String(msg.get("email", ""))
+			if _rate_limited(email):
+				_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "rate_limited"}))
+				return
+			AccountService.login_email(_pump, email, String(msg.get("password", "")),
+				func(ok: bool, bundle: Dictionary) -> void:
+					_note_attempt(email, ok)
+					_reply_auth(peer_id, ok, bundle))
+		Protocol.AUTH_EMAIL_SIGNUP:
+			AccountService.register_email(_pump,
+				String(msg.get("email", "")),
+				String(msg.get("password", "")),
+				String(msg.get("username", "")),
+				func(ok: bool, bundle: Dictionary) -> void: _reply_auth(peer_id, ok, bundle))
 		Protocol.PROFILE_SET:
 			var claims: Dictionary = _verifier.verify(String(msg.get("session_token", "")))
 			if claims.is_empty():
@@ -223,6 +257,35 @@ func _handle_auth(peer_id: int, msg_type: String, msg: Dictionary) -> void:
 					_reply(peer_id, Protocol.make(Protocol.ACCOUNT_DELETED))
 				else:
 					_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "db"})))
+
+
+## Non protegge da chi cambia email a ogni tentativo: rallenta la forza bruta
+## contro UN account, che è l'attacco a costo più basso da fare.
+func _rate_limited(email: String) -> bool:
+	var key := email.to_lower().strip_edges()
+	var entry: Dictionary = _login_fails.get(key, {})
+	if entry.is_empty():
+		return false
+	if _now() - float(entry["first"]) > LOGIN_WINDOW:
+		_login_fails.erase(key)
+		return false
+	return int(entry["count"]) >= LOGIN_MAX_FAILS
+
+
+func _note_attempt(email: String, ok: bool) -> void:
+	var key := email.to_lower().strip_edges()
+	if ok:
+		_login_fails.erase(key)
+		return
+	var entry: Dictionary = _login_fails.get(key, {"count": 0, "first": _now()})
+	if _now() - float(entry["first"]) > LOGIN_WINDOW:
+		entry = {"count": 0, "first": _now()}
+	entry["count"] = int(entry["count"]) + 1
+	_login_fails[key] = entry
+
+
+func _now() -> float:
+	return Time.get_ticks_msec() / 1000.0
 
 
 func _reply_auth(peer_id: int, ok: bool, bundle: Dictionary) -> void:

@@ -364,6 +364,22 @@ sudo journalctl -u autochess-worker@1 -f
 sudo tail -f /var/log/caddy/game.access.log | jq .
 ```
 
+### Il client entra in partita ma il timer è a zero e i comandi non passano
+
+Nel log del client: `Invalid status code. Got: '502', expected '101'`. Caddy
+instrada `/ws/wN` ma dietro non risponde nessuno. Verifica su quale porta
+ascolta davvero il worker:
+
+```sh
+sudo ss -lntp | grep -E '9000|9001'      # atteso: master 9000, worker 9001
+```
+
+Causa storica: la unit template aveva `--port=90%i`, che con `%i=1` diventa
+`901` invece di `9001`. Il valore corretto è `--port=900%i`. Stesso effetto sul
+master, che consegna `SPAWN_MATCH` a `ws://127.0.0.1:9001/ws/w1`
+(`server/master_server.gd:18`): senza worker su quella porta il `MatchRunner`
+non viene mai creato e ogni comando torna `no_match`.
+
 ### `wscat` risponde `Unexpected server response: 404`
 
 Il certificato TLS funziona (altrimenti l'errore sarebbe sul TLS) ma Caddy non

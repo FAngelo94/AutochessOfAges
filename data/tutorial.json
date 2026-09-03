@@ -20,7 +20,7 @@
     {
       "id": "schieramento",
       "title": "Schieramento",
-      "body": "Solo le unità sul campo combattono: quelle in panchina restano a guardare. La prima fila del campo è quella a contatto con il nemico, quindi è lì che vanno le unità pensate per incassare i colpi."
+      "body": "Solo le unità sul campo combattono: quelle in panchina restano a guardare. La prima fila del campo è quella a contatto con il nemico, quindi è lì che vanno le unità pensate per incassare i colpi. Avete {preparation_seconds} secondi per sistemare tutto — la barra in fondo li conta — poi il round parte da solo."
     },
     {
       "id": "sinergie",
@@ -30,7 +30,7 @@
     {
       "id": "combattimento",
       "title": "La battaglia",
-      "body": "Durante il combattimento non si controlla nulla: ogni decisione va presa prima, in preparazione. Potete solo accelerare la riproduzione o saltare dritti al risultato."
+      "body": "Durante il combattimento non si controlla nulla: ogni decisione va presa prima, in preparazione. La barra in fondo allo schermo misura il round, che dura {round_seconds} secondi: negli ultimi {berserk_seconds} scatta il Berserker Time e tutto va {berserk_scale} volte più veloce. Se allo scadere nessuno ha vinto è pareggio, e nessuno dei due perde vita."
     },
     {
       "id": "livello",

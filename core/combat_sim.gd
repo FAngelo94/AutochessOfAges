@@ -15,10 +15,20 @@ var arena_columns: int
 var arena_rows: int
 var tick_delta: float
 var max_duration: float
+var berserk_at: float
+var berserk_scale: int
 
 var units: Array[CombatUnit] = []
 var events: Array[Dictionary] = []
+## Orologio della SIMULAZIONE: è quello che leggono le unità per ricariche,
+## effetti a tempo e stordimenti. Durante il berserk avanza più in fretta di
+## `elapsed`, ed è esattamente questo scarto a rendere tutto tre volte più
+## rapido senza toccare una sola riga della logica delle unità.
 var time: float = 0.0
+## Orologio del ROUND: 0 → max_duration, sempre a velocità reale. Decide la
+## fine della battaglia e marca gli eventi, così la riproduzione dura quanto la
+## barra che la accompagna e negli ultimi secondi si *vede* accelerare.
+var elapsed: float = 0.0
 var outcome: int = Outcome.DRAW
 
 var _rng: SimRNG
@@ -31,6 +41,7 @@ var _occupancy: Dictionary = {}
 var _by_uid: Dictionary = {}
 var _deaths_by_team := {0: 0, 1: 0}
 var _prune_accumulator := 0.0
+var _berserk_announced := false
 
 
 func _init(rng: SimRNG) -> void:
@@ -40,6 +51,8 @@ func _init(rng: SimRNG) -> void:
 	arena_rows = int(balance["match"]["board_rows"]) * 2
 	tick_delta = 1.0 / float(balance["combat"]["tick_rate"])
 	max_duration = float(balance["combat"]["max_duration_seconds"])
+	berserk_at = float(balance["combat"]["berserk_at_seconds"])
+	berserk_scale = int(balance["combat"]["berserk_time_scale"])
 
 
 # --------------------------------------------------------------------------
@@ -62,6 +75,8 @@ func setup(team_a: Array[UnitInstance], team_b: Array[UnitInstance]) -> void:
 	_occupancy.clear()
 	_by_uid.clear()
 	time = 0.0
+	elapsed = 0.0
+	_berserk_announced = false
 	_deaths_by_team = {0: 0, 1: 0}
 
 	_add_team(team_a, 0)
@@ -117,9 +132,33 @@ func run() -> Dictionary:
 	return result()
 
 
+## Un passo del ROUND. Normalmente è anche un passo di simulazione; dopo
+## `berserk_at` ne esegue `berserk_scale` di fila nello stesso intervallo di
+## `elapsed`, ed è così che "tutto va a tripla velocità": attacchi, movimento,
+## ricariche, veleni e stordimenti insieme, perché è il tempo stesso a scorrere
+## più in fretta.
+##
+## I sotto-passi mantengono la durata di `tick_delta`: triplicare direttamente
+## il passo avrebbe reso la simulazione più grossolana proprio nei secondi
+## decisivi (un'unità avrebbe attraversato due terzi di cella per tick),
+## cambiando gli esiti invece di limitarsi ad accelerarli.
 func step() -> void:
-	time += tick_delta
+	var substeps := berserk_scale if elapsed >= berserk_at else 1
+	# `elapsed` si divide fra i sotto-passi: gli eventi restano distinguibili
+	# nel tempo e la riproduzione non li ammucchia tutti sullo stesso istante.
+	var slice := tick_delta / float(substeps)
 
+	if substeps > 1 and not _berserk_announced:
+		_berserk_announced = true
+		_log("berserk", {"scale": berserk_scale})
+
+	for _i in substeps:
+		elapsed += slice
+		time += tick_delta
+		_advance()
+
+
+func _advance() -> void:
 	for unit in units:
 		if unit.is_alive():
 			_update_unit(unit)
@@ -134,8 +173,12 @@ func step() -> void:
 
 
 func _is_finished() -> bool:
-	if time >= max_duration:
-		outcome = _decide_by_remaining_hp()
+	# Scaduto il tempo del round è pareggio, punto: nessun confronto di salute
+	# residua. Se due squadre non riescono a chiudere nemmeno con il berserk,
+	# nessuna delle due ha vinto davvero, e `match_state` applica il danno solo
+	# a chi ha un vincitore — quindi non ne esce ferito nessuno.
+	if elapsed >= max_duration:
+		outcome = Outcome.DRAW
 		return true
 	var alive_a := alive_count(0)
 	var alive_b := alive_count(1)
@@ -149,27 +192,6 @@ func _is_finished() -> bool:
 		outcome = Outcome.TEAM_A
 		return true
 	return false
-
-
-## Allo scadere del tempo vince chi ha più salute residua in percentuale:
-## evita che una battaglia di stallo penalizzi entrambi a caso.
-func _decide_by_remaining_hp() -> int:
-	var ratio_a := _team_hp_ratio(0)
-	var ratio_b := _team_hp_ratio(1)
-	if absf(ratio_a - ratio_b) < 0.0001:
-		return Outcome.DRAW
-	return Outcome.TEAM_A if ratio_a > ratio_b else Outcome.TEAM_B
-
-
-func _team_hp_ratio(team: int) -> float:
-	var current := 0.0
-	var maximum := 0.0
-	for unit in units:
-		if unit.team != team:
-			continue
-		maximum += unit.base_stat("max_hp")
-		current += maxf(0.0, unit.hp)
-	return current / maxf(1.0, maximum)
 
 
 func alive_count(team: int) -> int:
@@ -191,7 +213,10 @@ func alive_units(team: int) -> Array[CombatUnit]:
 func result() -> Dictionary:
 	return {
 		"outcome": outcome,
-		"duration": time,
+		# Durata del ROUND, non della simulazione: è la lunghezza del replay e
+		# la scala della barra che lo accompagna.
+		"duration": elapsed,
+		"berserk_at": berserk_at,
 		"survivors_a": _survivor_summary(0),
 		"survivors_b": _survivor_summary(1),
 		"initial": _initial,
@@ -695,6 +720,9 @@ func _lowest_hp_ally(caster: CombatUnit) -> CombatUnit:
 
 
 func _log(type: String, data: Dictionary) -> void:
-	data["t"] = time
+	# Marcati sull'orologio del round: durante il berserk gli eventi si
+	# addensano nello stesso secondo di riproduzione, ed è proprio l'effetto
+	# voluto — chi guarda vede la battaglia accelerare.
+	data["t"] = elapsed
 	data["type"] = type
 	events.append(data)

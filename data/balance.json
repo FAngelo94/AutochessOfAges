@@ -65,8 +65,11 @@
   },
 
   "combat": {
+    "_berserk_doc": "Negli ultimi berserk_at_seconds..max_duration_seconds la simulazione scorre a berserk_time_scale volte la velocità normale: attacchi, movimento, ricariche e effetti periodici. Serve a chiudere gli stalli entro il tempo del round. Allo scadere è sempre pareggio, senza danno a nessuno dei due.",
     "tick_rate": 30,
-    "max_duration_seconds": 45.0,
+    "max_duration_seconds": 30.0,
+    "berserk_at_seconds": 20.0,
+    "berserk_time_scale": 3,
     "mana_per_attack": 10,
     "mana_per_damage_taken": 0.03,
     "mana_cap_after_cast": 0,
@@ -88,6 +91,6 @@
     "stages": 8,
     "rounds_per_stage": 5,
     "preparation_seconds": 30.0,
-    "first_round_preparation_seconds": 45.0
+    "first_round_preparation_seconds": 30.0
   }
 }

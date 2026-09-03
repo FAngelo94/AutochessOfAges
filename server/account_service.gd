@@ -12,7 +12,8 @@ extends RefCounted
 ## Il refresh token e' OPACO (32 byte casuali, esadecimale). Nel DB va solo il
 ## suo sha256: un dump non permette di impersonare nessuno.
 
-const REFRESH_TTL_DAYS := 7
+const REFRESH_TTL_DAYS := 90
+const MIN_PASSWORD_LEN := 8
 
 
 ## cb.call(ok: bool, bundle: Dictionary)
@@ -39,6 +40,43 @@ static func refresh(owner: Node, refresh_token: String, cb: Callable) -> void:
 			cb.call(false, {"reason": "invalid_refresh"})
 			return
 		_issue_session(owner, row, cb))
+
+
+## cb.call(ok: bool, bundle: Dictionary) — stessa forma di login_google.
+static func login_email(owner: Node, email: String, password: String, cb: Callable) -> void:
+	if not _credentials_plausible(email, password):
+		cb.call(false, {"reason": "invalid"})
+		return
+	DbClient.login_email_account(owner, email, password, func(ok: bool, row: Dictionary) -> void:
+		if not ok:
+			cb.call(false, {"reason": "invalid_credentials"})
+			return
+		_issue_session(owner, row, cb))
+
+
+static func register_email(owner: Node, email: String, password: String,
+		username: String, cb: Callable) -> void:
+	if not _credentials_plausible(email, password):
+		cb.call(false, {"reason": "invalid"})
+		return
+	DbClient.register_email_account(owner, email, password, username, func(ok: bool, row: Dictionary) -> void:
+		if not ok:
+			cb.call(false, {"reason": "db"})
+			return
+		# La RPC segnala il rifiuto nel corpo, non con un codice HTTP.
+		if row.has("error"):
+			cb.call(false, {"reason": String(row["error"])})
+			return
+		_issue_session(owner, row, cb))
+
+
+## Il client non e' autorevole: le stesse regole valgono anche qui, prima di
+## spendere un giro di rete verso il database.
+static func _credentials_plausible(email: String, password: String) -> bool:
+	if password.length() < MIN_PASSWORD_LEN:
+		return false
+	var at := email.find("@")
+	return at > 0 and email.find(".", at) > at + 1 and not email.contains(" ")
 
 
 static func _issue_session(owner: Node, row: Dictionary, cb: Callable) -> void:
