@@ -37,6 +37,10 @@ const ZOOM := 1.85
 ## Quante figure si rendono nello stesso fotogramma.
 const BATCH := 8
 
+## Quante volte si ritenta una figura che è uscita tutta trasparente prima di
+## rinunciare e lasciare alla casella il suo ripiego testuale.
+const MAX_TRIES := 3
+
 var _textures: Dictionary = {}
 ## Ogni voce è {"id": String, "kind": "unit"|"hero"}.
 var _queue: Array[Dictionary] = []
@@ -196,6 +200,16 @@ func _render_batch() -> void:
 		_busy = false
 		return
 
+	# I nodi appena appesi alla postazione entrano nell'albero — e vengono
+	# registrati presso il server di rendering — solo alla fine del fotogramma
+	# in corso. Aspettare subito frame_post_draw fotograferebbe la postazione
+	# ancora vuota, o con solo la parte di modello già registrata: è da lì che
+	# venivano le caselle nere e le figure a metà. Si lascia passare un
+	# fotogramma intero, si riarma UPDATE_ONCE (che nel frattempo si è già
+	# consumato a vuoto) e solo allora si aspetta il disegno vero.
+	await get_tree().process_frame
+	for i in rendering.size():
+		_stations[i]["viewport"].render_target_update_mode = SubViewport.UPDATE_ONCE
 	await RenderingServer.frame_post_draw
 
 	for i in rendering.size():
@@ -203,10 +217,22 @@ func _render_batch() -> void:
 		var key := "%s:%s" % [entry["kind"], entry["id"]]
 		var viewport: SubViewport = _stations[i]["viewport"]
 		var image := viewport.get_texture().get_image()
-		if image != null and not image.is_empty():
+		if image != null and not image.is_empty() and image.get_used_rect().size != Vector2i.ZERO:
 			_textures[key] = ImageTexture.create_from_image(image)
 			portrait_ready.emit(entry["id"])
-		_queued.erase(key)
+			_queued.erase(key)
+			continue
+		# Immagine tutta trasparente: il disegno è mancato comunque. Si
+		# rimette in coda invece di memorizzare il vuoto per sempre, ma con un
+		# tetto ai tentativi: un modello che non si disegna mai (mesh assente)
+		# non deve far girare la coda all'infinito.
+		var tries: int = int(entry.get("tries", 0)) + 1
+		if tries < MAX_TRIES:
+			entry["tries"] = tries
+			_queue.append(entry)
+		else:
+			push_warning("Portraits: ritratto di '%s' non renderizzato dopo %d tentativi" % [key, tries])
+			_queued.erase(key)
 
 	_busy = false
 	_process_queue()

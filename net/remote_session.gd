@@ -212,6 +212,20 @@ func can_spectate(player_index: int) -> bool:
 
 
 func request_spectate(player_index: int) -> void:
+	# Il proprio ultimo scontro è già in memoria (COMBAT): si serve subito senza
+	# passare dal worker, che dopo la fine partita viene smontato (game_worker
+	# FINISH_GRACE_MS) e non risponderebbe più — è il caso della lente nella
+	# schermata di classifica.
+	if player_index == _local_index and not _own_combat.is_empty():
+		var opp_hero := ""
+		for row in _last_public_results:
+			if int(row.get("player_index", -1)) == _local_index:
+				var opp_idx := int(row.get("opponent_index", -1))
+				if opp_idx >= 0 and opp_idx < _state.players.size():
+					opp_hero = _state.players[opp_idx].hero_id
+				break
+		spectate_ready.emit(_local_index, _own_combat, _own_team, opp_hero)
+		return
 	_send_worker(Protocol.make(Protocol.SPECTATE_REQUEST, {"player_index": player_index}))
 
 

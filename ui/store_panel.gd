@@ -173,5 +173,12 @@ func _on_purchase_completed(entitlement_id: String, success: bool, reason: Strin
 		# L'utente ha cambiato idea: non è un errore e non va presentato come tale.
 		_status.text = "Acquisto annullato."
 	else:
-		_status.text = "Acquisto non riuscito: %s" % (reason if reason != "" else "errore sconosciuto")
+		var detail := reason if reason != "" else "errore sconosciuto"
+		_status.text = "Acquisto non riuscito: %s" % detail
+		# Un fallimento vero (non un ripensamento) ferma l'utente: la riga di
+		# stato da sola passa inosservata, e chi resta col dubbio di essere stato
+		# addebitato riprova.
+		ModalDialog.notice(self, "Acquisto non riuscito",
+			"Non è stato possibile completare l'acquisto di %s (%s).\n\n" % [name, detail]
+			+ "Non ti è stato addebitato nulla. Riprova più tardi.")
 	_refresh()

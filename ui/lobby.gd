@@ -22,7 +22,6 @@ var _status_label: Label
 var _count_label: Label
 var _timer_label: Label
 var _cancel_button: Button
-var _menu_button: Button
 
 
 func _ready() -> void:
@@ -109,16 +108,6 @@ func _build() -> void:
 	_cancel_button.pressed.connect(_on_cancel_pressed)
 	column.add_child(_cancel_button)
 
-	_menu_button = Button.new()
-	_menu_button.text = "Torna al menu"
-	_menu_button.custom_minimum_size = Vector2(0, Style.TOUCH_PRIMARY)
-	_menu_button.add_theme_font_size_override("font_size", 26)
-	_menu_button.add_theme_color_override("font_color", Style.INK)
-	Style.apply_plate(_menu_button, Style.GOLD, Style.GOLD_DEEP, 20, 8)
-	_menu_button.visible = false
-	_menu_button.pressed.connect(_return_to_menu)
-	column.add_child(_menu_button)
-
 
 # --------------------------------------------------------------------------
 # Segnali della sessione
@@ -161,13 +150,18 @@ func _on_connection_lost(reason: String) -> void:
 	_fail("Impossibile raggiungere il server. Riprova più tardi.")
 
 
+## Fine corsa: qualcosa è andato storto e la sala d'attesa non è più un'attesa.
+## Una modale lo dice a chiare lettere e l'unica uscita — anche col tasto
+## indietro — è il menu.
 func _fail(message: String) -> void:
 	_status_label.text = message
 	_status_label.add_theme_color_override("font_color", Color(0.92, 0.5, 0.45))
 	_count_label.text = ""
 	_timer_label.text = ""
 	_cancel_button.visible = false
-	_menu_button.visible = true
+	var dialog := ModalDialog.notice(self, "Partita non avviata", message)
+	dialog.confirmed.connect(_return_to_menu)
+	dialog.cancelled.connect(_return_to_menu)
 
 
 func _reason_text(reason: String) -> String:

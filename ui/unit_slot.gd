@@ -14,6 +14,17 @@ extends Button
 
 enum Badge { NONE, COST, STARS }
 
+## Dove sta questa casella. Serve al drag & drop: main.gd, tramite drag_agent,
+## legge zona e chiave per sapere da/verso dove si sposta un'unità.
+enum Zone { NONE, SHOP, BOARD, BENCH }
+var zone: int = Zone.NONE
+## int per negozio/panchina, Vector2i per il campo. null se la casella non è
+## una posizione (non dovrebbe succedere per le tre zone sopra).
+var slot_key: Variant = null
+## Oggetto che decide cosa è trascinabile e cosa succede al rilascio
+## (ui/main.gd). Deve avere slot_drag_data / slot_can_drop / slot_drop.
+var drag_agent: Object = null
+
 ## Le caselle del campo di battaglia sono esagoni; negozio, panchina e
 ## collezione restano rettangoli. Il disegno è qui e non in Style perché uno
 ## StyleBox sa fare solo rettangoli con gli angoli arrotondati: per una forma
@@ -34,7 +45,7 @@ var _badge_mode: int = Badge.NONE
 
 ## Il tooltip nativo di Godot si piazza dov'è comodo a lui, spesso sotto il
 ## dito — illeggibile su touch. Il testo si tiene qui e si disegna da soli con
-## _show_hover_card, sempre sopra il puntatore; tooltip_text resta vuoto così
+## _show_hover_card, ancorata sopra la casella; tooltip_text resta vuoto così
 ## il popup di sistema non compare mai.
 var _hover_text: String = ""
 var _hover_card: PanelContainer = null
@@ -212,6 +223,60 @@ static func _short_name(display_name: String) -> String:
 	return first if first.length() <= 12 else first.left(11) + "."
 
 
+## --- Drag & drop ------------------------------------------------------------
+## Trascinare un'unità tra panchina e campo, o tra celle del campo. La logica di
+## gioco è di main.gd (drag_agent): qui si intercetta solo il gesto e si disegna
+## l'anteprima. Su touch il motore emula il mouse, quindi funziona col dito.
+
+func _get_drag_data(_at_position: Vector2) -> Variant:
+	if drag_agent == null or unit_id == "":
+		return null
+	var data: Variant = drag_agent.slot_drag_data(self)
+	if data == null:
+		return null
+	_hide_hover_card()
+	set_drag_preview(_make_drag_preview())
+	return data
+
+
+func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+	return drag_agent != null and drag_agent.slot_can_drop(self, data)
+
+
+func _drop_data(_at_position: Vector2, data: Variant) -> void:
+	if drag_agent != null:
+		drag_agent.slot_drop(self, data)
+
+
+## L'anteprima segue il dito/puntatore centrata su di esso (di default Godot la
+## àncora in alto a sinistra: lo scarto sul figlio la ricentra).
+func _make_drag_preview() -> Control:
+	var root := Control.new()
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var box := TextureRect.new()
+	box.custom_minimum_size = size
+	box.size = size
+	box.position = -0.5 * size
+	box.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	box.modulate = Color(1.0, 1.0, 1.0, 0.85)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	if _portrait.texture != null:
+		box.texture = _portrait.texture
+	else:
+		var def := GameData.unit(unit_id)
+		var label := Label.new()
+		label.text = _short_name(def.display_name) if def != null else unit_id
+		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		box.add_child(label)
+
+	root.add_child(box)
+	return root
+
+
 func _on_mouse_entered() -> void:
 	_show_hover_card()
 
@@ -263,8 +328,10 @@ func _hide_hover_card() -> void:
 	_hover_card = null
 
 
-## Sempre sopra il puntatore, mai fuori schermo: se non c'entra sopra (righe in
-## cima allo schermo, come il negozio o la prima fila del campo) scende sotto.
+## Ancorata alla casella, non al puntatore: il bordo inferiore della carta tocca
+## il bordo superiore dell'unità, così non la copre mai. Se non c'entra sopra
+## (righe in cima allo schermo, come il negozio o la prima fila del campo) scende
+## sotto la casella. Mai fuori schermo in orizzontale.
 func _position_hover_card() -> void:
 	if _hover_card == null:
 		return
@@ -272,15 +339,15 @@ func _position_hover_card() -> void:
 	if viewport == null:
 		return
 	var screen := viewport.get_visible_rect().size
-	var pointer := get_global_mouse_position()
+	var slot := get_global_rect()
 	var card_size := _hover_card.size
 
-	const GAP := 10.0
-	var y := pointer.y - GAP - card_size.y
+	const GAP := 6.0
+	var y := slot.position.y - GAP - card_size.y
 	if y < 0.0:
-		y = pointer.y + GAP
+		y = slot.end.y + GAP
 
-	var x := pointer.x - card_size.x * 0.5
+	var x := slot.get_center().x - card_size.x * 0.5
 	x = clampf(x, 0.0, maxf(0.0, screen.x - card_size.x))
 
 	_hover_card.global_position = Vector2(x, y)

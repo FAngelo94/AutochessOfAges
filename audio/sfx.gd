@@ -40,6 +40,7 @@ func _ready() -> void:
 		"cast": _cast(),
 		"round_end": _round_end(),
 		"berserk": _berserk(),
+		"countdown": _countdown(),
 	}
 
 	for _i in POOL_SIZE:
@@ -211,6 +212,19 @@ func _berserk() -> AudioStreamWAV:
 		var horn := sin(TAU * f * t) * 0.55 + sin(TAU * f * 1.5 * t) * 0.3
 		var growl := randf_range(-1.0, 1.0) * 0.12 * (1.0 - prog)
 		out[i] = clampf(horn + growl, -1.0, 1.0) * _env(i, n, 0.06) * 0.5
+	return _wav(out)
+
+
+## Battito del conto alla rovescia: un bip breve e pulito negli ultimi secondi
+## della preparazione, uno al secondo. Corto e discreto — non deve coprire la
+## musica né spaventare, solo far notare che il tempo sta finendo.
+func _countdown() -> AudioStreamWAV:
+	var n := _samples(0.07)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		out[i] = sin(TAU * 880.0 * t) * _env(i, n, 0.01) * 0.3
 	return _wav(out)
 
 

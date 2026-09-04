@@ -23,6 +23,9 @@ var combat_speed: float = 1.0
 ## Volume degli effetti sonori, lineare 0..1. Preferenza di dispositivo come
 ## combat_speed: non va sul server.
 var sfx_volume: float = 0.8
+## Volume della musica di sottofondo, lineare 0..1. Preferenza di dispositivo
+## come sfx_volume: non va sul server.
+var music_volume: float = 0.2
 ## Ultima modalità scelta nel menu ("cpu" / "pvp"). Vuota al primo avvio. La
 ## stringa non è validata qui: ui/menu.gd la confronta con le proprie costanti e
 ## ricade su "contro il computer" se non la riconosce, così app/ non deve
@@ -83,6 +86,7 @@ func load_profile() -> void:
 	favourite_hero = String(config.get_value("preferences", "favourite_hero", ""))
 	combat_speed = float(config.get_value("preferences", "combat_speed", 1.0))
 	sfx_volume = float(config.get_value("preferences", "sfx_volume", 0.8))
+	music_volume = float(config.get_value("preferences", "music_volume", 0.2))
 	match_mode = String(config.get_value("preferences", "match_mode", ""))
 	matches_played = int(config.get_value("stats", "matches_played", 0))
 	best_placement = int(config.get_value("stats", "best_placement", 0))
@@ -99,6 +103,7 @@ func save_profile() -> void:
 	config.set_value("preferences", "favourite_hero", favourite_hero)
 	config.set_value("preferences", "combat_speed", combat_speed)
 	config.set_value("preferences", "sfx_volume", sfx_volume)
+	config.set_value("preferences", "music_volume", music_volume)
 	config.set_value("preferences", "match_mode", match_mode)
 	config.set_value("preferences", "guest_mode", guest_mode)
 	config.set_value("stats", "matches_played", matches_played)
@@ -152,6 +157,12 @@ func set_combat_speed(speed: float) -> void:
 
 func set_sfx_volume(v: float) -> void:
 	sfx_volume = clampf(v, 0.0, 1.0)
+	save_profile()
+	changed.emit()
+
+
+func set_music_volume(v: float) -> void:
+	music_volume = clampf(v, 0.0, 1.0)
 	save_profile()
 	changed.emit()
 

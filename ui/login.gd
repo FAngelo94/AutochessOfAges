@@ -26,6 +26,12 @@ const REASONS := {
 	"google": "Accesso con Google non riuscito.",
 }
 
+## Alzata da chi apre questa schermata di proposito pur essendo già ospite —
+## le impostazioni, con "Accedi". Senza, _ready() rimbalzerebbe al menu per via
+## di is_guest() e il pulsante sembrerebbe non fare nulla. Si consuma alla
+## prima lettura: un ritorno successivo torna a saltare il login come prima.
+static var force_prompt := false
+
 var _auth: Node
 var _state: int = State.LOGIN
 
@@ -46,9 +52,15 @@ var _guest_button: Button
 
 func _ready() -> void:
 	_auth = get_node_or_null("/root/Auth")
+	var music := get_node_or_null("/root/Music")
+	if music != null:
+		music.play_general()
 	# Backend segnaposto (test headless, sviluppo locale), sessione già valida o
 	# scelta "ospite" già fatta: non c'è niente da chiedere.
-	if _auth == null or not _auth.is_configured() or _auth.is_logged_in() or _auth.is_guest():
+	var forced := force_prompt
+	force_prompt = false
+	if _auth == null or not _auth.is_configured() \
+			or (not forced and (_auth.is_logged_in() or _auth.is_guest())):
 		_go_to_menu()
 		return
 	_auth.login_completed.connect(_on_login_completed)
@@ -57,8 +69,10 @@ func _ready() -> void:
 	_set_state(State.RESTORING if _auth.restore_pending() else State.LOGIN)
 
 
+## Differito: _go_to_menu() può essere chiamata da _ready(), quando l'albero
+## sta ancora aggiungendo figli e cambiare scena solleva "Parent node is busy".
 func _go_to_menu() -> void:
-	get_tree().change_scene_to_file(MENU_SCENE)
+	get_tree().change_scene_to_file.call_deferred(MENU_SCENE)
 
 
 # --------------------------------------------------------------------------
@@ -94,7 +108,10 @@ func _set_state(state: int) -> void:
 	_busy = false
 	for child in _column.get_children():
 		_column.remove_child(child)
-		child.free()
+		# queue_free e non free: _set_state() arriva spesso dal lambda di un
+		# pulsante di questa stessa colonna, che sta ancora emettendo il
+		# proprio segnale — liberarlo subito lo ucciderebbe sotto i piedi.
+		child.queue_free()
 	_email_edit = null
 	_password_edit = null
 	_confirm_edit = null
@@ -131,11 +148,11 @@ func _build_restoring() -> void:
 func _build_login() -> void:
 	_title("ACCEDI")
 
-	_email_edit = _line_edit("Email", false)
+	_email_edit = _line_edit("Email")
 	_column.add_child(_email_edit)
-	_password_edit = _line_edit("Password", true)
+	_password_edit = _line_edit("Password")
 	_password_edit.text_submitted.connect(func(_t: String) -> void: _on_primary_pressed())
-	_column.add_child(_password_edit)
+	_column.add_child(_password_field(_password_edit))
 
 	_primary_text = "ACCEDI"
 	_primary_button = _plate_button(_primary_text, Style.GOLD, Style.GOLD_DEEP, Style.TOUCH_PRIMARY)
@@ -155,15 +172,15 @@ func _build_login() -> void:
 func _build_signup() -> void:
 	_title("CREA ACCOUNT")
 
-	_username_edit = _line_edit("Nome giocatore", false)
+	_username_edit = _line_edit("Nome giocatore")
 	_column.add_child(_username_edit)
-	_email_edit = _line_edit("Email", false)
+	_email_edit = _line_edit("Email")
 	_column.add_child(_email_edit)
-	_password_edit = _line_edit("Password (almeno 8 caratteri)", true)
-	_column.add_child(_password_edit)
-	_confirm_edit = _line_edit("Conferma password", true)
+	_password_edit = _line_edit("Password (almeno 8 caratteri)")
+	_column.add_child(_password_field(_password_edit))
+	_confirm_edit = _line_edit("Conferma password")
 	_confirm_edit.text_submitted.connect(func(_t: String) -> void: _on_primary_pressed())
-	_column.add_child(_confirm_edit)
+	_column.add_child(_password_field(_confirm_edit))
 
 	_primary_text = "CREA ACCOUNT"
 	_primary_button = _plate_button(_primary_text, Style.GOLD, Style.GOLD_DEEP, Style.TOUCH_PRIMARY)
@@ -202,15 +219,42 @@ func _provider_buttons() -> Control:
 	return box
 
 
-func _line_edit(placeholder: String, secret: bool) -> LineEdit:
+func _line_edit(placeholder: String) -> LineEdit:
 	var edit := LineEdit.new()
 	edit.placeholder_text = placeholder
-	edit.secret = secret
 	edit.custom_minimum_size = Vector2(0, 72)
 	edit.add_theme_font_size_override("font_size", 20)
 	edit.add_theme_stylebox_override("normal", Style.box(Style.PLATE_DARK, Style.PLATE))
 	edit.add_theme_stylebox_override("focus", Style.box(Style.PLATE_DARK, Style.GOLD_DEEP, 2))
 	return edit
+
+
+## Marca `edit` come campo password (nascosto di default) e lo affianca a un
+## pulsante occhio che ne mostra/nasconde il testo — senza, chi sbaglia un
+## carattere in una password lunga non ha modo di controllare cosa ha scritto.
+## Ritorna la riga da aggiungere alla colonna; `edit` resta l'oggetto da cui
+## leggere .text, esattamente come prima di essere avvolto.
+func _password_field(edit: LineEdit) -> Control:
+	edit.secret = true
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var toggle := Button.new()
+	toggle.text = "👁"
+	toggle.custom_minimum_size = Vector2(56, 72)
+	toggle.add_theme_font_size_override("font_size", 22)
+	Style.apply_button(toggle, Style.PLATE_DARK, Style.PLATE)
+	toggle.pressed.connect(func() -> void:
+		edit.secret = not edit.secret
+		toggle.text = "🙈" if edit.secret else "👁"
+		# Il click sposta il focus sul pulsante: lo si restituisce al campo,
+		# altrimenti chi sta scrivendo la password perde il cursore.
+		edit.grab_focus())
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(edit)
+	row.add_child(toggle)
+	return row
 
 
 func _plate_button(text: String, fill: Color, edge: Color, min_height: int) -> Button:

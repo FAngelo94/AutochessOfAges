@@ -38,4 +38,13 @@ for f in "$MIGRATIONS"/*.sql; do
     -c "insert into public.schema_migrations (filename) values ('$name');"
 done
 
+# PostgREST tiene in cache lo schema al proprio avvio: una funzione creata da
+# una migrazione appena applicata resta invisibile — /rpc/<nome> risponde 404 —
+# finche' non gli si dice di rileggerlo. Senza questa riga bisogna ricordarsi
+# di riavviare postgrest a mano dopo ogni migrazione che tocca le RPC, e la
+# dimenticanza si manifesta lato client come un generico "servizio non
+# disponibile". NOTIFY e' innocuo se PostgREST non e' in ascolto.
+psql "$DB_URL" -q -c "notify pgrst, 'reload schema';"
+echo "  cache dello schema di PostgREST ricaricata"
+
 echo "migrazioni allineate."

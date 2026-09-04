@@ -77,6 +77,9 @@ func _ready() -> void:
 	_store = get_node("/root/Store")
 	_profile = get_node("/root/Profile")
 	_selected_hero = _profile.effective_hero()
+	var _music := get_node_or_null("/root/Music")
+	if _music != null:
+		_music.play_general()
 	_match_mode = _restored_mode()
 	_build()
 	_refresh_rank_label()
@@ -463,7 +466,7 @@ func _build_mode_panel() -> void:
 	column.add_child(_mode_option(MODE_CPU, "🖥️  Contro il computer",
 		"Affronta subito degli avversari controllati dal gioco."))
 	column.add_child(_mode_option(MODE_PVP, "👥  Contro giocatori",
-		"Partita online 8 giocatori. Richiede l'accesso con Google."))
+		"Partita online 8 giocatori. Richiede un account."))
 
 	column.add_child(_grow())
 
@@ -764,10 +767,12 @@ func _on_play_pressed() -> void:
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 
-## Contro giocatori: serve un account. Se già loggati si va in lobby; se no si
-## rimanda alla schermata di login, dove si può scegliere come identificarsi
-## (Google o email/password — un ospite non ha alternativa se non lì). Senza
-## l'autoload Auth (edge headless) si ricade sul vecchio avviso "in arrivo".
+## Contro giocatori: serve un account. Se già loggati si va in lobby; se no —
+## il caso dell'ospite, l'unico che arriva qui senza sessione, visto che la
+## scena di login precede il menu — si spiega perché e dove rimediare, invece
+## di mandarlo a login.tscn: da ospite quella scena rimbalza subito indietro
+## (is_guest()) e il pulsante sembrerebbe rotto. Senza l'autoload Auth (edge
+## headless) si ricade sul vecchio avviso "in arrivo".
 func _start_pvp() -> void:
 	if DevNet.enabled():
 		# Sviluppo locale: niente login, master/worker headless su 127.0.0.1.
@@ -780,17 +785,15 @@ func _start_pvp() -> void:
 	if auth.is_logged_in():
 		get_tree().change_scene_to_file(LOBBY_SCENE)
 		return
-	get_tree().change_scene_to_file("res://ui/login.tscn")
+	_show_pvp_unavailable(
+		"Per giocare contro altri giocatori serve un account.\n\n"
+		+ "Stai giocando come ospite: puoi accedere in qualsiasi momento da "
+		+ "Impostazioni → Accedi, con Google oppure con email e password.\n\n"
+		+ "Da ospite restano disponibili le partite contro il computer.")
 
 
 func _show_pvp_unavailable(message: String) -> void:
-	var notice := AcceptDialog.new()
-	notice.dialog_text = message
-	notice.title = "Contro giocatori"
-	add_child(notice)
-	notice.confirmed.connect(notice.queue_free)
-	notice.canceled.connect(notice.queue_free)
-	notice.popup_centered()
+	ModalDialog.notice(self, "Contro giocatori", message)
 
 
 func _on_collection_pressed() -> void:

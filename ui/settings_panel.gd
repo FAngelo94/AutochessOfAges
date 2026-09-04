@@ -7,7 +7,12 @@ extends Panel
 
 signal closed
 
+## login.gd non ha class_name: per alzare il suo force_prompt (schermata di
+## login richiamata di proposito da chi è già ospite) serve lo script stesso.
+const LoginScreen := preload("res://ui/login.gd")
+
 var _volume_label: Label
+var _music_label: Label
 
 
 func _ready() -> void:
@@ -23,6 +28,7 @@ func open() -> void:
 		remove_child(child)
 		child.free()
 	_volume_label = null
+	_music_label = null
 	_build()
 	visible = true
 
@@ -49,12 +55,16 @@ func _build() -> void:
 	column.add_child(title)
 
 	column.add_child(_volume_card())
+	column.add_child(_music_card())
 
 	var auth := get_node_or_null("/root/Auth")
 	if auth != null and auth.is_logged_in():
 		column.add_child(_account_card(auth))
-	elif auth != null and auth.is_configured() and auth.is_guest():
-		column.add_child(_guest_card())
+	elif auth != null and auth.is_configured():
+		# Non solo gli ospiti: anche chi ha appena cancellato il proprio account
+		# non è loggato né ospite, e senza questa card la schermata resterebbe
+		# priva di qualunque modo per identificarsi.
+		column.add_child(_guest_card(auth.is_guest()))
 	if auth != null and auth.game_host() != "":
 		column.add_child(_privacy_link(auth.game_host()))
 
@@ -118,6 +128,49 @@ func _volume_card() -> Control:
 	return card
 
 
+
+## Uguale a _volume_card ma per la musica di sottofondo (Profile.music_volume,
+## letto da Music). Cursore separato: molti vogliono la musica più bassa degli
+## effetti.
+func _music_card() -> Control:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 8)
+	card.add_child(inner)
+
+	var profile := get_node("/root/Profile")
+
+	var header := HBoxContainer.new()
+	inner.add_child(header)
+
+	var name_label := Label.new()
+	name_label.text = "Volume musica"
+	name_label.add_theme_font_size_override("font_size", 20)
+	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(name_label)
+
+	_music_label = Label.new()
+	_music_label.add_theme_font_size_override("font_size", 20)
+	_music_label.add_theme_color_override("font_color", Style.TEXT_DIM)
+	header.add_child(_music_label)
+
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.value = float(profile.music_volume)
+	slider.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.value_changed.connect(_on_music_changed)
+	inner.add_child(slider)
+
+	_refresh_music_label(float(profile.music_volume))
+	return card
+
+
 func _account_card(auth: Node) -> Control:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
@@ -163,7 +216,7 @@ func _account_card(auth: Node) -> Control:
 ## Card visibile solo da ospiti (Auth configurato ma nessun login): senza,
 ## chi ha scelto "ospite" — una scelta persistita — resterebbe ospite per
 ## sempre, non avendo più modo di tornare alla schermata di login.
-func _guest_card() -> Control:
+func _guest_card(is_guest: bool) -> Control:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
 
@@ -178,7 +231,7 @@ func _guest_card() -> Control:
 	inner.add_child(name_label)
 
 	var who := Label.new()
-	who.text = "Stai giocando come ospite"
+	who.text = "Stai giocando come ospite" if is_guest else "Nessun account collegato"
 	who.add_theme_font_size_override("font_size", 16)
 	who.add_theme_color_override("font_color", Style.TEXT_DIM)
 	inner.add_child(who)
@@ -190,6 +243,9 @@ func _guest_card() -> Control:
 	login.add_theme_color_override("font_color", Style.INK)
 	Style.apply_plate(login, Style.GOLD, Style.GOLD_DEEP, 14, 4)
 	login.pressed.connect(func() -> void:
+		# Senza, login.gd vedrebbe is_guest() vero e rimbalzerebbe dritto al
+		# menu — il pulsante sembrerebbe non fare nulla.
+		LoginScreen.force_prompt = true
 		get_tree().change_scene_to_file("res://ui/login.tscn"))
 	inner.add_child(login)
 
@@ -208,33 +264,39 @@ func _privacy_link(host: String) -> Control:
 
 
 func _confirm_delete_account(auth: Node) -> void:
-	var dialog := ConfirmationDialog.new()
-	dialog.title = "Elimina account"
-	dialog.dialog_text = "Questa azione è irreversibile: profilo, statistiche e civiltà sbloccate verranno cancellati dal server. Il single-player resta disponibile come ospite."
-	dialog.ok_button_text = "Elimina"
-	dialog.cancel_button_text = "Annulla"
-	add_child(dialog)
+	var dialog := ModalDialog.confirm(self, "Elimina account",
+		"Questa azione è irreversibile: profilo, statistiche e civiltà sbloccate "
+		+ "verranno cancellati dal server.\n\nIl single-player resta disponibile come ospite.",
+		"Elimina")
 	dialog.confirmed.connect(func() -> void:
 		if not auth.account_deletion_completed.is_connected(_on_account_deletion_completed):
 			auth.account_deletion_completed.connect(_on_account_deletion_completed, CONNECT_ONE_SHOT)
 		auth.delete_account())
-	dialog.canceled.connect(dialog.queue_free)
-	dialog.confirmed.connect(dialog.queue_free)
-	dialog.popup_centered()
 
 
+## Cancellato l'account non si è più loggati, ma nemmeno ospiti: in quello
+## stato questa schermata non avrebbe né la card Account né quella Ospite, e
+## resterebbe un pannello senza vie d'uscita. Si riparte quindi dalla scena di
+## login, che è il punto in cui si sceglie di nuovo fra account e ospite.
 func _on_account_deletion_completed(success: bool) -> void:
-	var notice := AcceptDialog.new()
-	notice.title = "Elimina account"
-	notice.dialog_text = "Account eliminato." if success else "Eliminazione non riuscita. Riprova più tardi."
-	add_child(notice)
-	notice.confirmed.connect(notice.queue_free)
-	notice.canceled.connect(notice.queue_free)
-	notice.popup_centered()
-	if success:
-		# la card Account non ha più senso: si rifà la schermata alla prossima apertura
-		visible = false
-		closed.emit()
+	if not success:
+		ModalDialog.notice(self, "Elimina account",
+			"Eliminazione non riuscita. Riprova più tardi.")
+		return
+	var notice := ModalDialog.notice(self, "Account eliminato",
+		"Il tuo account è stato cancellato dal server.\n\nTorni alla schermata "
+		+ "iniziale, dove puoi crearne uno nuovo o giocare come ospite.")
+	# Anche su annullamento (tasto indietro): da qui non si torna indietro.
+	notice.confirmed.connect(_go_to_login)
+	notice.cancelled.connect(_go_to_login)
+
+
+func _go_to_login() -> void:
+	# delete_account() passa da logout(), che azzera anche la modalità ospite,
+	# quindi login.tscn mostrerebbe il modulo comunque. Il flag lo garantisce
+	# a prescindere, senza dipendere da quel dettaglio di un altro file.
+	LoginScreen.force_prompt = true
+	get_tree().change_scene_to_file("res://ui/login.tscn")
 
 
 func _on_volume_changed(value: float) -> void:
@@ -245,3 +307,13 @@ func _on_volume_changed(value: float) -> void:
 func _refresh_volume_label(value: float) -> void:
 	if _volume_label != null:
 		_volume_label.text = "%d%%" % roundi(value * 100.0)
+
+
+func _on_music_changed(value: float) -> void:
+	get_node("/root/Profile").set_music_volume(value)
+	_refresh_music_label(value)
+
+
+func _refresh_music_label(value: float) -> void:
+	if _music_label != null:
+		_music_label.text = "%d%%" % roundi(value * 100.0)

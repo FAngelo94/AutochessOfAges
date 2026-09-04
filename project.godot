@@ -23,6 +23,7 @@ Portraits="*res://art/unit_portraits.gd"
 Store="*res://monetization/store.gd"
 Auth="*res://net/auth.gd"
 Sfx="*res://audio/sfx.gd"
+Music="*res://audio/music.gd"
 
 [display]
 

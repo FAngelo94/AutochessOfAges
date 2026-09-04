@@ -32,7 +32,7 @@ var _hp_label: Label
 var _gold_label: Label
 var _level_label: Label
 var _rank_label: Label
-var _stats_label: Label
+var _stats_label: RichTextLabel
 var _log_label: RichTextLabel
 var _shop_row: HBoxContainer
 var _board_rows: VBoxContainer
@@ -54,6 +54,9 @@ var _prep_phase_bar: PhaseBar
 ## Secondi che restano alla preparazione locale. < 0 = disarmato (battaglia in
 ## corso, partita finita, o giocatore eliminato).
 var _prep_left: float = -1.0
+## Ultimo secondo intero per cui è stato emesso il bip del conto alla rovescia
+## (ultimi 10 s di preparazione). -1 = nessuno / fuori dalla finestra.
+var _last_prep_beep: int = -1
 var _reconnect_panel: Panel
 
 ## I controlli di negozio, griglia e panchina hanno numero fisso: vengono
@@ -92,7 +95,6 @@ var _combat_bottom_hp: Label
 var _combat_bottom_synergy_row: HBoxContainer
 var _combat_outcome: Label
 var _combat_hint: Label
-var _exit_confirm: ConfirmationDialog
 var _spectate_overlay: Panel
 var _spectate_view: CombatView
 var _spectate_title: Label
@@ -126,6 +128,14 @@ var _auto_close_left: float = -1.0
 ## RemoteSession Array[Dictionary]). Vuota finché la partita non è decisa.
 var _final_standings: Array = []
 var _match_recorded := false
+
+
+func _exit_tree() -> void:
+	# Tornando al menu la musica generale riprende; la imposta anche menu.gd,
+	# qui si evita solo il buco durante il cambio scena.
+	var music := get_node_or_null("/root/Music")
+	if music != null:
+		music.play_general()
 
 
 func _ready() -> void:
@@ -303,9 +313,16 @@ func _build_hud() -> Control:
 	_rank_label = _chip(chips, _glyph_label("🏆", Style.GOLD), 0.7,
 		"Posizione attuale. A parità di vita sta davanti chi l'ha persa più tardi.")
 
-	_stats_label = Label.new()
-	_stats_label.add_theme_font_size_override("font_size", 18)
-	_stats_label.add_theme_color_override("font_color", Style.TEXT_DIM)
+	# RichTextLabel (non Label) solo per poter evidenziare in rosso/grassetto il
+	# conteggio "Unità X/Y" quando il campo non è pieno — vedi _refresh().
+	_stats_label = RichTextLabel.new()
+	_stats_label.bbcode_enabled = true
+	_stats_label.fit_content = true
+	_stats_label.scroll_active = false
+	_stats_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_stats_label.add_theme_font_size_override("normal_font_size", 18)
+	_stats_label.add_theme_font_size_override("bold_font_size", 18)
+	_stats_label.add_theme_color_override("default_color", Style.TEXT_DIM)
 	column.add_child(_stats_label)
 
 	return column
@@ -1375,6 +1392,7 @@ func _process(delta: float) -> void:
 
 	_tick_combat_bar(delta)
 	_tick_preparation(delta)
+	_update_match_music()
 
 	# Countdown fluido della riga di stato per chi guarda da eliminato: senza
 	# questo si aggiornerebbe solo a ogni snapshot del server.
@@ -1413,7 +1431,12 @@ func _tick_preparation(delta: float) -> void:
 		and not _is_out_of_match()
 	_prep_phase_bar.visible = running
 	if not running:
+		_last_prep_beep = -1
 		return
+
+	var seconds_left: float = (_session as RemoteSession).prep_seconds_left \
+		if _session is RemoteSession else _prep_left
+	_prep_countdown_beep(seconds_left)
 
 	if _session is RemoteSession:
 		var total := _prep_phase_bar.total
@@ -1432,6 +1455,38 @@ func _tick_preparation(delta: float) -> void:
 		_session.request_ready()
 
 
+## Sceglie la traccia in base allo stato della partita: battaglia mentre l'overlay
+## di combattimento è visibile (anche da spettatore eliminato), preparazione
+## durante il conto alla rovescia, altrimenti il tema generale (risultati, lobby
+## interna). play_track() ignora la ripetizione, quindi si può chiamare a ogni frame.
+func _update_match_music() -> void:
+	var music := get_node_or_null("/root/Music")
+	if music == null:
+		return
+	if _combat_overlay.visible:
+		music.play_battle()
+	elif match_state.phase == MatchState.Phase.PREPARATION and not _is_out_of_match():
+		music.play_prep()
+	else:
+		music.play_general()
+
+
+## Un bip al secondo negli ultimi 10 secondi di preparazione, in locale e in
+## remoto. Deduplica sul secondo intero: _tick_preparation gira a ogni frame,
+## il suono deve scattare una volta sola per secondo.
+func _prep_countdown_beep(seconds_left: float) -> void:
+	if seconds_left <= 0.0 or seconds_left > 10.0:
+		_last_prep_beep = -1
+		return
+	var whole := int(ceil(seconds_left))
+	if whole == _last_prep_beep:
+		return
+	_last_prep_beep = whole
+	var sfx := get_node_or_null("/root/Sfx")
+	if sfx != null:
+		sfx.play("countdown")
+
+
 ## Riarma il conto alla rovescia della preparazione all'inizio di ogni round.
 ## Il primo round e i successivi possono durare diversamente (data/balance.json),
 ## quindi la durata si rilegge ogni volta invece di essere memorizzata.
@@ -1442,6 +1497,7 @@ func _restart_preparation_timer() -> void:
 	var first := match_state.stage <= 1 and match_state.round_index <= 1
 	var total := float(rounds["first_round_preparation_seconds"] if first else rounds["preparation_seconds"])
 	_prep_phase_bar.configure(total)
+	_last_prep_beep = -1
 	# In remoto il countdown è quello del server: la barra lo rispecchia e basta.
 	_prep_left = -1.0 if _session is RemoteSession else total
 
@@ -1738,23 +1794,29 @@ func _on_rank_updated(mmr: int, delta: int) -> void:
 ## partita in corso (il cambio di scena la distrugge), quindi un tocco per
 ## sbaglio sul menu non deve poter buttare via un round già in corso.
 func _on_menu_button_pressed() -> void:
-	if _exit_confirm == null:
-		_exit_confirm = ConfirmationDialog.new()
-		_exit_confirm.cancel_button_text = "Annulla"
-		_exit_confirm.confirmed.connect(_on_exit_confirmed)
-		add_child(_exit_confirm)
-	if session_mode == SessionMode.REMOTE:
+	# Una modale nuova a ogni apertura: ModalDialog si libera da sola alla
+	# risposta, quindi non c'è niente da tenere in un campo.
+	var dialog: ModalDialog
+	if not _final_standings.is_empty():
+		# La partita per il giocatore è già finita (è nella schermata della
+		# classifica): uscire non è una resa, non cambia nulla del risultato.
+		dialog = ModalDialog.confirm(self, "Uscire dalla partita?",
+			"Vuoi tornare al menu?",
+			"Esci")
+	elif session_mode == SessionMode.REMOTE:
 		# Online non si può distruggere la scena e sparire: è una resa.
-		_exit_confirm.dialog_text = "Abbandonare la partita? Verrà contata come sconfitta."
-		_exit_confirm.ok_button_text = "Abbandona"
+		dialog = ModalDialog.confirm(self, "Abbandonare la partita?",
+			"La partita verrà contata come una sconfitta e il posto in classifica ne risentirà.",
+			"Abbandona")
 	else:
-		_exit_confirm.dialog_text = "Uscire dal combattimento? La partita in corso andrà persa."
-		_exit_confirm.ok_button_text = "Esci"
-	_exit_confirm.popup_centered()
+		dialog = ModalDialog.confirm(self, "Uscire dal combattimento?",
+			"La partita in corso andrà persa: non è possibile riprenderla da dove l'hai lasciata.",
+			"Esci")
+	dialog.confirmed.connect(_on_exit_confirmed)
 
 
 func _on_exit_confirmed() -> void:
-	if session_mode == SessionMode.REMOTE and _session != null:
+	if session_mode == SessionMode.REMOTE and _session != null and _final_standings.is_empty():
 		_session.leave()  # invia SURRENDER
 	_on_menu_pressed()
 
@@ -1860,6 +1922,18 @@ func _on_bench_slot_pressed(slot: int) -> void:
 # Aggiornamento della vista
 # --------------------------------------------------------------------------
 
+## Oro bonus che la serie corrente darà a fine round, mostrato di fianco al
+## contatore così il giocatore capisce a cosa serve. Stessa logica di
+## Player.grant_round_income (economy.streak_thresholds), sul valore assoluto:
+## anche una serie di sconfitte rende.
+func _streak_gold_bonus(streak: int) -> int:
+	var bonus := 0
+	for threshold in GameData.balance()["economy"]["streak_thresholds"]:
+		if absi(streak) >= int(threshold["streak"]):
+			bonus = int(threshold["gold"])
+	return bonus
+
+
 func _refresh() -> void:
 	# Uno snapshot dal server significa che la connessione regge: via il pannello.
 	if _reconnect_panel != null and _reconnect_panel.visible:
@@ -1875,9 +1949,19 @@ func _refresh() -> void:
 	_gold_label.text = str(p.gold)
 	_level_label.text = "%d  (%d/%d)" % [p.level, p.xp, p.xp_to_next_level()]
 	_rank_label.text = "%d°" % match_state.rank_of(p)
-	_stats_label.text = "%s    Unità %d/%d    Serie %+d" % [
-		p.display_name, p.board_count(), p.max_board_units(), p.streak,
-	]
+	# "Unità X/Y" in rosso e grassetto finché il giocatore schiera meno unità di
+	# quante potrebbe: è l'unico posto che dice quanti personaggi può mettere in
+	# campo, e va notato mentre la panchina è ancora piena.
+	var deployed := p.board_count()
+	var cap := p.max_board_units()
+	var units_text := "Unità %d/%d" % [deployed, cap]
+	if deployed < cap:
+		units_text = "[b][color=#e87272]%s[/color][/b]" % units_text
+	var streak_text := "Serie %+d" % p.streak
+	var streak_gold := _streak_gold_bonus(p.streak)
+	if streak_gold > 0:
+		streak_text += " (+%d oro)" % streak_gold
+	_stats_label.text = "%s    %s    %s" % [p.display_name, units_text, streak_text]
 
 	_sell_button.disabled = selected == null
 	_sell_button.text = "Vendi · %d" % selected.sell_value() if selected != null else "Vendi"

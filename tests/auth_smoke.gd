@@ -101,6 +101,14 @@ func _process(_delta: float) -> bool:
 				"il menu si costruisce con l'autoload Auth registrato")
 			check(root.get_node("/root/Auth").is_logged_in() == false,
 				"aprire il menu non effettua né forza il login")
+			# La modalità è una preferenza persistita in user://profile.cfg: se
+			# l'ultima partita giocata su questa macchina era "contro
+			# giocatori", premere Battaglia aprirebbe quel ramo e il test
+			# fallirebbe per lo stato lasciato dal giocatore, non per un
+			# difetto. Qui interessa il single-player, quindi lo si impone —
+			# scrivendo il campo e non _on_mode_pressed(), che salverebbe la
+			# preferenza e cambierebbe l'impostazione di chi esegue i test.
+			_menu._match_mode = _menu.MODE_CPU
 			_menu._on_play_pressed()
 		8:
 			section("Single-player: parte da sloggati e offline")
