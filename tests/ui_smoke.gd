@@ -47,6 +47,15 @@ func _run(main: Control) -> void:
 	var saved_tips: PackedStringArray = profile.seen_tips.duplicate()
 
 	check(main.match_state != null, "la partita viene creata all'avvio")
+	# Stessa cura del profilo per la cronologia locale: il test gioca una
+	# partita vera e la scrive in user://history.json, che e' quella di chi
+	# sviluppa. Si annota e si rimette com'era in fondo.
+	var saved_history := MatchLog.local_matches()
+	var history_before := saved_history.size()
+	# La telemetria di bilanciamento va rimessa a posto tale e quale: qui le
+	# scelte le fa il test, non un giocatore, e quei numeri falserebbero il
+	# report di tools/unit_balance.gd.
+	var saved_telemetry := _read_text(MatchLog.TELEMETRY_PATH)
 
 	# Il suggerimento del negozio compare da solo alla prima partita; una volta
 	# verificato, si disattivano le bolle per il resto del test — qui si pilota
@@ -169,6 +178,19 @@ func _run(main: Control) -> void:
 		"a fine partita il pulsante propone una nuova partita",
 		main._fight_button.text)
 
+	# La partita finita deve essere finita anche nella cronologia locale: e'
+	# l'unico posto dove una partita contro il computer viene conservata.
+	var history := MatchLog.local_matches()
+	check(history.size() == history_before + 1,
+		"la partita conclusa entra nella cronologia locale",
+		"%d -> %d" % [history_before, history.size()])
+	if not history.is_empty():
+		check(int(history[0].get("placement", 0)) == main.player().placement,
+			"la cronologia registra il piazzamento vero")
+		check(not (history[0].get("units", []) as Array).is_empty()
+				or main.player().board_units().is_empty(),
+			"la cronologia registra la formazione finale")
+
 	# Riavvio.
 	main._on_fight_pressed()
 	check(main.match_state.phase == MatchState.Phase.PREPARATION, "si può iniziare una nuova partita")
@@ -180,8 +202,28 @@ func _run(main: Control) -> void:
 	profile.seen_tips = saved_tips
 	profile.save_profile()
 
+	var restore := FileAccess.open(MatchLog.HISTORY_PATH, FileAccess.WRITE)
+	if restore != null:
+		restore.store_string(JSON.stringify(saved_history))
+		restore.close()
+	var telemetry_restore := FileAccess.open(MatchLog.TELEMETRY_PATH, FileAccess.WRITE)
+	if telemetry_restore != null:
+		telemetry_restore.store_string(saved_telemetry)
+		telemetry_restore.close()
+
 	print("\n%d superati, %d falliti" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
+
+
+func _read_text(path: String) -> String:
+	if not FileAccess.file_exists(path):
+		return ""
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return ""
+	var text := file.get_as_text()
+	file.close()
+	return text
 
 
 var _seen: Dictionary = {}

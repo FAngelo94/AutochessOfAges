@@ -3,7 +3,7 @@
 
   "match": {
     "players": 8,
-    "starting_hp": 10,
+    "starting_hp": 55,
     "board_columns": 5,
     "board_rows": 4,
     "bench_size": 5,
@@ -25,7 +25,7 @@
       { "streak": 7, "gold": 3 }
     ],
     "reroll_cost": 2,
-    "buy_xp_cost": 4,
+    "buy_xp_cost": 3,
     "buy_xp_amount": 4,
     "sell_refund_full_price": false
   },
@@ -35,8 +35,8 @@
     "max_level": 9,
     "starting_level": 2,
     "starting_xp": 0,
-    "xp_per_round": 2,
-    "xp_to_next": [2, 6, 10, 20, 36, 56, 80, 100],
+    "xp_per_round": 4,
+    "xp_to_next": [2, 6, 10, 20, 30, 40, 56, 100],
     "units": [1, 2, 3, 4, 5, 6, 6, 6, 6]
   },
 
@@ -47,15 +47,15 @@
     "3": [0.75, 0.25, 0.00, 0.00, 0.00],
     "4": [0.55, 0.30, 0.15, 0.00, 0.00],
     "5": [0.45, 0.33, 0.20, 0.02, 0.00],
-    "6": [0.30, 0.40, 0.25, 0.05, 0.00],
-    "7": [0.19, 0.30, 0.35, 0.15, 0.01],
-    "8": [0.18, 0.25, 0.32, 0.22, 0.03],
-    "9": [0.10, 0.20, 0.25, 0.35, 0.10]
+    "6": [0.26, 0.40, 0.25, 0.09, 0.00],
+    "7": [0.13, 0.30, 0.35, 0.20, 0.02],
+    "8": [0.08, 0.25, 0.32, 0.27, 0.08],
+    "9": [0.00, 0.16, 0.25, 0.38, 0.21]
   },
 
   "pool": {
     "_comment": "Copie disponibili nel pool CONDIVISO per ogni unità, in base al costo. È la meccanica di contesa: se gli avversari comprano, tu peschi meno.",
-    "copies_per_cost": { "1": 29, "2": 22, "3": 18, "4": 12, "5": 10 }
+    "copies_per_cost": { "1": 29, "2": 29, "3": 29, "4": 29, "5": 29 }
   },
 
   "star_scaling": {
@@ -82,15 +82,15 @@
 
   "damage_to_player": {
     "_comment": "Danno alla vita del giocatore che perde: base per stage + 1 per ogni unità nemica sopravvissuta, pesata per stella.",
-    "stage_base": [2, 3, 5, 6, 7, 8, 9, 10],
-    "per_surviving_unit": [1, 2, 3]
+    "stage_base": [1, 1, 1, 2, 3, 4, 6, 8],
+    "per_surviving_unit": [1, 1, 1]
   },
 
   "rounds": {
     "_comment": "Struttura degli stage. Ogni round è uno scontro tra giocatori.",
     "stages": 8,
     "rounds_per_stage": 5,
-    "preparation_seconds": 30.0,
-    "first_round_preparation_seconds": 30.0
+    "preparation_seconds": 18.0,
+    "first_round_preparation_seconds": 18.0
   }
 }

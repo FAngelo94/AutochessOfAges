@@ -69,7 +69,18 @@ func _test_protocol() -> void:
 	check(round_trip.get("n") == 7, "encode->decode conserva i campi scalari")
 	check(round_trip.get("cell") == Vector2i(3, 4), "encode->decode conserva Vector2i")
 
-	check(Protocol.PROTOCOL_VERSION == 3, "PROTOCOL_VERSION == 3")
+	check(Protocol.PROTOCOL_VERSION == 4, "PROTOCOL_VERSION == 4")
+
+	# La cronologia passa dal master come tutto il resto: il client non parla
+	# mai HTTP col database.
+	var hist := Protocol.decode(Protocol.encode(Protocol.make(Protocol.HISTORY_REQUEST, {
+		"session_token": "t", "limit": 20})))
+	check(Protocol.message_type(hist) == Protocol.HISTORY_REQUEST
+		and int(hist.get("limit", 0)) == 20, "HISTORY_REQUEST sopravvive alla codifica")
+	var data := Protocol.decode(Protocol.encode(Protocol.make(Protocol.HISTORY_DATA, {
+		"matches": [{"match_id": "m", "placement": 2}]})))
+	check(Protocol.message_type(data) == Protocol.HISTORY_DATA
+		and data.get("matches", []).size() == 1, "HISTORY_DATA sopravvive alla codifica")
 
 
 func _test_match_token() -> void:
@@ -360,6 +371,34 @@ func _has_type(msgs: Array, t: String) -> Dictionary:
 	return {}
 
 
+## Un turno di preparazione minimo per il posto umano: compra la prima casella
+## del negozio e schiera tutto quello che ha in panchina. Senza, il posto umano
+## arriva a fine partita senza aver mai messo un'unita' in campo e non produce
+## ne' telemetria ne' una partita realistica.
+func _play_preparation(runner: MatchRunner, peer: int) -> void:
+	if runner.phase() != MatchRunner.Phase.PREPARATION:
+		return
+	runner.handle_packet(peer, Protocol.encode(Protocol.make(Protocol.CMD_BUY, {"slot": 0})))
+	var player: Player = runner.state().players[0]
+	for inst in player.bench_units():
+		if not player.can_deploy_more():
+			return
+		var cell := _free_cell(player)
+		if cell.x < 0:
+			return
+		runner.handle_packet(peer, Protocol.encode(Protocol.make(Protocol.CMD_MOVE_BOARD, {
+			"uid": inst.uid, "cell": cell})))
+
+
+func _free_cell(player: Player) -> Vector2i:
+	var board: Dictionary = GameData.balance()["match"]
+	for y in int(board["board_rows"]):
+		for x in int(board["board_columns"]):
+			if player.unit_at_cell(Vector2i(x, y)) == null:
+				return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+
 func _test_runner_full_match() -> void:
 	section("MatchRunner — match completo 1 umano + 7 bot")
 
@@ -372,6 +411,7 @@ func _test_runner_full_match() -> void:
 	var finished := {}
 	var guard := 0
 	while not runner.is_finished() and guard < 400:
+		_play_preparation(runner, peer)
 		runner.handle_packet(peer, Protocol.encode(Protocol.make(Protocol.READY, {})))
 		runner.tick(60.0)   # scade la preparazione -> resolve
 		runner.tick(120.0)  # scade il ritmo del combattimento -> round dopo / fine
@@ -402,6 +442,20 @@ func _test_runner_full_match() -> void:
 			human = s
 	check(not human.is_empty() and int(human.get("placement", 0)) >= 1,
 		"il posto umano ha un piazzamento coerente")
+
+	# Telemetria di bilanciamento: e' quello che finisce in match_units nella
+	# stessa transazione del risultato (db/migrations/0004_match_units.sql).
+	var rows := runner.telemetry_rows()
+	check(not rows.is_empty(), "il match finito produce righe di telemetria", str(rows.size()))
+	var only_human := true
+	var coherent := true
+	for row in rows:
+		if String(row.get("profile_id", "")) != HUMAN_UID:
+			only_human = false
+		if int(row.get("rounds_fielded", 0)) <= 0 or int(row.get("placement", 0)) <= 0:
+			coherent = false
+	check(only_human, "solo i posti umani finiscono nel database")
+	check(coherent, "ogni riga ha round schierati e piazzamento")
 
 
 ## A5 — dopo un round, un client può chiedere lo schieramento di un altro

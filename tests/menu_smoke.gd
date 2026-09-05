@@ -94,6 +94,27 @@ func _run() -> void:
 		"il filtro per civiltà riduce l'elenco", str(collection._grid.get_child_count()))
 	collection.visible = false
 
+	# Cronologia: da ospite (nessun login) deve aprirsi lo stesso e mostrare le
+	# sole partite locali, senza errori — e' il percorso di chi gioca offline.
+	var history: HistoryPanel = _menu._history_panel
+	var saved_history := MatchLog.local_matches()
+	var restore := FileAccess.open(MatchLog.HISTORY_PATH, FileAccess.WRITE)
+	if restore != null:
+		restore.store_string(JSON.stringify([
+			{"mode": "cpu", "placement": 2, "hero_id": "cesare", "hp": 30,
+			 "ended_at": "2026-01-01T10:00:00", "units": [{"unit_id": "legionarius", "final_star": 2}]}]))
+		restore.close()
+	history.open()
+	check(history.visible, "la cronologia si apre")
+	check(history._list.get_child_count() == 1,
+		"la cronologia elenca le partite locali", str(history._list.get_child_count()))
+	check(history._status.text.contains("1"), "dice quante partite ci sono", history._status.text)
+	history.visible = false
+	var put_back := FileAccess.open(MatchLog.HISTORY_PATH, FileAccess.WRITE)
+	if put_back != null:
+		put_back.store_string(JSON.stringify(saved_history))
+		put_back.close()
+
 	# Guida: si apre, elenca tutti i capitoli e marca la voce come vista.
 	check(not _profile.has_seen_tip("guide_opened"), "la guida non è ancora stata vista")
 	_menu._on_guide_pressed()

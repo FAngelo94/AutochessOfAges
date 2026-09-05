@@ -18,6 +18,7 @@ var _wait_ticks := 0
 ## visti sul profilo reale: senza ripristinarlo, chi lancia lo strumento non
 ## vedrebbe più quei suggerimenti nella prossima partita vera.
 var _saved_tips := PackedStringArray()
+var _saved_history: Array = []
 
 
 func _initialize() -> void:
@@ -100,13 +101,55 @@ func _process(_delta: float) -> bool:
 		56:
 			_save("battaglia.png")
 		57:
+			# La cronologia chiude il giro: serve di nuovo una schermata di menu
+			# viva (quella di partenza e' stata liberata al frame 11) e qualche
+			# partita da mostrare, altrimenti si fotografa una lista vuota.
+			root.remove_child(_main)
+			_main.queue_free()
+			_saved_history = MatchLog.local_matches()
+			_seed_history()
+			_menu = (load("res://ui/menu.tscn") as PackedScene).instantiate()
+			root.add_child(_menu)
+		58:
+			_menu._history_panel.open()
+		59:
+			_save("cronologia.png")
 			var profile := root.get_node("/root/Profile")
 			profile.seen_tips = _saved_tips
 			profile.save_profile()
+			_restore_history()
 			print("schermate salvate in %s" % _output_dir)
 			quit(0)
 
 	return false
+
+
+## Cronologia di comodo per lo scatto: tre partite finte, poi si rimette il
+## file com'era — user://history.json e' quello di chi sviluppa.
+func _seed_history() -> void:
+	var rows := [
+		{"mode": "cpu", "placement": 1, "hero_id": "cesare", "hp": 74, "rounds": 28,
+		 "ended_at": "2026-09-05T18:40:00",
+		 "units": [{"unit_id": "legionarius", "final_star": 3}, {"unit_id": "equites", "final_star": 2},
+			{"unit_id": "sagittarius", "final_star": 2}]},
+		{"mode": "cpu", "placement": 4, "hero_id": "vercingetorige", "hp": 12, "rounds": 24,
+		 "ended_at": "2026-09-05T18:05:00",
+		 "units": [{"unit_id": "gaul_champion", "final_star": 2}, {"unit_id": "gaul_druid", "final_star": 1}]},
+		{"mode": "cpu", "placement": 7, "hero_id": "cesare", "hp": 0, "rounds": 15,
+		 "ended_at": "2026-09-04T21:12:00",
+		 "units": [{"unit_id": "legionarius", "final_star": 1}]},
+	]
+	var file := FileAccess.open(MatchLog.HISTORY_PATH, FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify(rows))
+		file.close()
+
+
+func _restore_history() -> void:
+	var file := FileAccess.open(MatchLog.HISTORY_PATH, FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify(_saved_history))
+		file.close()
 
 
 func _save(file_name: String) -> void:

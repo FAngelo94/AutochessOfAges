@@ -278,6 +278,25 @@ func delete_account() -> void:
 			account_deletion_completed.emit(done))
 
 
+## Cronologia delle partite online del giocatore. cb.call(ok: bool, matches: Array),
+## dalla piu' recente. Da sloggati o da ospiti risponde subito con una lista
+## vuota: la schermata Cronologia mostrera' solo le partite locali, senza errori.
+func request_history(limit: int, cb: Callable) -> void:
+	if not is_logged_in():
+		cb.call(false, [])
+		return
+	_master_request(
+		Protocol.make(Protocol.HISTORY_REQUEST, {
+			"session_token": _access_token,
+			"limit": limit,
+		}),
+		[Protocol.HISTORY_DATA, Protocol.AUTH_FAIL],
+		func(ok: bool, msg: Dictionary) -> void:
+			var done := ok and Protocol.message_type(msg) == Protocol.HISTORY_DATA
+			var matches: Array = msg.get("matches", []) if done else []
+			cb.call(done, matches))
+
+
 # --------------------------------------------------------------------------
 # Pompa
 # --------------------------------------------------------------------------

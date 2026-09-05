@@ -11,7 +11,10 @@ produzione senza riportare la modifica in una nuova migrazione.
 |---|---|
 | `migrations/0001_initial.sql` | tabelle, funzioni account/sessioni, RPC `record_match_result`, ruoli e grant |
 | `migrations/0002_rank_mmr.sql` | `record_match_result` calcola anche l'mmr a piazzamento e ritorna i delta per client |
+| `migrations/0003_email_password.sql` | account con email e password accanto a Google (bcrypt via `pgcrypto`) |
+| `migrations/0004_match_units.sql` | `match_units` + telemetria in `record_match_result`, RPC `player_match_history`, vista `unit_balance` |
 | `apply.sh` | applica le migrazioni non ancora presenti, traccia in `public.schema_migrations` |
+| `unit_balance.sql` | le query di bilanciamento da lanciare a mano (`psql "$DB_URL" -f db/unit_balance.sql`) |
 | `docker-compose.dev.yml` | Postgres + PostgREST in locale, al posto di `supabase start` |
 | `seed.sql` | dati di comodo per lo sviluppo locale |
 
@@ -22,8 +25,13 @@ produzione senza riportare la modifica in una nuova migrazione.
 | `profiles` | il server (master) | `favourite_*` via PROFILE_SET; `upsert_google_account` per il resto |
 | `player_stats` | il server (bundle di login) | **solo** `record_match_result` (SECURITY DEFINER) |
 | `owned_civs` | il server (rivalidazione hero, bundle) | `upsert_google_account` per le default |
-| `match_history` | il server | `record_match_result` |
+| `match_history` | il server (RPC `player_match_history`) | `record_match_result` |
+| `match_units` | chi bilancia (vista `unit_balance`) | `record_match_result` |
 | `sessions` | — | `store_refresh_token` / `redeem_refresh_token` |
+
+Come `match_history`, `match_units` non ha FK verso `profiles` e `delete_account`
+non la ripulisce: sono partite gia' giocate, e i loro numeri restano validi per
+il bilanciamento anche quando l'account sparisce.
 
 Nessuna Row Level Security: PostgREST è raggiungibile solo dai processi sulla
 stessa macchina e il ruolo `autochess_app` è a privilegio minimo. Se il client

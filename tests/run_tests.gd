@@ -26,6 +26,7 @@ func _initialize() -> void:
 	_test_combat_time_limit()
 	_test_traits()
 	_test_full_match()
+	_test_telemetry()
 	_test_live_ranking()
 	_test_eliminated_cannot_shop()
 	_test_rematch_avoidance()
@@ -772,6 +773,102 @@ func _test_full_match() -> void:
 	check(max_units >= 5, "i bot accumulano unità", "unità massime %d" % max_units)
 
 	print("  (vincitore: %s, round: %d, livello max: %d)" % [standings[0].display_name, rounds, max_level])
+
+
+## La telemetria di bilanciamento (core/unit_telemetry.gd) e' agganciata a ogni
+## partita, locale o online: se cambiasse anche di un'unita' l'esito di una
+## partita a seed fisso, il determinismo — e con lui il multiplayer autoritativo
+## — sarebbe finito. Qui si verifica che osservare non cambi cio' che si osserva,
+## e che i conteggi per giocatore siano numeri veri (una fusione a 2 stelle resta
+## una riga sola, mai piu' round di quelli giocati).
+func _test_telemetry() -> void:
+	section("Telemetria di bilanciamento")
+
+	var plain := _play_bot_match(4242, null)
+	var telemetry := UnitTelemetry.new()
+	var watched := _play_bot_match(4242, telemetry)
+
+	check(plain["signature"] == watched["signature"],
+		"osservare la partita non ne cambia l'esito",
+		"%s vs %s" % [plain["signature"], watched["signature"]])
+	check(telemetry.match_rounds() == int(watched["rounds"]),
+		"conta tutti i round giocati",
+		"%d vs %d" % [telemetry.match_rounds(), int(watched["rounds"])])
+
+	# Nessun uid -> nessuna riga per il database: i bot non hanno un profilo.
+	check(telemetry.match_rows({}).is_empty(),
+		"i posti senza profilo non producono righe da scrivere")
+
+	var rows := telemetry.match_rows({0: "11111111-1111-1111-1111-111111111111"})
+	check(not rows.is_empty(), "il posto con un profilo produce righe", str(rows.size()))
+
+	var seen := {}
+	var too_many := ""
+	var missing_placement := ""
+	for row in rows:
+		var unit_id := String(row.get("unit_id", ""))
+		if seen.has(unit_id):
+			too_many = unit_id
+		seen[unit_id] = true
+		if int(row.get("rounds_fielded", 0)) > telemetry.match_rounds():
+			too_many = unit_id
+		if int(row.get("placement", 0)) <= 0:
+			missing_placement = unit_id
+		var decided := int(row.get("rounds_won", 0)) + int(row.get("rounds_lost", 0))
+		decided += int(row.get("rounds_drawn", 0))
+		if decided > int(row.get("rounds_fielded", 0)):
+			too_many = unit_id
+	check(too_many == "", "una riga per unita', mai piu' round di quelli giocati", too_many)
+	check(missing_placement == "", "ogni riga porta il piazzamento finale", missing_placement)
+
+	var deterministic := UnitTelemetry.new()
+	_play_bot_match(4242, deterministic)
+	check(str(deterministic.match_rows({0: "u"})) == str(telemetry.match_rows({0: "u"})),
+		"a parita' di seed la telemetria e' identica")
+
+	# La cronologia locale: scrittura e rilettura, ripristinando il file di
+	# partenza — user:// e' condiviso con la partita vera di chi lancia i test.
+	var saved := MatchLog.local_matches()
+	MatchLog.append_match({"mode": "cpu", "placement": 3, "hero_id": "cesare", "seed": 4242})
+	var reloaded := MatchLog.local_matches()
+	check(not reloaded.is_empty() and int(reloaded[0].get("placement", 0)) == 3,
+		"la cronologia locale si rilegge dalla piu' recente")
+	check(String(reloaded[0].get("ended_at", "")) != "",
+		"la cronologia locale data ogni partita")
+	var restore := FileAccess.open(MatchLog.HISTORY_PATH, FileAccess.WRITE)
+	if restore != null:
+		restore.store_string(JSON.stringify(saved))
+		restore.close()
+
+
+## Una partita di soli bot a seed fisso, con o senza telemetria agganciata.
+## Torna una firma dell'esito (piazzamenti e vita) confrontabile fra due run.
+func _play_bot_match(match_seed: int, telemetry: UnitTelemetry) -> Dictionary:
+	var state := MatchState.new(match_seed, 0)
+	var brains: Array[BotBrain] = []
+	var brain_rng := SimRNG.new(state.seed_value ^ 0x5EED)
+	for player in state.players:
+		brains.append(BotBrain.new(player, brain_rng.fork(player.index)))
+
+	if telemetry != null:
+		telemetry.begin_match()
+		state.round_resolved.connect(telemetry.on_round_resolved)
+
+	var rounds := 0
+	while state.phase != MatchState.Phase.FINISHED and rounds < 200:
+		state.start_round()
+		for brain in brains:
+			brain.play_preparation(state.stage)
+		state.resolve_round()
+		rounds += 1
+
+	if telemetry != null:
+		telemetry.on_match_finished(state)
+
+	var signature: Array = []
+	for player in state.standings():
+		signature.append("%d:%d:%d" % [player.index, player.placement, player.hp])
+	return {"rounds": rounds, "signature": ",".join(signature)}
 
 
 ## La classifica dal vivo: vita decrescente e, a parità, davanti chi l'ha persa

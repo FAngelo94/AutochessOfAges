@@ -67,9 +67,13 @@
             {
               "stat": "rage_per_death",
               "add": 0.08
+            },
+            {
+              "stat": "attack_speed_percent",
+              "add": 0.14
             }
           ],
-          "text": "Ogni alleato morto: +8% velocità d'attacco ai Galli"
+          "text": "+14% velocità d'attacco ai Galli, +8% aggiuntivo per ogni alleato morto"
         },
         {
           "count": 4,
@@ -166,7 +170,7 @@
           "effects": [
             {
               "stat": "hp_percent",
-              "add": 0.18
+              "add": 0.12
             }
           ],
           "text": "+18% salute ai Legionari"
@@ -177,7 +181,7 @@
           "effects": [
             {
               "stat": "hp_percent",
-              "add": 0.4
+              "add": 0.28
             },
             {
               "stat": "armor",

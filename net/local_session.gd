@@ -7,6 +7,10 @@ extends MatchSession
 
 var _state: MatchState
 var _brains: Array[BotBrain] = []
+## Telemetria di bilanciamento della partita in corso (core/unit_telemetry.gd).
+## Sola lettura sullo stato: non tocca l'RNG, la partita e' identica con o
+## senza. La sfrutta ui/main.gd a fine partita per scrivere user://telemetry.jsonl.
+var _telemetry := UnitTelemetry.new()
 
 
 func begin(match_seed: int = 0, hero_id: String = "") -> void:
@@ -21,6 +25,9 @@ func begin(match_seed: int = 0, hero_id: String = "") -> void:
 	for p in _state.players:
 		if p.is_bot:
 			_brains.append(BotBrain.new(p, brain_rng.fork(p.index)))
+
+	_telemetry.begin_match()
+	_state.round_resolved.connect(_telemetry.on_round_resolved)
 
 	_state.start_round()
 	round_started.emit(_state.stage, _state.round_index)
@@ -78,12 +85,18 @@ func request_ready() -> void:
 	round_concluded.emit(results)
 
 	if _state.phase == MatchState.Phase.FINISHED:
+		_telemetry.on_match_finished(_state)
 		match_finished.emit(_state.standings())
 	else:
 		_state.start_round()
 		round_started.emit(_state.stage, _state.round_index)
 
 	state_changed.emit()
+
+
+## Telemetria della partita, per chi la vuole salvare (app/match_log.gd).
+func telemetry() -> UnitTelemetry:
+	return _telemetry
 
 
 func can_spectate(player_index: int) -> bool:

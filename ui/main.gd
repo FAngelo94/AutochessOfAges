@@ -1774,9 +1774,42 @@ func _show_match_over() -> void:
 	if not _match_recorded:
 		_match_recorded = true
 		_profile.record_match(player().placement, session_mode == SessionMode.REMOTE)
+		_record_local_history()
 	if session_mode == SessionMode.REMOTE:
 		_ready_button.visible = false
 		_prep_label.text = "Partita conclusa — usa ☰ per uscire"
+
+
+## Cronologia e telemetria delle partite locali (app/match_log.gd). Solo in
+## locale: online le scrive il server, che e' l'unico a vedere tutte le
+## formazioni, e la cronologia arriva dal DB. Agganciato al medesimo guardiano
+## di record_match(), quindi una partita non puo' finire due volte nel file.
+func _record_local_history() -> void:
+	if session_mode != SessionMode.LOCAL:
+		return
+	var telemetry := _session.telemetry() if _session != null else null
+	MatchLog.append_match({
+		"mode": "cpu",
+		"placement": player().placement,
+		"players": match_state.players.size(),
+		"hp": player().hp,
+		"hero_id": player().hero_id,
+		"seed": match_state.seed_value,
+		"rounds": telemetry.match_rounds() if telemetry != null else 0,
+		"units": _final_units(),
+	})
+	if telemetry != null:
+		MatchLog.append_telemetry(telemetry.report_dict({"seed": match_state.seed_value}))
+
+
+## La formazione con cui il giocatore locale ha chiuso, nella stessa forma che
+## il server manda per le partite online (unit_id + stella): cosi' HistoryPanel
+## legge le due sorgenti con lo stesso codice.
+func _final_units() -> Array:
+	var out: Array = []
+	for inst in player().board_units():
+		out.append({"unit_id": inst.def.id, "final_star": inst.star})
+	return out
 
 
 ## L'mmr arriva in ritardo rispetto a MATCH_FINISHED (RANK_UPDATE — vedi
@@ -1981,6 +2014,59 @@ func _refresh() -> void:
 			break
 
 
+## --- Drag & drop delle unità ----------------------------------------------
+## Alternativa al "tocca per selezionare, tocca per posizionare": si trascina
+## l'unità dalla panchina al campo, dal campo alla panchina o tra celle del
+## campo. Il rilascio chiama gli stessi request_move_* del tocco, che gestiscono
+## già lo scambio con l'eventuale occupante.
+
+## Cosa parte da questa casella. null = niente da trascinare (negozio, casella
+## vuota, fuori dalla preparazione, giocatore eliminato).
+func slot_drag_data(slot: UnitSlot) -> Variant:
+	if _combat_overlay.visible or match_state.phase != MatchState.Phase.PREPARATION:
+		return null
+	if _is_out_of_match() or slot.zone == UnitSlot.Zone.SHOP:
+		return null
+	var unit := _slot_unit(slot)
+	if unit == null:
+		return null
+	selected = unit
+	_refresh()
+	return {"uid": unit.uid}
+
+
+## Si può rilasciare su qualsiasi cella del campo o slot della panchina (anche
+## occupati: sarà uno scambio). Non sul negozio.
+func slot_can_drop(slot: UnitSlot, data: Variant) -> bool:
+	if typeof(data) != TYPE_DICTIONARY or not data.has("uid"):
+		return false
+	return slot.zone == UnitSlot.Zone.BOARD or slot.zone == UnitSlot.Zone.BENCH
+
+
+func slot_drop(slot: UnitSlot, data: Variant) -> void:
+	var uid := int(data["uid"])
+	match slot.zone:
+		UnitSlot.Zone.BOARD:
+			_session.request_move_to_board(uid, slot.slot_key as Vector2i)
+		UnitSlot.Zone.BENCH:
+			_session.request_move_to_bench(uid, int(slot.slot_key))
+	selected = null
+	_refresh()
+
+
+## L'unità che occupa la casella, o null.
+func _slot_unit(slot: UnitSlot) -> UnitInstance:
+	var p := player()
+	match slot.zone:
+		UnitSlot.Zone.BOARD:
+			return p.unit_at_cell(slot.slot_key as Vector2i)
+		UnitSlot.Zone.BENCH:
+			for unit in p.bench_units():
+				if unit.bench_slot == int(slot.slot_key):
+					return unit
+	return null
+
+
 ## Crea i controlli a numero fisso. Chiamata una sola volta, da _ready().
 func _build_slot_buttons() -> void:
 	var match_data: Dictionary = GameData.balance()["match"]
@@ -1988,6 +2074,9 @@ func _build_slot_buttons() -> void:
 	for slot in int(match_data["shop_slots"]):
 		var button := UnitSlot.new()
 		button.custom_minimum_size = SHOP_SLOT_SIZE
+		button.zone = UnitSlot.Zone.SHOP
+		button.slot_key = slot
+		button.drag_agent = self
 		button.pressed.connect(_on_shop_slot_pressed.bind(slot))
 		_shop_row.add_child(button)
 		_shop_buttons.append(button)
@@ -2009,6 +2098,9 @@ func _build_slot_buttons() -> void:
 			var button := UnitSlot.new()
 			button.hexagonal = true
 			button.custom_minimum_size = CELL_SIZE
+			button.zone = UnitSlot.Zone.BOARD
+			button.slot_key = cell
+			button.drag_agent = self
 			button.pressed.connect(_on_cell_pressed.bind(cell))
 			row_box.add_child(button)
 			_cell_buttons[cell] = button
@@ -2016,6 +2108,9 @@ func _build_slot_buttons() -> void:
 	for slot in int(match_data["bench_size"]):
 		var button := UnitSlot.new()
 		button.custom_minimum_size = BENCH_SLOT_SIZE
+		button.zone = UnitSlot.Zone.BENCH
+		button.slot_key = slot
+		button.drag_agent = self
 		button.pressed.connect(_on_bench_slot_pressed.bind(slot))
 		_bench_row.add_child(button)
 		_bench_buttons.append(button)

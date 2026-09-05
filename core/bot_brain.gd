@@ -14,6 +14,9 @@ var economy_floor: int
 var aggression: float
 
 var _rng: SimRNG
+## Stage corrente, aggiornato a inizio turno: serve a smorzare economy_floor
+## nelle fasi avanzate (vedi _effective_floor).
+var _stage: int = 1
 
 
 func _init(target: Player, rng: SimRNG) -> void:
@@ -32,6 +35,7 @@ func _init(target: Player, rng: SimRNG) -> void:
 func play_preparation(stage: int) -> void:
 	if not player.is_alive():
 		return
+	_stage = stage
 
 	_buy_from_shop()
 	_maybe_level_up(stage)
@@ -47,11 +51,37 @@ func _buy_from_shop() -> void:
 		if def == null:
 			continue
 		if not player.can_buy(slot):
-			continue
+			# L'unico motivo di rifiuto recuperabile è la panchina piena:
+			# se l'unità serve davvero, vende la più debole per farle posto
+			# invece di lasciar perdere l'acquisto.
+			if _wants(def) and player.bench_is_full() and player.gold >= def.cost:
+				_sell_weakest_bench()
+			if not player.can_buy(slot):
+				continue
 		if player.gold - def.cost < _reserve(def):
 			continue
 		if _wants(def):
 			player.buy(slot)
+
+
+## Vende l'unità di panchina di minor valore (costo × stella², a parità
+## preferisce tenere la civiltà preferita). Le fusioni scattano subito
+## all'acquisto (vedi _add_unit), quindi in panchina non restano mai coppie
+## pronte a salire di stella: vendere la più debole non spreca un
+## potenziamento in corso.
+func _sell_weakest_bench() -> UnitInstance:
+	var worst: UnitInstance = null
+	var worst_value := INF
+	for unit in player.bench_units():
+		var value: float = unit.def.cost * unit.star * unit.star
+		if unit.def.origin == favourite_origin:
+			value += 2
+		if value < worst_value:
+			worst_value = value
+			worst = unit
+	if worst != null:
+		player.sell(worst)
+	return worst
 
 
 ## Oro che il bot vuole conservare dopo l'acquisto.
@@ -64,7 +94,16 @@ func _reserve(def: UnitDef) -> int:
 		return 0
 	if player.board_count() < player.max_board_units():
 		return 0
-	return economy_floor
+	return _effective_floor()
+
+
+## Riserva d'oro effettiva: nelle fasi avanzate un bot non ha più bisogno di
+## tenerne da parte quanto all'inizio (reroll e acquisti extra non gli
+## serviranno a lungo), quindi da un certo stage in poi la soglia scende a
+## metà invece di restare fissa per tutta la partita — è anche ciò che
+## finanzia l'ultimo balzo di livello verso il costo 4-5.
+func _effective_floor() -> int:
+	return economy_floor if _stage < 6 else int(economy_floor / 2.0)
 
 
 func _wants(def: UnitDef) -> bool:
@@ -101,18 +140,31 @@ func _maybe_level_up(stage: int) -> void:
 	var target_level := clampi(stage + 2, 3, int(GameData.balance()["levels"]["max_level"]))
 	if player.level >= target_level:
 		return
-	var budget := player.gold - economy_floor
-	var spent := 0
-	while budget > 0 and player.level < target_level and player.buy_xp():
-		spent += int(GameData.balance()["economy"]["buy_xp_cost"])
-		budget = player.gold - economy_floor
-		if spent > 20:
+	var xp_cost := int(GameData.balance()["economy"]["buy_xp_cost"])
+	var floor := _effective_floor()
+	# Nessun tetto arbitrario alla spesa: finché resta oro sopra la riserva e
+	# il livello obiettivo non è raggiunto, continua a comprare xp. Il tetto
+	# che c'era prima (20 oro/round) fermava la corsa al livello 9 molto
+	# prima che il negozio arrivasse a mostrare il costo 4-5.
+	while player.level < target_level and player.gold - floor >= xp_cost and player.buy_xp():
+		pass
+
+	# Ancora indietro e panchina ingombra di scarti: ne liquida un paio per
+	# finanziare l'ultimo balzo, invece di restare seduto sopra unità deboli
+	# che non giocherà mai. Limitato a 2 vendite a turno: è un bot plausibile,
+	# non un ottimizzatore che si svuota la panchina ogni round.
+	var sells := 0
+	while player.level < target_level and player.bench_units().size() > 2 and sells < 2:
+		if _sell_weakest_bench() == null:
 			break
+		sells += 1
+		while player.level < target_level and player.gold - floor >= xp_cost and player.buy_xp():
+			pass
 
 
 ## Fa reroll solo con oro abbondante, tanto più volentieri quanto è aggressivo.
 func _maybe_reroll(stage: int) -> void:
-	var spare := player.gold - economy_floor - 10
+	var spare := player.gold - _effective_floor() - 10
 	var rolls := 0
 	var max_rolls := int(2 + aggression * 4 + stage / 2)
 	while spare >= player.reroll_cost() and rolls < max_rolls:
@@ -122,7 +174,7 @@ func _maybe_reroll(stage: int) -> void:
 			break
 		_buy_from_shop()
 		rolls += 1
-		spare = player.gold - economy_floor - 10
+		spare = player.gold - _effective_floor() - 10
 
 
 ## Schiera le unità migliori e le dispone su due linee: corpo a corpo davanti,

@@ -35,6 +35,7 @@ var _store: Node
 var _profile: Node
 var _store_panel: StorePanel
 var _collection_panel: CollectionPanel
+var _history_panel: HistoryPanel
 var _guide_panel: GuidePanel
 var _guide_button: Button
 var _settings_panel: SettingsPanel
@@ -154,6 +155,9 @@ func _build() -> void:
 
 	_collection_panel = CollectionPanel.new()
 	add_child(_collection_panel)
+
+	_history_panel = HistoryPanel.new()
+	add_child(_history_panel)
 
 	_guide_panel = GuidePanel.new()
 	add_child(_guide_panel)
@@ -665,11 +669,17 @@ func _open_hero_detail(hero_id: String) -> void:
 	_hero_detail_panel.visible = true
 
 
-## Tre pulsanti invece dei due precedenti: col font ridotto a 20 restano
-## dentro i loro bersagli anche con l'etichetta più lunga ("Collezione").
+## Due righe, non una. Su 720 px di larghezza tre etichette ("Guida",
+## "Collezione", "Negozio") piu' due icone non ci stanno: misurato, l'ultima
+## icona finiva mezza fuori dallo schermo. La cronologia scende quindi con le
+## impostazioni sulla seconda riga, dove ha spazio per il nome per esteso.
 func _nav_bar() -> Control:
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
+	column.add_child(row)
 
 	_guide_button = Button.new()
 	_guide_button.text = "📖 Guida"
@@ -690,7 +700,20 @@ func _nav_bar() -> Control:
 		button.pressed.connect(entry[1] as Callable)
 		row.add_child(button)
 
-	# Solo icona: non toglie larghezza alle tre voci accanto.
+	var second := HBoxContainer.new()
+	second.add_theme_constant_override("separation", 10)
+	column.add_child(second)
+
+	var history_button := Button.new()
+	history_button.text = "📜 Cronologia"
+	history_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	history_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	history_button.add_theme_font_size_override("font_size", 20)
+	Style.apply_plate(history_button, Style.PLATE, Style.PLATE_DARK, 18, 6)
+	history_button.pressed.connect(func() -> void: _history_panel.open())
+	second.add_child(history_button)
+
+	# Solo icona: non toglie larghezza alla voce accanto.
 	var settings_button := Button.new()
 	settings_button.text = "⚙️"
 	settings_button.custom_minimum_size = Vector2(Style.TOUCH_MIN, Style.TOUCH_MIN)
@@ -698,9 +721,9 @@ func _nav_bar() -> Control:
 	settings_button.add_theme_font_size_override("font_size", 20)
 	Style.apply_plate(settings_button, Style.PLATE, Style.PLATE_DARK, 18, 6)
 	settings_button.pressed.connect(func() -> void: _settings_panel.open())
-	row.add_child(settings_button)
+	second.add_child(settings_button)
 
-	return row
+	return column
 
 
 ## Il pulsante Guida è dorato finché non è mai stato aperto: è la seconda

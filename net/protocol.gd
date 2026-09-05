@@ -8,7 +8,7 @@ extends RefCounted
 ## 4.7 e var_to_bytes preserva Vector2i nativamente (serve all'event log del
 ## combattimento). decode() non decodifica mai oggetti: accetta solo dati puri.
 
-const PROTOCOL_VERSION := 3
+const PROTOCOL_VERSION := 4
 const MAX_PACKET_BYTES := 262144        # 256 KiB: pacchetti piu' grandi -> scartati
 
 ## Chiave del tipo di messaggio.
@@ -25,6 +25,10 @@ const AUTH_EMAIL_LOGIN := "AUTH_EMAIL_LOGIN"    # {email, password}
 const AUTH_EMAIL_SIGNUP := "AUTH_EMAIL_SIGNUP"  # {email, password, username}
 const PROFILE_SET := "PROFILE_SET"      # {session_token, favourite_origin, favourite_hero}
 const DELETE_ACCOUNT := "DELETE_ACCOUNT"# {session_token} — cancellazione GDPR / requisito Play Store
+## Cronologia partite del giocatore. Passa dal master come tutto il resto: il
+## client non parla mai HTTP col database, e il filtro sul profilo sta dentro
+## la RPC player_match_history (db/migrations/0004_match_units.sql).
+const HISTORY_REQUEST := "HISTORY_REQUEST"  # {session_token, limit}
 
 # --- Client -> Master ---------------------------------------------------------
 const HELLO := "HELLO"                  # {protocol_version, access_token}
@@ -38,6 +42,7 @@ const AUTH_OK := "AUTH_OK"              # {session_token, refresh_token, user_id
 const AUTH_FAIL := "AUTH_FAIL"          # {reason}
 const PROFILE_OK := "PROFILE_OK"        # {}
 const ACCOUNT_DELETED := "ACCOUNT_DELETED" # {}
+const HISTORY_DATA := "HISTORY_DATA"    # {matches: [{match_id, ended_at, ranked, placement, hero_id, hp, mmr_delta, mmr_after, humans, units}]}
 const WELCOME := "WELCOME"              # {user_id, username, stats}
 const REJECTED := "REJECTED"            # {reason: version|auth|banned|oversize}
 const QUEUE_UPDATE := "QUEUE_UPDATE"    # {players, seconds_left}

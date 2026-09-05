@@ -96,6 +96,13 @@ func can_spectate(_player_index: int) -> bool:
 	return false
 
 
+## La telemetria di bilanciamento della partita, se questa sessione la
+## raccoglie. Solo LocalSession la produce: online la raccoglie il server, che
+## e' l'unico a vedere tutte le formazioni. `null` = niente da salvare.
+func telemetry() -> UnitTelemetry:
+	return null
+
+
 ## Abbandona la partita.
 func leave() -> void:
 	pass

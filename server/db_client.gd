@@ -22,6 +22,7 @@ const RPC_REDEEM_REFRESH := "/rpc/redeem_refresh_token"
 const RPC_DELETE_ACCOUNT := "/rpc/delete_account"
 const RPC_REGISTER_EMAIL := "/rpc/register_email_account"
 const RPC_LOGIN_EMAIL := "/rpc/login_email_account"
+const RPC_MATCH_HISTORY := "/rpc/player_match_history"
 const OWNED_CIVS_PATH := "/owned_civs"
 const PROFILES_PATH := "/profiles"
 
@@ -49,6 +50,16 @@ static func fetch_owned_civs(owner: Node, uid: String, cb: Callable) -> void:
 				if row is Dictionary and row.has("civ_id"):
 					civs.append(String(row["civ_id"]))
 		cb.call(ok, civs))
+
+
+## Cronologia partite di UN profilo. Il filtro sta dentro la RPC, non qui:
+## match_history contiene le righe di tutti e un filtro costruito lato chiamante
+## sarebbe una fuga di dati a un errore di distanza.
+## cb.call(ok: bool, matches: Array)
+static func fetch_match_history(owner: Node, uid: String, limit: int, cb: Callable) -> void:
+	var body := JSON.stringify({"p_profile_id": uid, "p_limit": limit})
+	_rpc(owner, RPC_MATCH_HISTORY, body, func(ok: bool, data: Variant) -> void:
+		cb.call(ok and data is Array, data if data is Array else []))
 
 
 # --------------------------------------------------------------------------

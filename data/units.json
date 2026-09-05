@@ -38,7 +38,7 @@
       "origin": "roman",
       "classes": ["archer"],
       "cost": 2,
-      "stats": { "hp": 600, "attack_damage": 55, "attack_speed": 0.75, "range": 4, "armor": 20, "magic_resist": 20, "mana_max": 50, "mana_start": 0 },
+      "stats": { "hp": 620, "attack_damage": 62, "attack_speed": 0.78, "range": 4, "armor": 20, "magic_resist": 20, "mana_max": 50, "mana_start": 10 },
       "ability": {
         "name": "Salva incendiaria",
         "description": "Scaglia una freccia infuocata sul bersaglio più lontano, infliggendo danno magico ad area.",
@@ -53,7 +53,7 @@
       "origin": "roman",
       "classes": ["siege"],
       "cost": 2,
-      "stats": { "hp": 550, "attack_damage": 50, "attack_speed": 0.55, "range": 5, "armor": 15, "magic_resist": 15, "mana_max": 80, "mana_start": 20 },
+      "stats": { "hp": 650, "attack_damage": 78, "attack_speed": 0.74, "range": 5, "armor": 22, "magic_resist": 22, "mana_max": 60, "mana_start": 20 },
       "ability": {
         "name": "Colpo perforante",
         "description": "Un dardo attraversa la fila e colpisce ogni nemico sulla traiettoria.",
@@ -68,7 +68,7 @@
       "origin": "roman",
       "classes": ["cavalry"],
       "cost": 3,
-      "stats": { "hp": 800, "attack_damage": 70, "attack_speed": 0.70, "range": 1, "armor": 30, "magic_resist": 25, "mana_max": 60, "mana_start": 15 },
+      "stats": { "hp": 830, "attack_damage": 78, "attack_speed": 0.72, "range": 1, "armor": 30, "magic_resist": 25, "mana_max": 60, "mana_start": 15 },
       "ability": {
         "name": "Sfondamento",
         "description": "Carica il nemico più lontano infliggendo danno e stordendolo.",
@@ -83,12 +83,12 @@
       "origin": "roman",
       "classes": ["legionary"],
       "cost": 4,
-      "stats": { "hp": 1050, "attack_damage": 80, "attack_speed": 0.70, "range": 1, "armor": 45, "magic_resist": 40, "mana_max": 80, "mana_start": 20 },
+      "stats": { "hp": 770, "attack_damage": 57, "attack_speed": 0.65, "range": 1, "armor": 31, "magic_resist": 27, "mana_max": 90, "mana_start": 20 },
       "ability": {
         "name": "Serrate i ranghi",
         "description": "Concede uno scudo a sé e ai due alleati più vicini, e aumenta la loro armatura.",
         "type": "shield_allies",
-        "params": { "amount": [280, 420, 700], "allies": 2, "armor": [20, 30, 55], "duration": 6.0 }
+        "params": { "amount": [205, 320, 530], "allies": 2, "armor": [14, 22, 40], "duration": 6.0 }
       },
       "lore": "I pretoriani formavano la guardia imperiale, istituita da Augusto per proteggere l'imperatore e riunire in un solo corpo scelto le antiche coorti pretorie che scortavano i generali in campagna. Erano meglio pagati e meglio equipaggiati dei legionari di linea, con ferme più brevi e un equipaggiamento spesso più ricco e ornato, di stanza a Roma nel Castra Praetoria. Oltre al ruolo militare di scorta e protezione, divennero nel tempo un attore politico decisivo, capace di fare e disfare imperatori."
     },
@@ -98,12 +98,12 @@
       "origin": "roman",
       "classes": ["cavalry"],
       "cost": 5,
-      "stats": { "hp": 1300, "attack_damage": 100, "attack_speed": 0.65, "range": 1, "armor": 60, "magic_resist": 45, "mana_max": 100, "mana_start": 25 },
+      "stats": { "hp": 1030, "attack_damage": 74, "attack_speed": 0.65, "range": 1, "armor": 47, "magic_resist": 35, "mana_max": 100, "mana_start": 25 },
       "ability": {
         "name": "Cuneo corazzato",
         "description": "Carica in formazione serrata: infligge danno ad area davanti a sé e aumenta la velocità d'attacco degli alleati vicini.",
         "type": "rally",
-        "params": { "damage": [380, 570, 1150], "radius": 1, "attack_speed_bonus": [0.25, 0.40, 0.85], "duration": 8.0 }
+        "params": { "damage": [250, 375, 760], "radius": 1, "attack_speed_bonus": [0.16, 0.25, 0.55], "duration": 8.0 }
       },
       "lore": "I catafratti erano cavalieri corazzati da capo a piedi, cavallo compreso, un modello di cavalleria pesante appreso da Roma dai propri avversari orientali — Parti e Sarmati — e adottato su larga scala nel tardo impero. L'armatura, a lamelle o a maglia, copriva anche il destriero (spesso indicato come cataphractarius o clibanarius nelle fonti), e la lancia lunga (contus) impugnata a due mani permetteva una carica d'urto devastante contro la fanteria nemica, pagata però con una mobilità molto inferiore a quella della cavalleria leggera."
     },
@@ -113,12 +113,12 @@
       "origin": "roman",
       "classes": ["druid"],
       "cost": 2,
-      "stats": { "hp": 600, "attack_damage": 45, "attack_speed": 0.65, "range": 3, "armor": 20, "magic_resist": 30, "mana_max": 60, "mana_start": 15 },
+      "stats": { "hp": 650, "attack_damage": 45, "attack_speed": 0.65, "range": 3, "armor": 20, "magic_resist": 30, "mana_max": 55, "mana_start": 20 },
       "ability": {
         "name": "Fuoco sacro",
         "description": "Cura l'alleato con meno salute e gli concede rigenerazione.",
         "type": "heal_lowest_ally",
-        "params": { "amount": [220, 330, 580], "regen": [12, 20, 35], "duration": 5.0 }
+        "params": { "amount": [260, 390, 680], "regen": [16, 26, 45], "duration": 5.0 }
       },
       "lore": "Le vestali erano le sacerdotesse del culto di Vesta, dea del focolare, scelte in età infantile tra le famiglie patrizie e vincolate per trent'anni a mantenere acceso il fuoco sacro nel tempio del Foro Romano. Godevano di uno status unico per una donna romana — proprietà personale, testimonianza in tribunale, un seggio d'onore ai giochi — e la loro incolumità era considerata legata a quella stessa di Roma: si credeva che finché il fuoco non si fosse spento, la città sarebbe rimasta al sicuro."
     },
@@ -128,7 +128,7 @@
       "origin": "gaul",
       "classes": ["berserker"],
       "cost": 1,
-      "stats": { "hp": 600, "attack_damage": 50, "attack_speed": 0.70, "range": 1, "armor": 25, "magic_resist": 25, "mana_max": 60, "mana_start": 0 },
+      "stats": { "hp": 640, "attack_damage": 56, "attack_speed": 0.72, "range": 1, "armor": 25, "magic_resist": 25, "mana_max": 60, "mana_start": 10 },
       "ability": {
         "name": "Grido di guerra",
         "description": "Aumenta la propria velocità d'attacco per 5 secondi.",
@@ -188,12 +188,12 @@
       "origin": "gaul",
       "classes": ["berserker"],
       "cost": 4,
-      "stats": { "hp": 1000, "attack_damage": 90, "attack_speed": 0.75, "range": 1, "armor": 35, "magic_resist": 30, "mana_max": 70, "mana_start": 10 },
+      "stats": { "hp": 930, "attack_damage": 82, "attack_speed": 0.75, "range": 1, "armor": 34, "magic_resist": 29, "mana_max": 70, "mana_start": 10 },
       "ability": {
         "name": "Duello",
         "description": "Colpisce il bersaglio con un fendente devastante, più forte quanto più il nemico è ferito.",
         "type": "damage_execute",
-        "params": { "damage": [320, 480, 900], "missing_hp_scaling": 0.5, "target": "current" }
+        "params": { "damage": [290, 435, 810], "missing_hp_scaling": 0.42, "target": "current" }
       },
       "lore": "Nella società gallica il prestigio si conquistava sul campo di battaglia, e i campioni erano guerrieri che si erano guadagnati fama personale al punto da poter sfidare i migliori avversari nemici in duelli individuali davanti agli schieramenti, una pratica descritta da Diodoro Siculo e Tito Livio come parte integrante della cultura marziale celtica. Portavano spesso torque d'oro al collo, simbolo di rango e di voto agli dei, e armature riccamente decorate, e più il nemico appariva ferito o in difficoltà, più il campione cercava lo scontro diretto per suggellare la propria reputazione con un colpo definitivo."
     },
@@ -203,12 +203,12 @@
       "origin": "gaul",
       "classes": ["legionary", "berserker"],
       "cost": 5,
-      "stats": { "hp": 1200, "attack_damage": 110, "attack_speed": 0.75, "range": 1, "armor": 48, "magic_resist": 44, "mana_max": 90, "mana_start": 20 },
+      "stats": { "hp": 950, "attack_damage": 85, "attack_speed": 0.75, "range": 1, "armor": 42, "magic_resist": 38, "mana_max": 90, "mana_start": 20 },
       "ability": {
         "name": "Giuramento dei Solduri",
-        "description": "Ogni alleato caduto rinsalda il suo giuramento: infligge danno ad area e ruba salute per 10 secondi.",
+        "description": "Ogni alleato caduto rinsalda il suo giuramento: infligge danno ad area e concede a tutta la squadra furia e sete di sangue per 10 secondi.",
         "type": "rally",
-        "params": { "damage": [300, 450, 950], "radius": 1, "attack_speed_bonus": [0.25, 0.40, 0.85], "omnivamp": 0.30, "duration": 10.0, "self_only": true }
+        "params": { "damage": [220, 330, 690], "radius": 1, "attack_speed_bonus": [0.18, 0.28, 0.60], "omnivamp": 0.15, "duration": 10.0 }
       },
       "lore": "I soldurii, descritti da Cesare a proposito dell'aquitano Adcantuannus, erano un seguito di guerrieri legati al proprio capo da un giuramento assoluto: condividevano con lui ogni bene in vita e, se il capo cadeva in battaglia o veniva ucciso, si toglievano la vita per non sopravvivergli, ritenendo disonorevole continuare a vivere dopo la sua morte. Questo legame di fedeltà totale, più forte di qualsiasi altro vincolo sociale gallico, li rendeva combattenti implacabili proprio nel momento in cui la battaglia volgeva al peggio, spinti a vendicare i compagni caduti prima di seguirli."
     },
@@ -240,7 +240,8 @@
         "description": "Trafigge i due nemici più vicini e riduce la loro velocità d'attacco.",
         "type": "damage_nearest",
         "params": { "damage": [190, 285, 480], "targets": 2, "attack_speed_slow": 0.3, "duration": 4.0 }
-      }
+      },
+      "lore": "Secondo la descrizione di Tacito nella Germania, la maggior parte dei guerrieri germanici non disponeva di spade o lance pesanti, ma della framea, un'asta relativamente corta con una punta di ferro stretta e acuminata, maneggiata sia da vicino sia lanciata a distanza. I combattenti si disponevano in cunei serrati, spalla a spalla, affidando la tenuta della linea più alla coesione del gruppo di parenti e compagni di villaggio che a un addestramento professionale come quello romano, e la perdita dello scudo in battaglia era considerata un disonore tale da precludere il ritorno in patria."
     },
     {
       "id": "teuton_skirmisher",
@@ -254,7 +255,8 @@
         "description": "Colpisce il bersaglio con meno salute, con probabilità di stordirlo brevemente.",
         "type": "stun_target",
         "params": { "damage": [170, 255, 440], "duration": [0.8, 1.0, 1.8], "target": "lowest_hp" }
-      }
+      },
+      "lore": "Cesare descrive nel De Bello Gallico un reparto di fanti scelti per la loro rapidità, capaci di tenere il passo dei cavalli aggrappandosi alle criniere durante la carica per intervenire rapidamente in appoggio alla cavalleria germanica. Erano fanteria leggera armata di giavellotti, priva di armatura pesante per non perdere in agilità, e il loro compito era logorare il nemico da distanza o proteggere i cavalieri caduti prima che i reparti pesanti raggiungessero la linea di scontro."
     },
     {
       "id": "shieldmaiden",
@@ -268,7 +270,8 @@
         "description": "Per 4 secondi riduce i danni subiti e restituisce parte del danno bloccato.",
         "type": "shield_self",
         "params": { "amount": [200, 300, 520], "duration": 4.0, "reflect": 0.35, "damage_reduction": 0.25 }
-      }
+      },
+      "lore": "Le fonti romane non descrivono reparti femminili regolari nelle armate germaniche, ma raccontano episodi in cui le donne si trovarono a combattere con le armi: Plutarco narra che dopo la disfatta dei Cimbri a Vercelli nel 101 a.C. le donne asserragliate dietro il carroccio di carri si difesero con la stessa ferocia dei guerrieri caduti, uccidendo chiunque tentasse di avvicinarsi e infine se stesse pur di non cadere prigioniere. Tacito aggiunge che le donne seguivano abitualmente gli accampamenti, esortavano i mariti al valore e ne curavano le ferite, un ruolo che confondeva per i romani il confine fra retrovia e prima linea."
     },
     {
       "id": "cherusker_reiter",
@@ -276,7 +279,7 @@
       "origin": "teuton",
       "classes": ["cavalry"],
       "cost": 2,
-      "stats": { "hp": 700, "attack_damage": 60, "attack_speed": 0.75, "range": 1, "armor": 25, "magic_resist": 22, "mana_max": 60, "mana_start": 10 },
+      "stats": { "hp": 730, "attack_damage": 66, "attack_speed": 0.78, "range": 1, "armor": 25, "magic_resist": 22, "mana_max": 60, "mana_start": 15 },
       "ability": {
         "name": "Assalto boschivo",
         "description": "Carica il nemico più lontano infliggendo danno e stordendolo brevemente.",
@@ -297,7 +300,8 @@
         "description": "Cura l'alleato più ferito e gli concede uno scudo che assorbe danno magico.",
         "type": "heal_lowest_ally",
         "params": { "amount": [260, 390, 700], "shield": [150, 225, 400], "duration": 5.0 }
-      }
+      },
+      "lore": "Tacito racconta che i Germani attribuivano alle donne qualcosa di sacro e profetico, al punto da non disdegnarne i consigli né ignorarne le risposte agli oracoli: la più celebre fu Veleda, veggente dei Bructeri, che durante la rivolta batava del 69-70 d.C. visse isolata in una torre, comunicando con l'esterno solo tramite intermediari, e venne consultata come un'autorità quasi divina sull'esito della guerra contro Roma. Figure come lei univano il ruolo di guida spirituale a quello di guaritrice per la comunità, curando i feriti dei clan con rimedi tramandati oralmente."
     },
     {
       "id": "battering_ram",
@@ -305,13 +309,14 @@
       "origin": "teuton",
       "classes": ["siege"],
       "cost": 4,
-      "stats": { "hp": 1100, "attack_damage": 75, "attack_speed": 0.50, "range": 1, "armor": 45, "magic_resist": 25, "mana_max": 85, "mana_start": 20 },
+      "stats": { "hp": 1100, "attack_damage": 77, "attack_speed": 0.52, "range": 1, "armor": 43, "magic_resist": 24, "mana_max": 85, "mana_start": 25 },
       "ability": {
         "name": "Sfondaporte",
         "description": "Sferra un colpo che infligge danno pari a una percentuale della salute massima del bersaglio.",
         "type": "damage_execute",
-        "params": { "damage": [200, 300, 520], "max_hp_scaling": 0.12, "target": "current" }
-      }
+        "params": { "damage": [185, 280, 485], "max_hp_scaling": 0.11, "target": "current" }
+      },
+      "lore": "I Germani non svilupparono una tradizione propria di poliorcetica, preferendo scontri in campo aperto ed evitando le fortificazioni fisse tipiche del mondo mediterraneo; l'uso di macchine d'assedio come l'ariete si diffuse fra loro solo attraverso il contatto prolungato con Roma. Tacito descrive come durante la rivolta batava del 69-70 d.C. le forze di Civile assediarono il campo legionario di Vetera copiando le tecniche romane, comprese torri d'assedio e arieti, spesso costruiti da disertori o prigionieri romani costretti a mettere la propria competenza al servizio dei ribelli."
     },
     {
       "id": "arminius",
@@ -319,13 +324,14 @@
       "origin": "teuton",
       "classes": ["legionary", "berserker"],
       "cost": 5,
-      "stats": { "hp": 1250, "attack_damage": 105, "attack_speed": 0.70, "range": 1, "armor": 55, "magic_resist": 50, "mana_max": 95, "mana_start": 25 },
+      "stats": { "hp": 1000, "attack_damage": 86, "attack_speed": 0.70, "range": 1, "armor": 45, "magic_resist": 39, "mana_max": 95, "mana_start": 25 },
       "ability": {
         "name": "Imboscata di Teutoburgo",
-        "description": "Il bosco si chiude sui nemici: danno ad area ampia e scudo per gli alleati vicini.",
+        "description": "Il bosco si chiude sui nemici: danno ad area e scudo per gli alleati vicini.",
         "type": "rally",
-        "params": { "damage": [400, 600, 1250], "radius": 2, "shield": [250, 375, 800], "duration": 8.0 }
-      }
+        "params": { "damage": [270, 405, 850], "radius": 1, "shield": [175, 260, 555], "duration": 8.0 }
+      },
+      "lore": "Arminio, capo dei Cherusci, aveva prestato servizio come ufficiale ausiliario nell'esercito romano ottenendo la cittadinanza e il rango equestre, prima di tradire la fiducia di Publio Quintilio Varo e guidare la coalizione di tribù che nel 9 d.C. annientò tre legioni intere nella foresta di Teutoburgo, il più grave disastro militare subito da Roma sul suolo germanico. Tacito, pur scrivendo per un pubblico romano, non gli negò l'ammirazione, definendolo «senza dubbio il liberatore della Germania»; morì però ucciso dai propri parenti intorno al 21 d.C., temuto anche dai suoi per l'ambizione di un potere che nessun capo tribale germanico avrebbe dovuto detenere da solo."
     }
   ]
 }

@@ -33,6 +33,11 @@ var _pump: Node
 var _bootstrapped := false
 var _pending_close: Array = []
 
+## Quante partite di cronologia si servono per default e al massimo. Il tetto
+## e' del server: il client puo' chiedere, non decidere.
+const HISTORY_DEFAULT := 20
+const HISTORY_MAX := 50
+
 ## Tentativi di login falliti per email. Serve a rendere inutile provare le
 ## password a raffica: la chiave e' l'email e non il peer perche' il client apre
 ## una connessione nuova a ogni richiesta (net/auth.gd).
@@ -101,7 +106,8 @@ func _process(delta: float) -> bool:
 		var pt := Protocol.message_type(pre)
 		if pt == Protocol.AUTH_GOOGLE or pt == Protocol.AUTH_REFRESH \
 				or pt == Protocol.AUTH_EMAIL_LOGIN or pt == Protocol.AUTH_EMAIL_SIGNUP \
-				or pt == Protocol.PROFILE_SET or pt == Protocol.DELETE_ACCOUNT:
+				or pt == Protocol.PROFILE_SET or pt == Protocol.DELETE_ACCOUNT \
+				or pt == Protocol.HISTORY_REQUEST:
 			_handle_auth(from, pt, pre)
 			continue
 		var mm: Matchmaker = _peer_mm.get(from, _mm)
@@ -247,6 +253,23 @@ func _handle_auth(peer_id: int, msg_type: String, msg: Dictionary) -> void:
 				"favourite_origin": String(msg.get("favourite_origin", "")),
 				"favourite_hero": String(msg.get("favourite_hero", "")),
 			}, func(_ok: bool) -> void: _reply(peer_id, Protocol.make(Protocol.PROFILE_OK)))
+		Protocol.HISTORY_REQUEST:
+			var hist_claims: Dictionary = _verifier.verify(String(msg.get("session_token", "")))
+			if hist_claims.is_empty():
+				_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "auth"}))
+				return
+			# Il limite lo decide il server: un client che ne chiede centomila non
+			# deve poter far costruire a Postgres una risposta enorme.
+			var limit := clampi(int(msg.get("limit", HISTORY_DEFAULT)), 1, HISTORY_MAX)
+			DbClient.fetch_match_history(_pump, String(hist_claims.get("sub", "")), limit,
+				func(ok: bool, matches: Array) -> void:
+					# Database irraggiungibile: si dice, non si finge una
+					# cronologia vuota. La schermata distingue i due casi
+					# ("nessuna partita" vs "non raggiungibili").
+					if not ok:
+						_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "db"}))
+						return
+					_reply(peer_id, Protocol.make(Protocol.HISTORY_DATA, {"matches": matches})))
 		Protocol.DELETE_ACCOUNT:
 			var del_claims: Dictionary = _verifier.verify(String(msg.get("session_token", "")))
 			if del_claims.is_empty():

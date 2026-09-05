@@ -44,6 +44,12 @@ stale and the parser won't find it:
 godot --headless --path . --import
 ```
 
+Balance report from real local matches (after playing some games offline):
+
+```sh
+godot --headless --path . --script res://tools/unit_balance.gd
+```
+
 Visual verification (must run **without** `--headless` — the viewport produces no image
 headless):
 
@@ -96,7 +102,7 @@ exposed; role `autochess_app` is least-privilege).
 `ui/login.tscn` is the actual main scene (`project.godot`): it gates the home behind a login —
 Google, email/password, or "gioca come ospite" (offline, no multiplayer/stats, remembered in
 `Profile.guest_mode`) — and falls straight through to `ui/menu.tscn` when the backend is
-unconfigured, already logged in, or already a guest. `PROTOCOL_VERSION` is 3.
+unconfigured, already logged in, or already a guest. `PROTOCOL_VERSION` is 4.
 
 The rule that holds everything else up: **`core/` does not know about `ui/`**. The simulation is
 deterministic and seeded, so the same match can be replayed identically — the prerequisite for
@@ -119,7 +125,7 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `ui/main.gd` | in-match screen; local mode unchanged, remote mode shows prep timer + PRONTO |
 | `net/auth.gd` | autoload `Auth` — Google loopback+PKCE and email/password, forwards to master over a short WS; degrades to guest |
 | `net/match_session.gd` | base class; `LocalSession` / `RemoteSession` back it |
-| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 3) |
+| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 4) |
 | `server/master_server.gd` | `SceneTree` script; auth (`AUTH_*`/`PROFILE_SET`), queue, 30s timer, worker routing |
 | `server/session_token.gd` / `session_verifier.gd` | HMAC session token minted by the master + the instance adapter injected into `Matchmaker` |
 | `server/google_oauth.gd` | server-side `code`→`id_token` exchange, validates `aud`/`iss`/`exp` (no JWKS) |
@@ -128,17 +134,20 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `server/matchmaker.gd` | socket-free queue core (testable) |
 | `server/game_worker.gd` | `SceneTree` script; `match_id → MatchRunner` |
 | `server/match_runner.gd` | authoritative match: prep timer, 3-level command validation, resolve, targeted logs, reconnect |
-| `server/stats_writer.gd` | writes `match_history` / `player_stats` via PostgREST RPC `record_match_result` |
+| `server/stats_writer.gd` | writes `match_history` / `player_stats` / `match_units` via PostgREST RPC `record_match_result` |
 | `ui/combat_view.gd` | replays the battle by reading the event log |
 | `ui/phase_bar.gd` | `PhaseBar` — time bar shared by preparation and battle |
 | `ui/unit_slot.gd` | shop/board/bench/collection slot; shows the 3D model |
 | `art/unit_models.gd` | procedural unit figures (see below) |
 | `art/unit_portraits.gd` | renders each model once, keeps the texture (autoload `Portraits`) |
 | `ui/collection_panel.gd` | unit encyclopedia, generated from `data/` |
+| `ui/history_panel.gd` | match history — merges the server's online matches with the local ones |
 | `ui/store_panel.gd` | purchase screen |
 | `ui/guide_panel.gd` | "how to play" screen, generated from `data/tutorial.json` |
 | `ui/tip_bubble.gd` | one-shot in-match tips, queued in `data/tutorial.json`, tracked in `Profile.seen_tips` |
 | `app/profile.gd` | favorite civilization, battle speed, stats (autoload `Profile`) |
+| `app/match_log.gd` | local match history (`user://history.json`) + balance telemetry (`user://telemetry.jsonl`) |
+| `core/unit_telemetry.gd` | per-unit balance accumulator, shared by the sim, local matches and the server |
 
 Autoloads (project.godot): `Profile`, `Portraits`, `Store`.
 
@@ -241,6 +250,30 @@ Dropping a `.glb` file named after a unit's id (see `models/README.txt`) into th
 `art/unit_models.gd` use it in place of the procedural figure for that id — no other registration
 needed. Models must face **+Z** (matches procedural `FORWARD`), one board cell = 1.0 world unit.
 Requires the same one-time `--headless --path . --import` before Godot picks it up.
+
+### Match history and balance telemetry
+
+Every match — simulated, local or online — feeds the *same* accumulator,
+`core/unit_telemetry.gd` (pure, hooked to `MatchState.round_resolved`, never touches the RNG, so
+attaching it cannot change a seeded match). It produces two things: light per-(match, player, unit)
+rows — how many rounds a unit was fielded, how many it won, its final star — and the cumulative
+report `tools/print_report.py` already knew how to print.
+
+Where those numbers land depends on who owns the match:
+
+- **online** — `server/match_runner.gd` passes the rows to `StatsWriter`, which writes
+  `match_units` in the same transaction as the result (`db/migrations/0004_match_units.sql`). Query
+  them with `db/unit_balance.sql` (view `public.unit_balance`).
+- **local** — `ui/main.gd` appends one line per match to `user://telemetry.jsonl` and one entry to
+  `user://history.json` (`app/match_log.gd`). Report:
+  `godot --headless --path . --script res://tools/unit_balance.gd`.
+
+The two are kept apart on purpose: a match against the bot must not move the PvP numbers, and
+balance data sent by a client would be forgeable anyway.
+
+The player reads their history in `ui/history_panel.gd` (📜 in the menu), which merges the online
+matches — fetched with `HISTORY_REQUEST` through the master, never HTTP straight to the DB — with
+the local ones. Guest or offline, it shows the local ones and no error.
 
 ### Balance
 

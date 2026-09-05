@@ -31,15 +31,19 @@ const HISTORY_PATH := "/match_history"
 
 
 ## standings: [{player_index, uid, placement, hp, hero_id, display_name, is_bot}]
+## units: righe di telemetria per unità (UnitTelemetry.match_rows) — finiscono
+## in `match_units` dentro la stessa transazione. Vuoto = nessuna telemetria,
+## il resto della scrittura non cambia.
 ## on_result(update: Dictionary): opzionale, chiamata per ogni riga della
 ## risposta della RPC (vedi sopra). Non chiamata affatto se la RPC fallisce o
 ## se il match non è ranked (la RPC torna [] in quel caso).
 static func write_match(owner: Node, match_id: String, seed_value: int, ranked: bool,
-		standings: Array, on_result: Callable = Callable()) -> void:
+		standings: Array, on_result: Callable = Callable(), units: Array = []) -> void:
 	var url := OS.get_environment("DB_API_URL").rstrip("/")
 	if url == "":
 		print("StatsWriter: DB_API_URL assente — no-op. ",
-			"match=%s ranked=%s standings=%s" % [match_id, ranked, _human_results(standings)])
+			"match=%s ranked=%s standings=%s unità=%d" % [
+				match_id, ranked, _human_results(standings), units.size()])
 		return
 	if owner == null or not is_instance_valid(owner):
 		push_warning("StatsWriter: nessun Node owner per HTTPRequest — scrittura saltata (match=%s)" % match_id)
@@ -50,6 +54,7 @@ static func write_match(owner: Node, match_id: String, seed_value: int, ranked: 
 		"p_seed": seed_value,
 		"p_ranked": ranked,
 		"p_results": _human_results(standings),
+		"p_units": units,
 	}
 	var headers := PackedStringArray(["Content-Type: application/json"])
 

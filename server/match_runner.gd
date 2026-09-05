@@ -42,6 +42,9 @@ var _last_results: Array = []
 var _pending_finish := false
 var _finished := false
 var _stats_owner: Node = null               # Node vivo per StatsWriter (opzionale)
+## Telemetria di bilanciamento (core/unit_telemetry.gd): sola lettura sullo
+## stato, non tocca l'RNG — la partita resta identica con o senza.
+var _telemetry := UnitTelemetry.new()
 
 var _outbox: Array = []
 
@@ -76,6 +79,9 @@ func _init(spawn_payload: Dictionary, stats_owner: Node = null) -> void:
 	for p in _state.players:
 		if p.is_bot:
 			_brains[p.index] = BotBrain.new(p, brain_rng.fork(p.index))
+
+	_telemetry.begin_match()
+	_state.round_resolved.connect(_telemetry.on_round_resolved)
 
 	_state.start_round()
 	_open_preparation(true)
@@ -146,6 +152,13 @@ func pending_outbox() -> Array:
 # --------------------------------------------------------------------------
 # Accessori (test / worker)
 # --------------------------------------------------------------------------
+
+## Le righe di telemetria per unita' della partita, gia' mappate sui profili:
+## le stesse che _finish_match() passa a StatsWriter per match_units. Esposte
+## per i test — in produzione nessuno le chiede da fuori.
+func telemetry_rows() -> Array:
+	return _telemetry.match_rows(_uid_by_seat())
+
 
 func state() -> MatchState:
 	return _state
@@ -380,13 +393,15 @@ func _finish_match() -> void:
 	_finished = true
 	_phase = Phase.FINISHED
 	var standings := _standings_data()
+	_telemetry.on_match_finished(_state)
 	for idx in _seat_peer:
 		_send(_seat_peer[idx], Protocol.make(Protocol.MATCH_FINISHED, {"standings": standings}))
 	# La RPC che calcola l'mmr è asincrona (StatsWriter.write_match) e torna
 	# tipicamente uno o più tick dopo che questo runner è "finito": il worker lo
 	# tiene in vita per una breve grazia proprio per lasciare arrivare questa
 	# callback e drenare push_rank_update() nell'outbox (server/game_worker.gd).
-	StatsWriter.write_match(_stats_owner, match_id, seed_value, ranked, standings, _on_rank_update)
+	StatsWriter.write_match(_stats_owner, match_id, seed_value, ranked, standings, _on_rank_update,
+		_telemetry.match_rows(_uid_by_seat()))
 
 
 ## Chiamata da StatsWriter per ogni riga della RPC (una per umano in un match
@@ -451,11 +466,18 @@ func _public_results() -> Array:
 	return out
 
 
+## player_index -> profile_id. I bot hanno uid vuoto e vengono scartati a valle
+## (StatsWriter._human_results, UnitTelemetry.match_rows).
+func _uid_by_seat() -> Dictionary:
+	var out := {}
+	for s in _slots:
+		out[int(s.get("index", 0))] = String(s.get("uid", ""))
+	return out
+
+
 func _standings_data() -> Array:
 	var out: Array = []
-	var uid_by_seat := {}
-	for s in _slots:
-		uid_by_seat[int(s.get("index", 0))] = String(s.get("uid", ""))
+	var uid_by_seat := _uid_by_seat()
 	for p in _state.standings():
 		out.append({
 			"player_index": p.index,
