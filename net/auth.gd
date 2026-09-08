@@ -30,7 +30,10 @@ signal account_deletion_completed(success: bool)
 
 const CONFIG_PATH := "res://data/backend.json"
 const TOKEN_PATH := "user://auth.dat"
-const CALLBACK_HTML := "<!doctype html><html><head><meta charset=\"utf-8\"></head><body style=\"font-family:sans-serif;text-align:center;padding-top:3em\"><h2>Login completato</h2><p>Torna al gioco.</p></body></html>"
+## Package Android — deve combaciare con `package/unique_name` in
+## export_presets.cfg. Serve solo alla pagina di callback per riportare in
+## primo piano l'app dopo il redirect (su mobile il browser non lo fa da solo).
+const ANDROID_PACKAGE := "com.afalc.autochessofages"
 
 const HOST_PLACEHOLDERS := ["tuodominio", "your-", "yourdomain", "example.", "changeme", "placeholder"]
 const CLIENT_ID_PLACEHOLDER := "REPLACE_WITH_GOOGLE_CLIENT_ID"
@@ -153,17 +156,18 @@ func login_google() -> void:
 		login_completed.emit(false, "backend non configurato")
 		return
 
+	# Porta 0 = la sceglie il sistema operativo, che dà per forza una porta
+	# libera. Un tempo si scandivano 51000..51059 a mano, ma su Windows
+	# quell'intervallo può finire fra le porte riservate da Hyper-V/WSL/WinNAT
+	# (`netsh int ipv4 show excludedportrange tcp`) e ogni bind falliva con
+	# ERR_ALREADY_IN_USE. Google accetta qualunque porta su 127.0.0.1 per un
+	# client OAuth "Desktop", quindi una porta dinamica va benissimo.
 	_server = TCPServer.new()
-	var bound := false
-	for port in range(51000, 51060):
-		if _server.listen(port, "127.0.0.1") == OK:
-			_port = port
-			bound = true
-			break
-	if not bound:
+	if _server.listen(0, "127.0.0.1") != OK:
 		_cleanup_server()
 		login_completed.emit(false, "nessuna porta di loopback disponibile")
 		return
+	_port = _server.get_local_port()
 
 	_code_verifier = _random_verifier()
 	var challenge := _base64url(_sha256(_code_verifier))
@@ -330,7 +334,7 @@ func _pump_loopback() -> void:
 		guard += 1
 
 	var code := _extract_code(request)
-	var body := CALLBACK_HTML.to_utf8_buffer()
+	var body := _callback_html().to_utf8_buffer()
 	var response := "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % body.size()
 	conn.put_data(response.to_utf8_buffer())
 	conn.put_data(body)
@@ -504,6 +508,27 @@ func _extract_code(request: String) -> String:
 		if kv.size() == 2 and kv[0] == "code":
 			return kv[1].uri_decode()
 	return ""
+
+
+## Pagina servita sul loopback dopo il redirect di Google. Su desktop basta un
+## messaggio: il browser è una finestra a parte, l'utente torna al gioco da solo.
+## Su Android il redirect resta a schermo intero sopra l'app e il browser non
+## la riporta in primo piano: la pagina prova a rilanciare l'activity con un
+## intent verso il package (l'app è già viva con il login in corso, quindi
+## torna semplicemente davanti), con un pulsante di ripiego se l'automatismo
+## viene bloccato.
+func _callback_html() -> String:
+	var head := "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+	var style := "<style>body{font-family:sans-serif;text-align:center;padding:3em 1.5em;background:#12121a;color:#eee}a.btn{display:inline-block;margin-top:1.5em;padding:.8em 1.6em;background:#f0c020;color:#12121a;border-radius:8px;text-decoration:none;font-weight:bold}</style>"
+	var msg := "<h2>Accesso completato ✓</h2><p>Puoi tornare ad AoA.</p>"
+	if OS.get_name() != "Android":
+		return head + style + msg
+	# MAIN/LAUNCHER: riporta davanti l'activity di Godot (già viva) invece di
+	# provare a consegnarle una VIEW, che il suo intent-filter non accetta.
+	var intent := "intent://home#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=%s;end" % ANDROID_PACKAGE
+	var script := "<script>setTimeout(function(){try{location.href=%s}catch(e){}window.close();},300);</script>" % JSON.stringify(intent)
+	var button := "<a class=\"btn\" href=\"%s\">Torna ad AoA</a>" % intent
+	return head + style + msg + button + script
 
 
 static func email_looks_valid(email: String) -> bool:

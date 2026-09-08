@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- GENERATO DA tools/make_icon.py - non modificare a mano. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#131C36"/><stop offset="1" stop-color="#241F33"/></linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.46" r="0.52"><stop offset="0" stop-color="#3B3A6B" stop-opacity="0.55"/><stop offset="1" stop-color="#3B3A6B" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+  
+</svg>

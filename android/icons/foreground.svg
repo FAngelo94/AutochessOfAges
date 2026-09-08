@@ -1,8 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <!-- GENERATO DA tools/make_icon.py - non modificare a mano. -->
   <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#131C36"/><stop offset="1" stop-color="#241F33"/></linearGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.46" r="0.52"><stop offset="0" stop-color="#3B3A6B" stop-opacity="0.55"/><stop offset="1" stop-color="#3B3A6B" stop-opacity="0"/></radialGradient>
     <linearGradient id="g1" gradientUnits="userSpaceOnUse" x1="218.5" y1="56.9" x2="207.4" y2="52.5"><stop offset="0" stop-color="#FBD97A"/><stop offset="0.6" stop-color="#B87A1A"/><stop offset="1" stop-color="#8A5510"/></linearGradient>
     <linearGradient id="g2" gradientUnits="userSpaceOnUse" x1="213.5" y1="74.2" x2="218.2" y2="67.5"><stop offset="0" stop-color="#FBD97A"/><stop offset="0.6" stop-color="#B87A1A"/><stop offset="1" stop-color="#8A5510"/></linearGradient>
     <linearGradient id="g3" gradientUnits="userSpaceOnUse" x1="186.4" y1="65.3" x2="173.8" y2="62.6"><stop offset="0" stop-color="#EDB13A"/><stop offset="0.6" stop-color="#B87A1A"/><stop offset="1" stop-color="#8A5510"/></linearGradient>
@@ -194,8 +192,8 @@
     <linearGradient id="g189" gradientUnits="userSpaceOnUse" x1="22.8" y1="9.7" x2="21.2" y2="0.6"><stop offset="0" stop-color="#FBD97A"/><stop offset="0.55" stop-color="#8A5510"/><stop offset="1" stop-color="#5E3A0C"/></linearGradient>
     <linearGradient id="g190" gradientUnits="userSpaceOnUse" x1="-27.0" y1="-6.0" x2="-6.0" y2="14.0"><stop offset="0" stop-color="#FFF4D2"/><stop offset="0.45" stop-color="#EDB13A"/><stop offset="1" stop-color="#8A5510"/></linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#sky)"/>
-  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+  
+  <g transform="translate(92.16 92.16) scale(0.6400)">
   <path d="M222.0,63.0 A196.0,196.0 0 0 0 228.7,450.1" fill="none" stroke="#8A5510" stroke-width="5" stroke-linecap="round"/>
   <path d="M210.5,64.4C215.6,63.5 218.7,54.4 216.6,45.5C209.0,50.6 205.1,59.3 208.1,63.5Z" fill="url(#g1)" stroke="#241606" stroke-width="1.50" stroke-opacity="0.55" stroke-linejoin="round" stroke-linecap="round"/>
   <path d="M209.3,64.0 L215.5,48.3" fill="none" stroke="#5E3A0C" stroke-width="1.10" stroke-opacity="0.40" stroke-linecap="round"/>
@@ -501,4 +499,5 @@
   <path d="M271.4,192.4C270.3,198.1 278.1,203.8 287.9,203.8C285.3,194.9 278.1,188.5 273.2,190.2Z" fill="url(#g184)" stroke="#241606" stroke-width="1.30" stroke-opacity="0.50" stroke-linejoin="round" stroke-linecap="round"/>
   <path d="M274.9,187.3C275.6,193.1 284.7,196.2 294.0,193.4C288.9,185.6 280.2,181.6 276.0,184.6Z" fill="url(#g185)" stroke="#241606" stroke-width="1.30" stroke-opacity="0.50" stroke-linejoin="round" stroke-linecap="round"/>
   <g transform="translate(256.0 150.0) scale(1.22)"><path d="M-10.0,-14.0C-4.0,-25.0 11.0,-24.0 16.0,-12.0C21.0,-2.0 20.0,11.0 14.0,18.0C7.0,24.0 -4.0,22.0 -9.0,14.0C-12.0,6.0 -13.0,-6.0 -10.0,-14.0Z" fill="url(#g186)" stroke="#241606" stroke-width="1.40" stroke-opacity="0.50" stroke-linejoin="round" stroke-linecap="round"/><path d="M15.0,7.5C14.2,11.7 20.2,16.6 27.6,17.4C25.6,10.6 20.1,5.2 16.4,6.0Z" fill="url(#g187)" stroke="#241606" stroke-width="1.00" stroke-opacity="0.50" stroke-linejoin="round" stroke-linecap="round"/><path d="M15.7,7.3C16.5,11.4 23.1,12.9 29.4,10.1C25.3,5.1 18.9,3.0 16.2,5.4Z" fill="url(#g188)" stroke="#241606" stroke-width="1.00" stroke-opacity="0.50" stroke-linejoin="round" stroke-linecap="round"/><path d="M16.2,6.9C18.5,10.2 24.1,8.9 27.8,3.7C22.7,0.9 16.9,1.6 15.8,4.9Z" fill="url(#g189)" stroke="#241606" stroke-width="1.00" stroke-opacity="0.50" stroke-linejoin="round" stroke-linecap="round"/><path d="M-10.0,-7.0C-3.0,-15.0 7.0,-15.0 13.0,-9.0C6.0,-11.0 -2.0,-9.0 -6.0,-2.0Z" fill="#5E3A0C"/><ellipse cx="0" cy="0" rx="5.2" ry="4.4" fill="#FBD97A" stroke="#241606" stroke-width="1.2" stroke-opacity="0.6"/><circle cx="-0.8" cy="0.4" r="2.6" fill="#241606"/><circle cx="-1.8" cy="-0.8" r="1.0" fill="#FFF4D2"/><path d="M-8.0,-11.0C-14.0,-10.0 -16.0,-6.0 -15.0,-2.0C-11.0,-2.0 -8.0,-5.0 -7.0,-8.0Z" fill="#B87A1A" stroke="#241606" stroke-width="1.00" stroke-opacity="0.50" stroke-linejoin="round" stroke-linecap="round"/><path d="M-7.0,-10.0C-18.0,-7.0 -26.0,0.0 -28.0,9.0C-29.5,15.0 -24.0,17.5 -23.0,12.0C-21.0,6.0 -15.0,2.0 -8.0,1.0C-4.0,0.0 -3.0,-6.0 -6.0,-9.0Z" fill="url(#g190)" stroke="#241606" stroke-width="1.30" stroke-opacity="0.50" stroke-linejoin="round" stroke-linecap="round"/><path d="M-9.0,2.0C-16.0,5.0 -13.0,9.5 -7.0,9.5C-3.0,9.5 -2.0,5.0 -4.0,2.0Z" fill="#8A5510" stroke="#241606" stroke-width="1.00" stroke-opacity="0.50" stroke-linejoin="round" stroke-linecap="round"/><path d="M-22.0,6.0 L-11.0,2.0 L-4.0,-1.5" fill="none" stroke="#5E3A0C" stroke-width="1.20" stroke-opacity="0.55" stroke-linecap="round"/></g>
+  </g>
 </svg>
