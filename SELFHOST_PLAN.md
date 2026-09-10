@@ -47,6 +47,17 @@ ruolo Postgres a privilegio minimo**, non le policy per riga.
 
 ### D0.3 Lo scambio del code OAuth avviene sul MASTER, non sul client
 
+> **Superato (settembre 2026).** Il redirect non torna piu' nell'app sul loopback:
+> Google redirige su `https://<host>/oauth/cb`, cioe' sul master. Il flusso
+> loopback e' un flusso desktop e su Android non puo' funzionare — appena si apre
+> il browser l'activity di Godot va in pausa, `_process()` si ferma e nessun
+> `TCPServer` dentro l'app puo' accettare il redirect. Il client ora chiede
+> `AUTH_GOOGLE_BEGIN`, apre il browser, e ritira la sessione con
+> `AUTH_GOOGLE_POLL` quando torna in primo piano. Vedi `server/oauth_pending.gd`,
+> `server/oauth_http.gd` e il §Backend di `CLAUDE.md`. Il client OAuth deve essere
+> di tipo **Web application**. Il resto di questa sezione resta valido: lo scambio
+> del code (e quindi `GOOGLE_CLIENT_SECRET`) sta sul master, mai nell'APK.
+
 Google, per i client di tipo *Desktop app*, richiede `client_secret` nello scambio
 del code anche con PKCE. Se lo scambio lo facesse il client, quel secret finirebbe
 nell'APK.
@@ -504,6 +515,9 @@ E in `server/master_server.gd` rimuovere: `JWKS_REFRESH_SECONDS`, `BACKEND_CONFI
 ## D4 — Autenticazione Google diretta
 
 ### D4.1 Google Cloud Console
+
+> **Superato (settembre 2026):** serve un client **Web application** con redirect
+> `https://<dominio>/oauth/cb`. Istruzioni aggiornate in `SETUP_DB.md` §2.
 
 Creare un **nuovo** OAuth Client ID di tipo **Desktop app** (non "Web
 application": il redirect è ora `http://127.0.0.1:<porta>/callback`, che i client

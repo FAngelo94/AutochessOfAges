@@ -9,7 +9,7 @@ Google (identity provider del login).
 | `Caddyfile` | `/etc/caddy/Caddyfile` | reverse proxy TLS, route statiche `/ws/mm` e `/ws/w1` |
 | `autochess-postgrest.service` | `/etc/systemd/system/` | PostgREST su `127.0.0.1:3000` (accesso dati) |
 | `postgrest.conf` | `/etc/autochess/postgrest.conf` (mode 0600) | config PostgREST, password del ruolo di connessione |
-| `autochess-master.service` | `/etc/systemd/system/` | master server (login + matchmaking) su `127.0.0.1:9000` |
+| `autochess-master.service` | `/etc/systemd/system/` | master server (login + matchmaking) su `127.0.0.1:9000`, piu' il redirect OAuth su `127.0.0.1:9010` |
 | `autochess-worker@.service` | `/etc/systemd/system/` | unit template worker: `@1` → `127.0.0.1:9001` |
 | `env.example` | `/etc/autochess/env` (mode 0600) | secret: OAuth Google, `SESSION_TOKEN_SECRET`, `MATCH_TOKEN_SECRET`, `DB_API_URL` |
 | `backup-db.sh` | `/opt/autochess/backup-db.sh` (cron notturno) | `pg_dump` del Postgres locale → Hetzner Storage Box |

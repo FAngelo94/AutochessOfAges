@@ -24,7 +24,16 @@ const REASONS := {
 	"rate_limited": "Troppi tentativi. Riprova tra qualche minuto.",
 	"db": "Servizio non disponibile, riprova più tardi.",
 	"google": "Accesso con Google non riuscito.",
+	"expired": "L'accesso con Google è scaduto. Riprova.",
+	"denied": "Accesso con Google annullato.",
 }
+
+## Testo del pulsante Google mentre si aspetta il consenso nel browser. Il
+## consenso ora si chiude sul server e il client lo ritira quando torna in primo
+## piano (net/auth.gd): puo' passare qualche minuto, e chi ha solo chiuso la
+## scheda del browser deve poter tornare indietro senza aspettare la scadenza.
+const GOOGLE_WAIT_TEXT := "In attesa di Google — annulla"
+const GOOGLE_TEXT := "Continua con Google"
 
 ## Alzata da chi apre questa schermata di proposito pur essendo già ospite —
 ## le impostazioni, con "Accedi". Senza, _ready() rimbalzerebbe al menu per via
@@ -47,6 +56,7 @@ var _username_edit: LineEdit
 var _primary_button: Button
 var _primary_text := ""
 var _google_button: Button
+var _google_waiting := false
 var _guest_button: Button
 
 
@@ -203,7 +213,7 @@ func _provider_buttons() -> Control:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 
-	_google_button = _plate_button("Continua con Google", Style.BLUE, Style.BLUE_DEEP, Style.TOUCH_MIN)
+	_google_button = _plate_button(GOOGLE_TEXT, Style.BLUE, Style.BLUE_DEEP, Style.TOUCH_MIN)
 	_google_button.pressed.connect(_on_google_pressed)
 	box.add_child(_google_button)
 
@@ -377,10 +387,16 @@ func _validate_signup(username_text: String, email: String, password: String, co
 
 
 func _on_google_pressed() -> void:
+	if _google_waiting:
+		_auth.cancel_login()
+		_set_google_waiting(false)
+		_set_busy(false)
+		return
 	if _busy:
 		return
 	_set_busy(true)
 	_auth.login_google()
+	_set_google_waiting(_auth.google_pending())
 
 
 func _on_guest_pressed() -> void:
@@ -394,6 +410,7 @@ func _on_login_completed(success: bool, reason: String) -> void:
 	if success:
 		_go_to_menu()
 		return
+	_set_google_waiting(false)
 	_set_busy(false)
 	_show_error(String(REASONS.get(reason, "Accesso non riuscito.")))
 
@@ -405,13 +422,23 @@ func _on_restore_finished(success: bool) -> void:
 		_set_state(State.LOGIN)
 
 
+## Il pulsante Google diventa "annulla" finche' il consenso e' in sospeso.
+func _set_google_waiting(waiting: bool) -> void:
+	_google_waiting = waiting
+	if _google_button == null:
+		return
+	_google_button.disabled = _busy and not waiting
+	_google_button.text = GOOGLE_WAIT_TEXT if waiting else GOOGLE_TEXT
+
+
 func _set_busy(busy: bool) -> void:
 	_busy = busy
 	if _primary_button != null:
 		_primary_button.disabled = busy
 		_primary_button.text = "…" if busy else _primary_text
 	if _google_button != null:
-		_google_button.disabled = busy
+		# Mentre si aspetta Google il pulsante resta vivo: e' l'annulla.
+		_google_button.disabled = busy and not _google_waiting
 	if _guest_button != null:
 		_guest_button.disabled = busy
 	if _email_edit != null:

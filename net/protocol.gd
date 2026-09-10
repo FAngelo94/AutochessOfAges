@@ -8,17 +8,22 @@ extends RefCounted
 ## 4.7 e var_to_bytes preserva Vector2i nativamente (serve all'event log del
 ## combattimento). decode() non decodifica mai oggetti: accetta solo dati puri.
 
-const PROTOCOL_VERSION := 4
+const PROTOCOL_VERSION := 6
 const MAX_PACKET_BYTES := 262144        # 256 KiB: pacchetti piu' grandi -> scartati
 
 ## Chiave del tipo di messaggio.
 const KEY_TYPE := "t"
 
 # --- Client -> Master (autenticazione, prima di HELLO) ------------------------
-## Lo scambio del code OAuth lo fa il master (tiene GOOGLE_CLIENT_SECRET): il
-## client cattura il code sul loopback e lo inoltra qui. Vedi net/auth.gd e
-## server/account_service.gd.
-const AUTH_GOOGLE := "AUTH_GOOGLE"      # {code, code_verifier, redirect_uri}
+## Login Google in due tempi. Il client NON vede mai il code: apre il browser
+## sull'auth_url e Google redirige su https://<host>/oauth/cb, che il master
+## riceve e scambia da solo. Serve perche' su Android l'app va in pausa appena
+## si apre il browser e nessun listener dentro l'app puo' ricevere il redirect.
+## Il client ritira la sessione quando torna in primo piano. Vedi net/auth.gd,
+## server/oauth_pending.gd, server/oauth_http.gd.
+const AUTH_GOOGLE_BEGIN := "AUTH_GOOGLE_BEGIN"  # {}
+const AUTH_GOOGLE_URL := "AUTH_GOOGLE_URL"      # {state, auth_url}
+const AUTH_GOOGLE_POLL := "AUTH_GOOGLE_POLL"    # {state}
 const AUTH_REFRESH := "AUTH_REFRESH"    # {refresh_token}
 ## Account con email e password, alternativa a Google. Vedi server/account_service.gd.
 const AUTH_EMAIL_LOGIN := "AUTH_EMAIL_LOGIN"    # {email, password}
@@ -29,6 +34,7 @@ const DELETE_ACCOUNT := "DELETE_ACCOUNT"# {session_token} — cancellazione GDPR
 ## client non parla mai HTTP col database, e il filtro sul profilo sta dentro
 ## la RPC player_match_history (db/migrations/0004_match_units.sql).
 const HISTORY_REQUEST := "HISTORY_REQUEST"  # {session_token, limit}
+const DONATIONS_REQUEST := "DONATIONS_REQUEST"  # {session_token, limit}
 
 # --- Client -> Master ---------------------------------------------------------
 const HELLO := "HELLO"                  # {protocol_version, access_token}
@@ -37,11 +43,15 @@ const QUEUE_LEAVE := "QUEUE_LEAVE"      # {}
 
 # --- Master -> Client --------------------------------------------------------
 const AUTH_OK := "AUTH_OK"              # {session_token, refresh_token, user_id, username, profile, stats, owned_civs}
-## reason: google|db|invalid|email_taken|invalid_credentials|rate_limited (auth), oltre a
+## reason: google|db|invalid|email_taken|invalid_credentials|rate_limited|expired|denied (auth), oltre a
 ## version|auth|banned|oversize per REJECTED su HELLO.
 const AUTH_FAIL := "AUTH_FAIL"          # {reason}
+## Risposta ad AUTH_GOOGLE_POLL finche' il consenso e' in corso: non e' un
+## errore, il client richiedera' ancora.
+const AUTH_PENDING := "AUTH_PENDING"    # {}
 const PROFILE_OK := "PROFILE_OK"        # {}
 const ACCOUNT_DELETED := "ACCOUNT_DELETED" # {}
+const DONATIONS_DATA := "DONATIONS_DATA"  # {total_cents, goal_cents, supporters, mine: [{amount_cents, created_at}]}
 const HISTORY_DATA := "HISTORY_DATA"    # {matches: [{match_id, ended_at, ranked, placement, hero_id, hp, mmr_delta, mmr_after, humans, units}]}
 const WELCOME := "WELCOME"              # {user_id, username, stats}
 const REJECTED := "REJECTED"            # {reason: version|auth|banned|oversize}

@@ -14,6 +14,11 @@ signal entitlements_changed(entitlement_ids: PackedStringArray)
 ## Emesso al termine di un acquisto. success=false con reason="cancelled"
 ## quando è l'utente ad annullare: non è un errore da mostrare come tale.
 signal purchase_completed(entitlement_id: String, success: bool, reason: String)
+## Emesso al termine dell'acquisto di un prodotto che NON concede entitlement —
+## oggi solo le donazioni, che sono consumabili e ripetibili. Tenerlo separato
+## da purchase_completed evita che la UI degli sblocchi reagisca a un acquisto
+## che non sblocca niente.
+signal product_purchase_completed(product_id: String, success: bool, reason: String)
 ## Emesso quando il listino con i prezzi localizzati è disponibile.
 signal products_loaded(products: Dictionary)
 
@@ -41,6 +46,24 @@ func fetch_products(_entitlement_ids: PackedStringArray) -> void:
 
 ## Avvia il flusso d'acquisto per un entitlement del catalogo.
 func purchase(_entitlement_id: String) -> void:
+	pass
+
+
+## Avvia il flusso d'acquisto per un prodotto qualsiasi, senza passare dagli
+## entitlement. L'esito arriva su product_purchase_completed.
+func purchase_product(_product_id: String) -> void:
+	pass
+
+
+## Associa gli acquisti a un account. Va chiamata quando il giocatore fa il
+## login: fino a quel momento il negozio conosce solo un id anonimo di
+## dispositivo, e ciò che è stato pagato non seguirebbe il giocatore altrove.
+func identify(_user_id: String) -> void:
+	pass
+
+
+## Torna all'utente anonimo, al logout.
+func sign_out() -> void:
 	pass
 
 

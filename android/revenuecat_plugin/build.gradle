@@ -37,6 +37,6 @@ dependencies {
     // La libreria Godot NON va inclusa nell'.aar: è già dentro l'applicazione.
     compileOnly fileTree(dir: 'libs', include: ['godot-lib.*.aar'])
 
-    implementation 'com.revenuecat.purchases:purchases:8.10.0'
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
+    implementation 'com.revenuecat.purchases:purchases:10.20.0'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.0'
 }

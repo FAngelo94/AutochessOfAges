@@ -227,8 +227,9 @@ func _check_scene_change() -> void:
 			current.match_state.human_player().hero_id)
 
 
-## Il negozio deve aprirsi, mostrare una riga per ogni contenuto in vendita e
-## riflettere subito ciò che è stato acquistato.
+## Il Crowdfunding Store deve aprirsi, offrire un pulsante per ogni taglio
+## donabile e la barra verso l'obiettivo. Non vende piu' contenuti: il pannello
+## non deve tornare a proporre entitlement.
 ##
 ## L'autoload si recupera dall'albero invece di usare il nome globale: questo
 ## script viene compilato prima che gli autoload siano registrati, e "Store"
@@ -236,27 +237,58 @@ func _check_scene_change() -> void:
 func _check_store_panel(menu: Control) -> void:
 	var store := menu.get_node("/root/Store")
 	var panel: StorePanel = menu._store_panel
-	check(panel._rows.size() == Catalog.entitlement_ids().size(),
-		"c'è una riga per ogni contenuto in vendita",
-		"%d righe" % panel._rows.size())
 
-	var entitlement_id := "cosmetic_pack_legion"
-	var button: Button = panel._rows[entitlement_id]
-	check(not button.disabled, "un contenuto non posseduto è acquistabile")
+	check(panel._quick.size() == Catalog.donation_tiers().size(),
+		"c'e' un pulsante per ogni taglio donabile",
+		"%d pulsanti" % panel._quick.size())
+	for amount in [99, 199, 299, 499, 999, 2499]:
+		check(panel._quick.has(amount), "esiste il pulsante da %d centesimi" % amount)
 
-	store.purchase(entitlement_id)
-	check(store.has_entitlement(entitlement_id), "l'acquisto concede il contenuto")
-	check(button.disabled, "dopo l'acquisto il pulsante non è più premibile")
-	check(store.owns_cosmetic("roman_gold"), "il cosmetico risulta posseduto")
+	# Tre per riga: il pannello e' verticale su 720 px e una riga piu' fitta
+	# stringerebbe i pulsanti sotto la soglia tattile.
+	var righe := 0
+	var per_riga: Array[String] = []
+	for figlio in panel._bar.get_parent().get_parent().get_children():
+		if figlio is HBoxContainer:
+			righe += 1
+			per_riga.append("%d" % figlio.get_child_count())
+	check(righe == 2, "i tagli stanno su due righe", "%d righe" % righe)
+	check(per_riga == ["3", "3"], "tre pulsanti per riga", ", ".join(per_riga))
 
-	# La modalità 'shared' non deve mai togliere civiltà dalla partita: è la
-	# garanzia che l'acquisto non tocchi l'equilibrio competitivo.
+	check(panel._bar != null and int(panel._bar.max_value) == Catalog.donation_goal_cents(),
+		"la barra arriva all'obiettivo", "max=%d" % int(panel._bar.max_value))
+	check(Catalog.donation_goal_cents() == 100000, "l'obiettivo e' 1000 euro")
+	check(Catalog.donation_goals().size() == 6, "gli obiettivi elencati sono sei",
+		"%d" % Catalog.donation_goals().size())
+
+	# Ogni pulsante deve corrispondere a un prodotto vero, o premerlo non
+	# aprirebbe nessun pagamento. E' l'invariante che lega il pannello al
+	# catalogo e, di riflesso, alle dashboard di RevenueCat e Google Play.
+	var senza_prodotto: Array[String] = []
+	for amount in panel._quick:
+		if Catalog.donation_product(int(amount), "android").is_empty():
+			senza_prodotto.append("%d" % amount)
+	check(senza_prodotto.is_empty(), "ogni pulsante ha un prodotto Android configurato",
+		", ".join(senza_prodotto))
+
+	# Da sloggati la donazione non sarebbe attribuibile a nessuno: meglio non
+	# aprire affatto il pagamento.
+	var auth := menu.get_node_or_null("/root/Auth")
+	if auth != null and not auth.is_logged_in():
+		panel._refresh()
+		var tutti_bloccati := true
+		for amount in panel._quick:
+			if not (panel._quick[amount] as Button).disabled:
+				tutti_bloccati = false
+		check(tutti_bloccati, "senza account non si puo' donare")
+
+	# La modalita' 'shared' non deve mai togliere civilta' dalla partita.
 	check(store.playable_origins().size() == GameData.origin_ids().size(),
-		"in modalità condivisa tutte le civiltà restano giocabili")
-	check(store.selectable_origins().has("roman"), "la civiltà gratuita è sempre selezionabile")
+		"in modalita' condivisa tutte le civilta' restano giocabili")
+	check(store.selectable_origins().has("roman"), "la civilta' gratuita e' sempre selezionabile")
 
-	# Non lasciare acquisti finti sul disco: il prossimo avvio ripartirebbe
-	# con contenuti già sbloccati e i test non sarebbero più ripetibili.
+	# Non lasciare donazioni finte sul disco: il prossimo avvio ripartirebbe con
+	# la barra gia' avanzata e i test non sarebbero piu' ripetibili.
 	if store.backend is MockStore:
 		(store.backend as MockStore).clear()
 

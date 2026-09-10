@@ -1,33 +1,58 @@
 class_name GoogleOAuth
 extends RefCounted
 
-## Scambio del code OAuth con Google, lato master. Il client cattura il code sul
-## loopback (net/auth.gd) e lo inoltra al master, che qui lo scambia per un
-## id_token usando GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (env, /etc/autochess/env).
+## Consenso Google, lato master. Il master costruisce l'URL di consenso
+## (build_auth_url), riceve il redirect su https://<host>/oauth/cb
+## (server/oauth_http.gd) e scambia il code per un id_token qui, usando
+## GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (env, /etc/autochess/env).
+##
+## Il redirect NON e' piu' il loopback dentro l'app (RFC 8252): su Android
+## l'app va in pausa appena si apre il browser e non puo' accettare niente.
+## Passando dal server, lo scambio avviene mentre il gioco e' in background e il
+## client ritira la sessione al rientro. Vedi server/oauth_pending.gd.
+##
+## Il client OAuth deve quindi essere di tipo "Web application", con
+## GOOGLE_REDIRECT_URI fra gli "Authorized redirect URIs" (SETUP_DB.md §2).
 ##
 ## L'id_token arriva direttamente da Google su TLS e non passa mai per il client:
 ## la firma NON viene verificata (nessuna JWKS), si validano solo i claim
 ## aud/iss/exp/sub. Vedi SELFHOST_PLAN.md D0.4.
 
+const AUTH_ENDPOINT := "https://accounts.google.com/o/oauth2/v2/auth"
 const TOKEN_ENDPOINT := "https://oauth2.googleapis.com/token"
+const SCOPE := "openid email profile"
 const VALID_ISS := ["accounts.google.com", "https://accounts.google.com"]
 
 
 static func is_configured() -> bool:
 	return OS.get_environment("GOOGLE_CLIENT_ID") != "" \
-		and OS.get_environment("GOOGLE_CLIENT_SECRET") != ""
+		and OS.get_environment("GOOGLE_CLIENT_SECRET") != "" \
+		and redirect_uri() != ""
+
+
+## URI di redirect registrato su Google. Unico per tutte le piattaforme: e' il
+## server a riceverlo, non l'app.
+static func redirect_uri() -> String:
+	return OS.get_environment("GOOGLE_REDIRECT_URI").strip_edges()
+
+
+## URL di consenso da aprire nel browser dell'utente. `state` lega la risposta
+## alla richiesta in sospeso (server/oauth_pending.gd).
+static func build_auth_url(challenge: String, state: String) -> String:
+	return "%s?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s&code_challenge=%s&code_challenge_method=S256" % [
+		AUTH_ENDPOINT,
+		OS.get_environment("GOOGLE_CLIENT_ID").uri_encode(),
+		redirect_uri().uri_encode(),
+		SCOPE.uri_encode(),
+		state.uri_encode(),
+		challenge.uri_encode()]
 
 
 ## cb.call(ok: bool, claims: Dictionary) -> {sub, email, name} in caso di successo,
 ## {"reason": "..."} altrimenti.
-static func exchange_code(owner: Node, code: String, verifier: String, redirect_uri: String, cb: Callable) -> void:
+static func exchange_code(owner: Node, code: String, verifier: String, cb: Callable) -> void:
 	if not is_configured() or owner == null or not is_instance_valid(owner):
 		cb.call(false, {"reason": "oauth_not_configured"})
-		return
-	# Il redirect_uri deve essere loopback: senza questo vincolo il master
-	# diventa un oracolo di scambio code per redirect arbitrari.
-	if not (redirect_uri.begins_with("http://127.0.0.1:") and redirect_uri.ends_with("/callback")):
-		cb.call(false, {"reason": "bad_redirect"})
 		return
 	if code == "" or verifier == "":
 		cb.call(false, {"reason": "missing_code"})
@@ -37,7 +62,7 @@ static func exchange_code(owner: Node, code: String, verifier: String, redirect_
 	var form := "grant_type=authorization_code"
 	form += "&code=" + code.uri_encode()
 	form += "&code_verifier=" + verifier.uri_encode()
-	form += "&redirect_uri=" + redirect_uri.uri_encode()
+	form += "&redirect_uri=" + redirect_uri().uri_encode()
 	form += "&client_id=" + client_id.uri_encode()
 	form += "&client_secret=" + OS.get_environment("GOOGLE_CLIENT_SECRET").uri_encode()
 

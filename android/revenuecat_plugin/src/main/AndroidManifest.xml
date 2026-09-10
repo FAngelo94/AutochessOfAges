@@ -4,4 +4,23 @@
          la libreria di fatturazione. -->
     <uses-permission android:name="com.android.vending.BILLING" />
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <application>
+        <!-- COME GODOT TROVA QUESTO PLUGIN.
+             Non basta che le classi finiscano nell'APK: all'avvio
+             GodotPluginRegistry legge il manifest cercando i meta-data che
+             cominciano per "org.godotengine.plugin.v2.", e istanzia la classe
+             indicata nel value. Senza questa riga il plugin viene impacchettato
+             ma mai registrato, Engine.has_singleton("RevenueCatGodot") risponde
+             false, e il gioco ricade sul negozio finto senza un solo errore nei
+             log — il modo peggiore di fallire.
+
+             Il suffisso del name DEVE combaciare con getPluginName() nel Kotlin:
+             il registry confronta i due e scarta il plugin se differiscono
+             ("Meta-data plugin name does not match the value returned by the
+             plugin handle"). -->
+        <meta-data
+            android:name="org.godotengine.plugin.v2.RevenueCatGodot"
+            android:value="com.atuochess.revenuecat.RevenueCatGodotPlugin" />
+    </application>
 </manifest>

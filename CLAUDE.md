@@ -90,10 +90,19 @@ is WebSocket (`wss://`, TLS via Caddy), messages are `var_to_bytes`-encoded dict
 single Hetzner box; the only external service is Google (login). The client never talks HTTP to
 the backend — only `wss://` to the master. Identity is Google **or** email/password (added in
 `db/migrations/0003_email_password.sql`), never both required: `profiles.google_sub` is nullable,
-an account has `google_sub`, `password_hash`, or both. Login: for Google, the client does the
-loopback+PKCE dance and forwards `code` to the master (`AUTH_GOOGLE`); the master holds
-`GOOGLE_CLIENT_SECRET`, exchanges it, and mints its own HMAC **session token**
-(`server/session_token.gd`) that the client presents in `HELLO`. For email/password, the client
+an account has `google_sub`, `password_hash`, or both. Login: for Google, **the server closes the
+consent**, not the app — the client asks the master for a consent URL
+(`AUTH_GOOGLE_BEGIN` → `AUTH_GOOGLE_URL`), opens the system browser, and Google redirects to
+`https://<host>/oauth/cb`, the master's only HTTP route (`server/oauth_http.gd`, behind Caddy). The
+master exchanges the `code` (it holds `GOOGLE_CLIENT_SECRET`) and parks the session under the
+`state` (`server/oauth_pending.gd`, one-shot, 10 min TTL); the client picks it up with
+`AUTH_GOOGLE_POLL` when it comes back to the foreground. The old loopback+PKCE flow (RFC 8252,
+a `TCPServer` inside the app) was removed because it is a **desktop** flow: on Android the
+activity pauses the moment the browser opens, `_process()` stops, and the redirect is never
+accepted. The client persists the pending login (`user://oauth_pending.dat`) so a login survives
+the OS killing the game. The master then mints its own HMAC **session token**
+(`server/session_token.gd`) that the client presents in `HELLO`. The Google OAuth client must be
+of type **Web application** with that exact redirect URI (`GOOGLE_REDIRECT_URI`). For email/password, the client
 sends `AUTH_EMAIL_LOGIN`/`AUTH_EMAIL_SIGNUP` and the master calls the matching Postgres RPC
 (`login_email_account`/`register_email_account`, bcrypt via `pgcrypto`) — both paths converge on
 the same `AccountService._issue_session()` and the same `AUTH_OK` bundle. No RLS (PostgREST isn't
@@ -102,7 +111,7 @@ exposed; role `autochess_app` is least-privilege).
 `ui/login.tscn` is the actual main scene (`project.godot`): it gates the home behind a login —
 Google, email/password, or "gioca come ospite" (offline, no multiplayer/stats, remembered in
 `Profile.guest_mode`) — and falls straight through to `ui/menu.tscn` when the backend is
-unconfigured, already logged in, or already a guest. `PROTOCOL_VERSION` is 4.
+unconfigured, already logged in, or already a guest. `PROTOCOL_VERSION` is 6.
 
 The rule that holds everything else up: **`core/` does not know about `ui/`**. The simulation is
 deterministic and seeded, so the same match can be replayed identically — the prerequisite for
@@ -123,12 +132,14 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `ui/castle_backdrop.gd` | `class_name CastleBackdrop` — the runtime-drawn castle facade, shared by login and menu |
 | `ui/lobby.gd` | matchmaking waiting room (queue count + 30s countdown) |
 | `ui/main.gd` | in-match screen; local mode unchanged, remote mode shows prep timer + PRONTO |
-| `net/auth.gd` | autoload `Auth` — Google loopback+PKCE and email/password, forwards to master over a short WS; degrades to guest |
+| `net/auth.gd` | autoload `Auth` — Google (server-side consent: begin → browser → poll on resume) and email/password over a short WS; degrades to guest |
 | `net/match_session.gd` | base class; `LocalSession` / `RemoteSession` back it |
-| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 4) |
-| `server/master_server.gd` | `SceneTree` script; auth (`AUTH_*`/`PROFILE_SET`), queue, 30s timer, worker routing |
+| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 6) |
+| `server/master_server.gd` | `SceneTree` script; auth (`AUTH_*`/`PROFILE_SET`), OAuth redirect, queue, 30s timer, worker routing |
 | `server/session_token.gd` / `session_verifier.gd` | HMAC session token minted by the master + the instance adapter injected into `Matchmaker` |
-| `server/google_oauth.gd` | server-side `code`→`id_token` exchange, validates `aud`/`iss`/`exp` (no JWKS) |
+| `server/google_oauth.gd` | consent URL + server-side `code`→`id_token` exchange, validates `aud`/`iss`/`exp` (no JWKS) |
+| `server/oauth_pending.gd` | `state` → pending Google login (socket-free, testable): PKCE pair, one-shot pickup, TTL, cap |
+| `server/oauth_http.gd` | the master's only HTTP route (`GET /oauth/cb`, loopback behind Caddy) + the browser page that offers the "back to AoA" intent |
 | `server/account_service.gd` | login/refresh orchestration: OAuth → `upsert_google_account` → mint session + opaque refresh |
 | `server/db_client.gd` | PostgREST calls on `DB_API_URL` (loopback), no auth headers; replaces `supabase_admin.gd` |
 | `server/matchmaker.gd` | socket-free queue core (testable) |
@@ -142,7 +153,7 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `art/unit_portraits.gd` | renders each model once, keeps the texture (autoload `Portraits`) |
 | `ui/collection_panel.gd` | unit encyclopedia, generated from `data/` |
 | `ui/history_panel.gd` | match history — merges the server's online matches with the local ones |
-| `ui/store_panel.gd` | purchase screen |
+| `ui/store_panel.gd` | Crowdfunding Store — fixed donation tiers, progress bar to €1000, goal list |
 | `ui/guide_panel.gd` | "how to play" screen, generated from `data/tutorial.json` |
 | `ui/tip_bubble.gd` | one-shot in-match tips, queued in `data/tutorial.json`, tracked in `Profile.seen_tips` |
 | `app/profile.gd` | favorite civilization, battle speed, stats (autoload `Profile`) |
@@ -280,14 +291,53 @@ the local ones. Guest or offline, it shows the local ones and no error.
 All tunable constants live in `data/balance.json` — economy, interest, XP curve, shop odds per
 level, pool size, star scaling, damage to player health. No magic numbers in code.
 
-### Monetization
+### Monetization — Crowdfunding Store
+
+The store sells nothing: it collects **donations** toward a €1000 goal. Every civilization is
+free (`free_origins` in `data/catalog.json`), so no gameplay feature depends on the store — a
+project constraint, not an accident. The entitlement machinery still exists and `MockStore` still
+exercises it, but nothing is on sale; a civilization that were neither free nor purchasable would
+be permanently unselectable, which is why removing something from the store always means checking
+`free_origins`.
 
 RevenueCat has **no Godot SDK**, so this layer is split into an interface (`store_backend.gd`)
-and backends per platform. On desktop the game uses `mock_store.gd` and the full flow is
-testable now. On Android/Web, until the native bridges are wired (`android/`, `web/`), 
-`is_available()` returns false, the store is hidden, and **the game stays fully playable** with
-free content — no gameplay feature may depend on the store. See `monetization/README.md`,
-`android/README.md`, `web/README.md` for the bridge contracts and setup steps.
+and backends per platform. On desktop the game uses `mock_store.gd` and the full flow is testable
+now. On Android the bridge is a Kotlin plugin built from `android/revenuecat_plugin/` — the
+`.aar` in `android/plugins/` plus `gradle_build/use_gradle_build=true` in `export_presets.cfg`
+are what put the SDK inside the APK; without either, `is_available()` returns false and the store
+is hidden. Two constraints are not free choices: the plugin must compile with the **same Kotlin
+version as `godot-lib`** (2.1, or its metadata is unreadable), and the RevenueCat SDK must be
+**>= 9.9.0** for the Test Store — hence 10.20.0, declared identically in
+`android/plugins/RevenueCatGodot.gdap` (what ships) and `revenuecat_plugin/build.gradle` (what
+compiles). `godot-lib.template_release.aar` need not be downloaded: it is inside Godot's own
+export templates. See `android/README.md`.
 
-`catalog.json`'s `roster_mode` (`shared` vs `owned`) controls whether purchased civilizations join
-everyone's shared pool or only the buyer's — a design decision, not a technical one.
+`data/catalog.json` currently holds a **Test Store** key (`test_…`), which lets purchases be
+tested without Google Play. `Store._select_backend()` refuses to use one in a non-debug build and
+disables the store instead: RevenueCat rejects test keys in production, and a hidden store is a
+better failure than a button that opens nothing.
+
+Two constraints shape the whole design:
+
+- **Google Play product prices are fixed** — an arbitrary amount cannot be charged, so donations
+  are fixed tiers, one button each (`donations.tiers` in `data/catalog.json`). A free-amount field
+  was the first design and was dropped: it promised what the payment cannot deliver, since any
+  typed amount still has to land on a pre-created product. Adding an amount costs one line of JSON
+  plus one product in each dashboard.
+- **The database row is written by the RevenueCat webhook, never by the client.** The progress bar
+  is public, so a total summed by whoever pays would be inflatable by anyone. `POST
+  /revenuecat/webhook` is the master's second HTTP route (`server/oauth_http.gd`, shared port with
+  the OAuth redirect, shared-secret `Authorization` header) and lands in `public.donations`
+  (`db/migrations/0005_donations.sql`) via `record_donation`, idempotent on `transaction_id`
+  because RevenueCat retries. The client only *reads* the total, through the master
+  (`DONATIONS_REQUEST`/`DONATIONS_DATA`), like everything else.
+
+Donations are **consumables**: repeatable, granting no entitlement — hence two separate signals
+(`purchase_completed` unlocks something, `product_purchase_completed` does not) and no "restore
+purchases" button in the panel. If entitlements ever go back on sale, that button must come back
+with them: on Google Play it is a requirement.
+
+`Store` calls `Purchases.logIn()` on login (`identify()` → the plugin's `logIn`). Without it the
+store only knows an anonymous device id — `Store` is an autoload registered *before* `Auth`, so
+`_ready()` cannot see it — purchases would not follow the player across devices, and a donation
+would reach the webhook with an `app_user_id` matching no profile.

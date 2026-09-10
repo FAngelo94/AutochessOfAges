@@ -58,6 +58,8 @@ func fetch_products(entitlement_ids: PackedStringArray) -> void:
 		var product := Catalog.product_id(entitlement_id, "web")
 		if not product.is_empty():
 			products.append(product)
+	for product in Catalog.donation_product_ids("web"):
+		products.append(product)
 	_bridge.getProducts(",".join(products))
 
 
@@ -72,6 +74,20 @@ func purchase(entitlement_id: String) -> void:
 	# Apre il flusso di pagamento ospitato. L'esito torna via callback: nel
 	# browser l'utente può anche completare il pagamento in un'altra scheda.
 	_bridge.purchase(product)
+
+
+## Come su Android il ponte non distingue i due casi: la differenza sta solo in
+## come si legge la risposta. Senza questa implementazione una donazione dal
+## browser non emetterebbe alcun segnale e il pannello resterebbe appeso su
+## "in corso" per sempre.
+func purchase_product(product_id: String) -> void:
+	if _bridge == null:
+		product_purchase_completed.emit(product_id, false, "negozio non disponibile")
+		return
+	if product_id.is_empty():
+		product_purchase_completed.emit(product_id, false, "prodotto non configurato")
+		return
+	_bridge.purchase(product_id)
 
 
 func restore_purchases() -> void:
@@ -99,6 +115,11 @@ func _on_purchase(args: Array) -> void:
 	var entitlement_id := _entitlement_for_product(product)
 	var success := bool(parsed.get("success", false))
 	var reason := String(parsed.get("error", "cancelled" if parsed.get("cancelled", false) else ""))
+	# Un prodotto che non è mappato a un entitlement non sblocca niente: è una
+	# donazione, e va sull'altro segnale.
+	if entitlement_id.is_empty():
+		product_purchase_completed.emit(product, success, reason)
+		return
 	purchase_completed.emit(entitlement_id, success, reason)
 
 
@@ -106,12 +127,13 @@ func _on_products(args: Array) -> void:
 	var parsed = JSON.parse_string(String(args[0]) if args.size() > 0 else "")
 	if not (parsed is Dictionary):
 		return
-	var by_entitlement := {}
+	# I prodotti senza entitlement — le donazioni — restano sotto il proprio id,
+	# che è come il pannello li cerca.
+	var by_key := {}
 	for product in parsed.keys():
 		var entitlement_id := _entitlement_for_product(String(product))
-		if not entitlement_id.is_empty():
-			by_entitlement[entitlement_id] = parsed[product]
-	products_loaded.emit(by_entitlement)
+		by_key[entitlement_id if not entitlement_id.is_empty() else String(product)] = parsed[product]
+	products_loaded.emit(by_key)
 
 
 func _entitlement_for_product(product: String) -> String:

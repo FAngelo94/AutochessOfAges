@@ -4,6 +4,7 @@
   "roster_mode": "shared",
   "_roster_mode_doc": "'shared' = la lobby decide quali civiltà sono in gioco e valgono per tutti; possedere una civiltà sblocca la possibilità di SCEGLIERLA in singolo e di proporla in lobby. 'owned' = si gioca solo con le civiltà possedute, che entrano nel proprio pool: più semplice da vendere, ma rompe l'equità del pool condiviso in multiplayer.",
 
+  "_entitlements_doc": "Restano definiti — il gioco sa ancora ragionare per entitlement e MockStore li usa nei test — ma il negozio NON li espone più: la monetizzazione è passata alle donazioni. Se un giorno tornassero in vendita, riportare anche il pulsante 'Ripristina acquisti' nel pannello.",
   "entitlements": {
     "season_pass": {
       "name": "Pass stagionale",
@@ -31,8 +32,31 @@
     }
   },
 
-  "_free_content_doc": "Le civiltà elencate qui sono sempre disponibili senza acquisto. Almeno una deve esserci, altrimenti al primo avvio non si può giocare.",
-  "free_origins": ["roman"],
+  "_free_content_doc": "Le civiltà elencate qui sono sempre disponibili senza acquisto. Almeno una deve esserci, altrimenti al primo avvio non si può giocare. Da quando il negozio raccoglie donazioni invece di vendere contenuti, TUTTE le civiltà stanno qui: gli entitlement restano definiti ma nessuno è più acquistabile, e una civiltà non gratuita sarebbe per sempre non selezionabile.",
+  "free_origins": ["roman", "gaul", "teuton"],
+
+  "_donations_doc": "Crowdfunding Store. Su Google Play il prezzo di un prodotto è FISSO: non esiste un'API per addebitare una cifra arbitraria, esistono solo prodotti creati in anticipo. Per questo le donazioni sono a importo fisso: ogni taglio qui sotto è un pulsante nel pannello, e ogni pulsante e' un prodotto consumabile da creare con lo stesso id su RevenueCat e su Google Play. Aggiungere un taglio = una riga qui + un prodotto nelle due dashboard.",
+  "donations": {
+    "goal_cents": 100000,
+    "currency": "EUR",
+    "_tiers_doc": "Gli id sono in CENTESIMI col suffisso 'c', non in euro: un id in euro come 'aoa_donate_2' sarebbe ambiguo con prezzi come 1,99 e 2,99, e un errore del genere in Play Console si scopre solo quando qualcuno paga la cifra sbagliata. L'ordine di questa lista e' l'ordine dei pulsanti nel pannello, tre per riga.",
+    "tiers": [
+      { "amount_cents": 99, "android": "aoa_donate_99c", "web": "aoa_donate_99c_web" },
+      { "amount_cents": 199, "android": "aoa_donate_199c", "web": "aoa_donate_199c_web" },
+      { "amount_cents": 299, "android": "aoa_donate_299c", "web": "aoa_donate_299c_web" },
+      { "amount_cents": 499, "android": "aoa_donate_499c", "web": "aoa_donate_499c_web" },
+      { "amount_cents": 999, "android": "aoa_donate_999c", "web": "aoa_donate_999c_web" },
+      { "amount_cents": 2499, "android": "aoa_donate_2499c", "web": "aoa_donate_2499c_web" }
+    ],
+    "goals": [
+      "introduzione di 1 nuova civiltà",
+      "introduzione di 2 nuovi eroi",
+      "personalizzazione del proprio account con avatar",
+      "pacchetto personalizzazione avatar avanzato per i sostenitori",
+      "Arricchimento dello store con nuovi ambiziosi obiettivi",
+      "miglioramento complessivo del gioco"
+    ]
+  },
 
   "products": {
     "_comment": "entitlement -> identificativi per piattaforma. Vanno creati con gli stessi id su Google Play Console e collegati in RevenueCat; per il web sono i price id configurati in RevenueCat Web Billing.",
@@ -44,7 +68,8 @@
 
   "revenuecat": {
     "_comment": "Le chiavi pubbliche di RevenueCat (SDK key) non sono segreti: identificano l'app, non autorizzano operazioni sensibili. La chiave SEGRETA (v1 secret) non deve MAI stare nel client: serve solo al server per la REST API.",
-    "android_api_key": "",
+    "_test_key_warning": "android_api_key comincia per 'test_': e' la chiave della Test Store, che serve a provare gli acquisti senza Google Play. NON deve finire in una build pubblicata — RevenueCat la rifiuta in produzione e il negozio smetterebbe di funzionare per tutti. Store._select_backend() se ne accorge e spegne il negozio invece di lasciarlo rotto, ma la sostituzione con la chiave dell'app Play resta un passo manuale prima della pubblicazione.",
+    "android_api_key": "test_wFwROWhfkOQdfUkTzMHPnlYRHjD",
     "web_api_key": "",
     "offering_id": "default"
   }

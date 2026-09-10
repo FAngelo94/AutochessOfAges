@@ -1,0 +1,11 @@
+// Versioni dei plugin Gradle, dichiarate una volta per tutti i moduli.
+//
+// Kotlin 2.1: NON e' una scelta libera. godot-lib.template_release.aar di Godot
+// 4.7 e' compilata con metadata Kotlin 2.1.0, e un compilatore 1.9 si rifiuta di
+// leggerla ("was compiled with an incompatible version of Kotlin"). La versione
+// va tenuta allineata a quella con cui e' costruito il motore, non alla piu'
+// comoda.
+plugins {
+    id 'com.android.library' version '8.5.2' apply false
+    id 'org.jetbrains.kotlin.android' version '2.1.0' apply false
+}

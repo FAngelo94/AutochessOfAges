@@ -18,3 +18,8 @@ Thumbs.db
 # Claude Code local settings
 .claude/settings.local.json
 data/.secret.env
+
+# Gradle (plugin Android) — cache locale e marcatore del template di build Godot.
+# `build/` piu' sopra copre gia' android/build/ e revenuecat_plugin/build/.
+.gradle/
+android/.build_version

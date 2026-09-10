@@ -68,6 +68,8 @@ func _build_product_map() -> void:
 			_product_to_entitlement[product] = entitlement_id
 
 
+## Chiede il listino degli entitlement E dei tagli di donazione: al pannello
+## servono i prezzi localizzati dallo store, non quelli scritti nel catalogo.
 func fetch_products(entitlement_ids: PackedStringArray) -> void:
 	if _plugin == null:
 		return
@@ -76,6 +78,8 @@ func fetch_products(entitlement_ids: PackedStringArray) -> void:
 		var product := Catalog.product_id(entitlement_id, "android")
 		if not product.is_empty():
 			products.append(product)
+	for product in Catalog.donation_product_ids("android"):
+		products.append(product)
 	_plugin.getProducts(",".join(products))
 
 
@@ -90,9 +94,39 @@ func purchase(entitlement_id: String) -> void:
 	_plugin.purchase(product)
 
 
+## Il plugin Kotlin non distingue i due casi: purchase(productId) è già
+## generico, e la differenza sta solo in come si legge la risposta.
+func purchase_product(product_id: String) -> void:
+	if _plugin == null:
+		product_purchase_completed.emit(product_id, false, "negozio non disponibile")
+		return
+	if product_id.is_empty():
+		product_purchase_completed.emit(product_id, false, "prodotto non configurato")
+		return
+	_plugin.purchase(product_id)
+
+
 func restore_purchases() -> void:
 	if _plugin != null:
 		_plugin.restorePurchases()
+
+
+## Un `.aar` più vecchio dei metodi che chiediamo non deve far cadere il gioco:
+## vale la stessa prudenza di _connect_if_present.
+func identify(user_id: String) -> void:
+	if _plugin == null or user_id.is_empty():
+		return
+	if _plugin.has_method("logIn"):
+		_plugin.logIn(user_id)
+	else:
+		push_warning("RevenueCatAndroid: il plugin non espone logIn(); gli acquisti restano legati al dispositivo")
+
+
+func sign_out() -> void:
+	if _plugin == null:
+		return
+	if _plugin.has_method("logOut"):
+		_plugin.logOut()
 
 
 func active_entitlements() -> PackedStringArray:
@@ -127,6 +161,12 @@ func _on_purchase(payload: String) -> void:
 	# come tale, quindi arriva con una ragione riconoscibile.
 	var reason := String(parsed.get("error", "cancelled" if parsed.get("cancelled", false) else ""))
 
+	# Un prodotto che non è mappato a un entitlement non sblocca niente: è una
+	# donazione, e va sull'altro segnale. Il plugin non conosce la differenza.
+	if entitlement_id.is_empty():
+		product_purchase_completed.emit(product, success, reason)
+		return
+
 	purchase_completed.emit(entitlement_id, success, reason)
 	if success:
 		_active = PackedStringArray(parsed.get("active_entitlements", _active))
@@ -138,10 +178,10 @@ func _on_products(payload: String) -> void:
 	if not (parsed is Dictionary):
 		return
 	# Riporta le chiavi da product_id a entitlement_id: al gioco i prodotti
-	# non interessano.
-	var by_entitlement := {}
+	# non interessano. I prodotti senza entitlement — le donazioni — restano
+	# sotto il proprio id, che è come il pannello li cerca.
+	var by_key := {}
 	for product in parsed.keys():
 		var entitlement_id := String(_product_to_entitlement.get(product, ""))
-		if not entitlement_id.is_empty():
-			by_entitlement[entitlement_id] = parsed[product]
-	products_loaded.emit(by_entitlement)
+		by_key[entitlement_id if not entitlement_id.is_empty() else String(product)] = parsed[product]
+	products_loaded.emit(by_key)

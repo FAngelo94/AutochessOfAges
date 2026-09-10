@@ -39,8 +39,16 @@ Stop: `docker compose -f db/docker-compose.dev.yml down` (`-v` azzera il volume)
 
 ## 2. Google Cloud Console — OAuth Client ID
 
-Serve un client di tipo **Desktop app** (il redirect è `http://127.0.0.1:<porta>/callback`,
-che i client "Web application" non accettano con porta arbitraria).
+Serve un client di tipo **Web application**. Il redirect è
+`https://game.tuodominio.it/oauth/cb`, cioè il **server**, non l'app: su Android il
+vecchio redirect sul loopback (`http://127.0.0.1:<porta>/callback`, client "Desktop
+app") non può funzionare, perché appena si apre il browser l'app va in pausa e non
+può accettare nessuna connessione. Vedi `server/oauth_pending.gd`.
+
+> Se hai già un client "Desktop app" in uso: creane uno **nuovo** di tipo "Web
+> application" e sostituisci `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` in
+> `/etc/autochess/env` e `google_client_id` in `data/backend.json`. Un client
+> Desktop non accetta redirect `https`, quindi i due tipi non convivono.
 
 1. <https://console.cloud.google.com/> → progetto `autochess-of-ages`.
 2. **APIs & Services → OAuth consent screen**: User type **External**; nome app,
@@ -48,12 +56,15 @@ che i client "Web application" non accettano con porta arbitraria).
    aggiungi il tuo indirizzo tra i **Test users** finché l'app è in "Testing".
    Per il lancio pubblico: **Publish app** (nessuna verifica Google richiesta con
    questi soli scope non sensibili).
-3. **Credentials → Create Credentials → OAuth client ID → Desktop app**, nome
-   `autochess-desktop`. **Create**.
-4. Copia **Client ID** (`<google-client-id>`) e **Client secret** (`<google-client-secret>`).
+3. **Credentials → Create Credentials → OAuth client ID → Web application**, nome
+   `autochess-web`.
+4. In **Authorized redirect URIs** aggiungi, esatto e senza slash finale:
+   `https://game.tuodominio.it/oauth/cb`. **Create**.
+5. Copia **Client ID** (`<google-client-id>`) e **Client secret** (`<google-client-secret>`).
 
-Non serve registrare redirect URI: per i client Desktop Google accetta i loopback
-`http://127.0.0.1:*` in automatico.
+Lo stesso URI va poi in `GOOGLE_REDIRECT_URI` (`/etc/autochess/env`) e nella rotta
+`handle /oauth/cb` del `Caddyfile`: i tre valori devono combaciare carattere per
+carattere, altrimenti Google risponde `redirect_uri_mismatch`.
 
 ---
 

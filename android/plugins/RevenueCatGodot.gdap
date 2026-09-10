@@ -7,5 +7,5 @@ binary="RevenueCatGodot.release.aar"
 [dependencies]
 
 local=[]
-remote=["com.revenuecat.purchases:purchases:8.10.0"]
+remote=["com.revenuecat.purchases:purchases:10.20.0"]
 custom_maven_repos=[]

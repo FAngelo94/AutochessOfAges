@@ -23,6 +23,9 @@ const RPC_DELETE_ACCOUNT := "/rpc/delete_account"
 const RPC_REGISTER_EMAIL := "/rpc/register_email_account"
 const RPC_LOGIN_EMAIL := "/rpc/login_email_account"
 const RPC_MATCH_HISTORY := "/rpc/player_match_history"
+const RPC_RECORD_DONATION := "/rpc/record_donation"
+const RPC_DONATION_SUMMARY := "/rpc/donation_summary"
+const RPC_PLAYER_DONATIONS := "/rpc/player_donations"
 const OWNED_CIVS_PATH := "/owned_civs"
 const PROFILES_PATH := "/profiles"
 
@@ -59,6 +62,45 @@ static func fetch_owned_civs(owner: Node, uid: String, cb: Callable) -> void:
 static func fetch_match_history(owner: Node, uid: String, limit: int, cb: Callable) -> void:
 	var body := JSON.stringify({"p_profile_id": uid, "p_limit": limit})
 	_rpc(owner, RPC_MATCH_HISTORY, body, func(ok: bool, data: Variant) -> void:
+		cb.call(ok and data is Array, data if data is Array else []))
+
+
+# --------------------------------------------------------------------------
+# Donazioni (Crowdfunding Store)
+# --------------------------------------------------------------------------
+
+## Registra una donazione arrivata dal webhook di RevenueCat. Idempotente lato
+## Postgres: lo stesso transaction_id non viene contato due volte, quindi un
+## ritentativo del webhook e' innocuo.
+## cb.call(ok: bool, row: Dictionary) con {inserted, total_cents}.
+static func record_donation(owner: Node, app_user_id: String, amount_cents: int,
+		currency: String, store: String, product_id: String, transaction_id: String,
+		environment: String, cb: Callable) -> void:
+	var body := JSON.stringify({
+		"p_app_user_id": app_user_id,
+		"p_amount_cents": amount_cents,
+		"p_currency": currency,
+		"p_store": store,
+		"p_product_id": product_id,
+		"p_transaction_id": transaction_id,
+		"p_environment": environment,
+	})
+	_rpc(owner, RPC_RECORD_DONATION, body, func(ok: bool, data: Variant) -> void:
+		cb.call(ok and data is Dictionary, data if data is Dictionary else {}))
+
+
+## Totale raccolto e sostenitori. cb.call(ok: bool, row: Dictionary).
+static func fetch_donation_summary(owner: Node, cb: Callable) -> void:
+	_rpc(owner, RPC_DONATION_SUMMARY, "{}", func(ok: bool, data: Variant) -> void:
+		cb.call(ok and data is Dictionary, data if data is Dictionary else {}))
+
+
+## Le donazioni di UN profilo. Come per la cronologia partite, il filtro sta
+## dentro la RPC: la tabella contiene le righe di tutti.
+## cb.call(ok: bool, donations: Array)
+static func fetch_player_donations(owner: Node, uid: String, limit: int, cb: Callable) -> void:
+	var body := JSON.stringify({"p_uid": uid, "p_limit": limit})
+	_rpc(owner, RPC_PLAYER_DONATIONS, body, func(ok: bool, data: Variant) -> void:
 		cb.call(ok and data is Array, data if data is Array else []))
 
 

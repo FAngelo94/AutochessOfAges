@@ -17,6 +17,23 @@ extends SceneTree
 const DEFAULT_PORT := 9000
 const WORKER_CONTROL_URL := "ws://127.0.0.1:9001/ws/w1"
 
+## Redirect OAuth: unica rotta HTTP del master, sul loopback dietro Caddy
+## (`handle /oauth/cb`). Vedi server/oauth_http.gd.
+const OAUTH_HTTP_PORT := 9010
+const OAUTH_CALLBACK_PATH := "/oauth/cb"
+
+## Webhook di RevenueCat: la SOLA scrittura delle donazioni. Sta sulla stessa
+## porta HTTP del redirect OAuth, dietro la stessa Caddy.
+const WEBHOOK_PATH := "/revenuecat/webhook"
+## Segreto condiviso configurato nella dashboard di RevenueCat come header
+## Authorization. Senza, il webhook e' rifiutato: chiunque conosca l'indirizzo
+## potrebbe altrimenti gonfiare il totale raccolto.
+const WEBHOOK_SECRET_ENV := "REVENUECAT_WEBHOOK_SECRET"
+## Eventi che corrispondono a una donazione. I consumabili arrivano come
+## NON_RENEWING_PURCHASE; INITIAL_PURCHASE resta accettato perche' la Test Store
+## di RevenueCat non usa sempre lo stesso tipo.
+const DONATION_EVENTS := ["NON_RENEWING_PURCHASE", "INITIAL_PURCHASE"]
+
 ## Quanto tenere in vita una lobby sigillata (i client ricevono MATCH_ASSIGNED e
 ## si riconnettono al worker; poi si scollegano dal master).
 const SEALED_LINGER_SECONDS := 20.0
@@ -28,6 +45,11 @@ var _peer_mm: Dictionary = {}        # peer_id -> Matchmaker
 ## Verifica dei token di SESSIONE emessi da questo stesso master (HMAC locale,
 ## nessuna JWKS da scaricare). Iniettato in ogni Matchmaker.
 var _verifier := SessionVerifier.new()
+## Login Google in sospeso: il consenso finisce sul server (OAuthHttp) mentre
+## l'app del giocatore e' in background, il client ritira poi con
+## AUTH_GOOGLE_POLL. Vedi server/oauth_pending.gd.
+var _oauth := OAuthPending.new()
+var _oauth_http := OAuthHttp.new()
 var _spawn := SpawnChannel.new(WORKER_CONTROL_URL)
 var _pump: Node
 var _bootstrapped := false
@@ -37,6 +59,10 @@ var _pending_close: Array = []
 ## e' del server: il client puo' chiedere, non decidere.
 const HISTORY_DEFAULT := 20
 const HISTORY_MAX := 50
+
+## Stesse regole per le proprie donazioni: il client chiede, il server decide.
+const DONATIONS_DEFAULT := 20
+const DONATIONS_MAX := 50
 
 ## Tentativi di login falliti per email. Serve a rendere inutile provare le
 ## password a raffica: la chiave e' l'email e non il peer perche' il client apre
@@ -62,6 +88,19 @@ func _initialize() -> void:
 	_peer.peer_disconnected.connect(_on_peer_disconnected)
 
 	print("master: in ascolto su ws://127.0.0.1:%d  (rotta Caddy: /ws/mm)" % port)
+
+	_oauth_http.handler = _on_oauth_callback
+	_oauth_http.post_handler = _on_revenuecat_webhook
+	if OS.get_environment(WEBHOOK_SECRET_ENV) == "":
+		push_warning("master: %s non impostata — il webhook delle donazioni rifiutera' tutto" % WEBHOOK_SECRET_ENV)
+	var oauth_port := _arg_int("oauth-port", OAUTH_HTTP_PORT)
+	if _oauth_http.listen(oauth_port) != OK:
+		# Non fatale: email/password e refresh continuano a funzionare, salta
+		# solo il login Google.
+		push_warning("master: porta %d occupata — redirect OAuth non disponibile" % oauth_port)
+	else:
+		print("master: redirect OAuth su http://127.0.0.1:%d%s  (rotta Caddy: %s)" % [
+			oauth_port, OAUTH_CALLBACK_PATH, OAUTH_CALLBACK_PATH])
 
 
 func _new_matchmaker() -> Matchmaker:
@@ -94,6 +133,7 @@ func _process(delta: float) -> bool:
 			push_warning("master: DB_API_URL assente — nessuna persistenza (solo ospiti dev)")
 
 	_spawn.poll()
+	_oauth_http.poll(_now())
 	_peer.poll()
 
 	while _peer.get_available_packet_count() > 0:
@@ -104,10 +144,10 @@ func _process(delta: float) -> bool:
 		# Matchmaker sincrona.
 		var pre := Protocol.decode(bytes)
 		var pt := Protocol.message_type(pre)
-		if pt == Protocol.AUTH_GOOGLE or pt == Protocol.AUTH_REFRESH \
+		if pt == Protocol.AUTH_GOOGLE_BEGIN or pt == Protocol.AUTH_GOOGLE_POLL 				or pt == Protocol.AUTH_REFRESH \
 				or pt == Protocol.AUTH_EMAIL_LOGIN or pt == Protocol.AUTH_EMAIL_SIGNUP \
 				or pt == Protocol.PROFILE_SET or pt == Protocol.DELETE_ACCOUNT \
-				or pt == Protocol.HISTORY_REQUEST:
+				or pt == Protocol.HISTORY_REQUEST or pt == Protocol.DONATIONS_REQUEST:
 			_handle_auth(from, pt, pre)
 			continue
 		var mm: Matchmaker = _peer_mm.get(from, _mm)
@@ -160,6 +200,7 @@ func _purge_login_fails() -> void:
 		var entry: Dictionary = _login_fails[key]
 		if now - float(entry["first"]) > LOGIN_WINDOW:
 			_login_fails.erase(key)
+	_oauth.prune(now)
 
 
 func _on_mm_sealed(mm: Matchmaker) -> void:
@@ -220,12 +261,27 @@ func _on_hero_review(uid: String, hero_id: String) -> void:
 
 func _handle_auth(peer_id: int, msg_type: String, msg: Dictionary) -> void:
 	match msg_type:
-		Protocol.AUTH_GOOGLE:
-			AccountService.login_google(_pump,
-				String(msg.get("code", "")),
-				String(msg.get("code_verifier", "")),
-				String(msg.get("redirect_uri", "")),
-				func(ok: bool, bundle: Dictionary) -> void: _reply_auth(peer_id, ok, bundle))
+		Protocol.AUTH_GOOGLE_BEGIN:
+			if not GoogleOAuth.is_configured():
+				_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "google"}))
+				return
+			var started := _oauth.begin(_now())
+			_reply(peer_id, Protocol.make(Protocol.AUTH_GOOGLE_URL, {
+				"state": started.state,
+				"auth_url": GoogleOAuth.build_auth_url(started.challenge, started.state),
+			}))
+		Protocol.AUTH_GOOGLE_POLL:
+			# Lo state e' il portatore della sessione: non si dice nulla di piu'
+			# di "in corso / ecco il bundle / scaduto".
+			var taken := _oauth.take(String(msg.get("state", "")), _now())
+			match String(taken["status"]):
+				OAuthPending.STATUS_READY:
+					_reply(peer_id, Protocol.make(Protocol.AUTH_OK, taken["bundle"]))
+				OAuthPending.STATUS_WAITING:
+					_reply(peer_id, Protocol.make(Protocol.AUTH_PENDING))
+				_:
+					_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL,
+						{"reason": String(taken["reason"])}))
 		Protocol.AUTH_REFRESH:
 			AccountService.refresh(_pump, String(msg.get("refresh_token", "")),
 				func(ok: bool, bundle: Dictionary) -> void: _reply_auth(peer_id, ok, bundle))
@@ -270,6 +326,31 @@ func _handle_auth(peer_id: int, msg_type: String, msg: Dictionary) -> void:
 						_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "db"}))
 						return
 					_reply(peer_id, Protocol.make(Protocol.HISTORY_DATA, {"matches": matches})))
+		Protocol.DONATIONS_REQUEST:
+			var don_claims: Dictionary = _verifier.verify(String(msg.get("session_token", "")))
+			if don_claims.is_empty():
+				_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "auth"}))
+				return
+			var don_limit := clampi(int(msg.get("limit", DONATIONS_DEFAULT)), 1, DONATIONS_MAX)
+			var uid := String(don_claims.get("sub", ""))
+			# Due letture, una risposta sola: il totale e' pubblico, le proprie
+			# donazioni no. Si aspetta la seconda per non dover inventare un
+			# secondo messaggio che il client dovrebbe correlare.
+			DbClient.fetch_donation_summary(_pump, func(ok: bool, summary: Dictionary) -> void:
+				if not ok:
+					_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "db"}))
+					return
+				DbClient.fetch_player_donations(_pump, uid, don_limit,
+					func(_mine_ok: bool, mine: Array) -> void:
+						# Se le proprie donazioni non arrivano si manda comunque
+						# il totale: la barra e' la ragione per cui il pannello
+						# ha chiesto, l'elenco personale e' un di piu'.
+						_reply(peer_id, Protocol.make(Protocol.DONATIONS_DATA, {
+							"total_cents": int(summary.get("total_cents", 0)),
+							"goal_cents": Catalog.donation_goal_cents(),
+							"supporters": int(summary.get("supporters", 0)),
+							"mine": mine,
+						}))))
 		Protocol.DELETE_ACCOUNT:
 			var del_claims: Dictionary = _verifier.verify(String(msg.get("session_token", "")))
 			if del_claims.is_empty():
@@ -280,6 +361,110 @@ func _handle_auth(peer_id: int, msg_type: String, msg: Dictionary) -> void:
 					_reply(peer_id, Protocol.make(Protocol.ACCOUNT_DELETED))
 				else:
 					_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "db"})))
+
+
+# --------------------------------------------------------------------------
+# Webhook RevenueCat (POST /revenuecat/webhook) — vedi server/oauth_http.gd
+# --------------------------------------------------------------------------
+
+## Registra una donazione. E' l'unico punto in cui `public.donations` cresce: il
+## client non partecipa, perche' la barra del Crowdfunding Store e' pubblica e
+## un totale sommato da chi paga sarebbe gonfiabile da chiunque.
+##
+## Regole di risposta, dettate da come RevenueCat ritenta:
+##   * 2xx = "non ritentare". Si risponde 2xx anche a un evento che non ci
+##     interessa o gia' registrato, altrimenti verrebbe ripresentato per giorni.
+##   * 5xx = "ritenta". Si usa solo quando la scrittura NON e' andata a buon
+##     fine e ha senso riprovare (database irraggiungibile).
+func _on_revenuecat_webhook(path: String, headers: Dictionary, body: String,
+		respond: Callable) -> void:
+	if path != WEBHOOK_PATH:
+		respond.call(404, "{\"error\":\"unknown_path\"}")
+		return
+
+	var secret := OS.get_environment(WEBHOOK_SECRET_ENV)
+	if secret == "" or String(headers.get("authorization", "")) != secret:
+		# Nessun dettaglio sul perche': la rotta e' pubblica.
+		respond.call(401, "{\"error\":\"unauthorized\"}")
+		return
+
+	var parsed = JSON.parse_string(body)
+	if not (parsed is Dictionary):
+		respond.call(400, "{\"error\":\"bad_json\"}")
+		return
+	var event: Dictionary = parsed.get("event", {})
+	if not (event is Dictionary) or not DONATION_EVENTS.has(String(event.get("type", ""))):
+		respond.call(200, "{\"ignored\":true}")
+		return
+
+	var product_id := String(event.get("product_id", ""))
+	var transaction_id := String(event.get("transaction_id", event.get("id", "")))
+	# L'importo autorevole e' quello del catalogo, non quello dell'evento: i
+	# tagli sono fissi e conosciuti, e cosi' un evento malformato non puo'
+	# inventare una cifra. Il prezzo dell'evento resta la riserva per un
+	# prodotto che il catalogo non conosce (es. creato solo lato dashboard).
+	var amount_cents := Catalog.donation_amount_for_product(product_id, "android")
+	if amount_cents <= 0:
+		amount_cents = int(round(float(event.get("price_in_purchased_currency", 0.0)) * 100.0))
+	if amount_cents <= 0 or transaction_id == "":
+		respond.call(200, "{\"ignored\":true}")
+		return
+
+	if not DbClient.is_configured():
+		push_error("master: webhook donazione ricevuto ma DB_API_URL non e' configurata")
+		respond.call(500, "{\"error\":\"db_unconfigured\"}")
+		return
+
+	# L'environment viene dall'evento e non e' negoziabile: le righe SANDBOX si
+	# scrivono ma restano fuori dal totale pubblico (vedi 0005_donations.sql).
+	DbClient.record_donation(_pump,
+		String(event.get("app_user_id", "")), amount_cents,
+		String(event.get("currency", "EUR")), String(event.get("store", "unknown")),
+		product_id, transaction_id, String(event.get("environment", "PRODUCTION")),
+		func(ok: bool, row: Dictionary) -> void:
+			if not ok:
+				# Riprovare ha senso: la riga non c'e'.
+				push_error("master: donazione %s non registrata" % transaction_id)
+				respond.call(500, "{\"error\":\"db\"}")
+				return
+			print("master: donazione %d centesimi (%s, %s) inserted=%s totale=%d" % [
+				amount_cents, transaction_id, String(event.get("environment", "PRODUCTION")),
+				row.get("inserted", false), int(row.get("total_cents", 0))])
+			respond.call(200, JSON.stringify(row)))
+
+
+# --------------------------------------------------------------------------
+# Redirect OAuth (GET /oauth/cb) — vedi server/oauth_http.gd
+# --------------------------------------------------------------------------
+
+## Restituisce l'HTML da mostrare nel browser. Lo scambio del code con Google e'
+## asincrono e NON si aspetta qui: la pagina si mostra subito e il bundle finisce
+## in _oauth, dove il client lo ritira con AUTH_GOOGLE_POLL.
+func _on_oauth_callback(path: String, query: Dictionary) -> String:
+	if path != OAUTH_CALLBACK_PATH:
+		return OAuthHttp.error_page("Indirizzo sconosciuto.")
+
+	var state := String(query.get("state", ""))
+	var now := _now()
+	# Consenso negato o annullato: si registra come esito, cosi' il client
+	# smette di richiedere invece di aspettare la scadenza.
+	if query.has("error"):
+		_oauth.fail(state, "denied", now)
+		return OAuthHttp.error_page("Accesso annullato.")
+
+	var verifier := _oauth.verifier_for(state, now)
+	if verifier == "":
+		# State sconosciuto, gia' usato o scaduto. Nessun dettaglio: la pagina
+		# e' pubblica e non deve dire quali state esistono.
+		return OAuthHttp.error_page("Richiesta scaduta.")
+
+	AccountService.login_google(_pump, String(query.get("code", "")), verifier,
+		func(ok: bool, bundle: Dictionary) -> void:
+			if ok:
+				_oauth.resolve(state, bundle, _now())
+			else:
+				_oauth.fail(state, String(bundle.get("reason", "google")), _now()))
+	return OAuthHttp.success_page()
 
 
 ## Non protegge da chi cambia email a ogni tentativo: rallenta la forza bruta

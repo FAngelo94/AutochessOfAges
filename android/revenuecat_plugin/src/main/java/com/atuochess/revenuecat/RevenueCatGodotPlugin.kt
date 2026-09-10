@@ -7,6 +7,15 @@ import com.revenuecat.purchases.Purchases
 import com.revenuecat.purchases.PurchasesConfiguration
 import com.revenuecat.purchases.PurchasesError
 import com.revenuecat.purchases.PurchasesErrorCode
+// Le API a callback dell'SDK sono estensioni top-level, non metodi di Purchases:
+// vanno importate esplicitamente o il compilatore vede solo le overload che
+// prendono un oggetto Callback.
+import com.revenuecat.purchases.getCustomerInfoWith
+import com.revenuecat.purchases.getProductsWith
+import com.revenuecat.purchases.logInWith
+import com.revenuecat.purchases.logOutWith
+import com.revenuecat.purchases.purchaseWith
+import com.revenuecat.purchases.restorePurchasesWith
 import com.revenuecat.purchases.models.StoreProduct
 import com.revenuecat.purchases.models.StoreTransaction
 import org.godotengine.godot.Godot
@@ -38,6 +47,19 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
         private const val SIGNAL_PRODUCTS = "on_products"
     }
 
+    /**
+     * Richiesta di listino arrivata prima che l'SDK fosse pronto.
+     *
+     * `configure` non e' istantanea: gira su runOnUiThread e ritorna subito. Il
+     * lato Godot pero' chiama initialize() e fetch_products() nello stesso
+     * frame (Store._ready), quindi getProducts arriva quasi sempre PRIMA che
+     * Purchases sia configurato — e Purchases.sharedInstance su un SDK non
+     * configurato solleva un'eccezione. La richiesta si mette da parte e si
+     * rigioca appena la configurazione e' finita.
+     */
+    @Volatile
+    private var pendingProductIds: String? = null
+
     override fun getPluginName(): String = "RevenueCatGodot"
 
     override fun getPluginSignals(): Set<SignalInfo> = setOf(
@@ -60,11 +82,51 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
                 }
                 Purchases.configure(builder.build())
                 refreshEntitlements()
+                pendingProductIds?.let { ids ->
+                    pendingProductIds = null
+                    getProducts(ids)
+                }
             } catch (error: Exception) {
                 Log.e(TAG, "configure fallita", error)
                 emitEntitlements(emptyList())
             }
         }
+    }
+
+    /**
+     * Associa gli acquisti a un account, dopo il login.
+     *
+     * `configure` parte all'avvio del gioco, quando l'utente non ha ancora fatto il
+     * login: fino a qui RevenueCat conosce solo un id anonimo di dispositivo. Senza
+     * questa chiamata gli acquisti non seguono il giocatore da un telefono all'altro,
+     * e una donazione arriva al webhook con un id che non corrisponde a nessun
+     * profilo — quindi non è attribuibile a nessuno.
+     */
+    @UsedByGodot
+    fun logIn(userId: String) {
+        if (userId.isEmpty() || !Purchases.isConfigured) {
+            return
+        }
+        Purchases.sharedInstance.logInWith(
+            userId,
+            { error: PurchasesError ->
+                Log.e(TAG, "logIn: ${error.message}")
+                refreshEntitlements()
+            },
+            { customerInfo: CustomerInfo, _: Boolean -> emitEntitlements(activeEntitlements(customerInfo)) },
+        )
+    }
+
+    /** Torna all'utente anonimo, al logout. */
+    @UsedByGodot
+    fun logOut() {
+        if (!Purchases.isConfigured) {
+            return
+        }
+        Purchases.sharedInstance.logOutWith(
+            { error: PurchasesError -> Log.e(TAG, "logOut: ${error.message}") },
+            { customerInfo: CustomerInfo -> emitEntitlements(activeEntitlements(customerInfo)) },
+        )
     }
 
     /** Listino con i prezzi già localizzati dallo store. */
@@ -75,38 +137,46 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
             emitSignal(SIGNAL_PRODUCTS, "{}")
             return
         }
-        Purchases.sharedInstance.getProducts(
+        if (!Purchases.isConfigured) {
+            pendingProductIds = productIds
+            return
+        }
+        Purchases.sharedInstance.getProductsWith(
             ids,
-            onError = { error ->
+            { error: PurchasesError ->
                 Log.e(TAG, "getProducts: ${error.message}")
                 emitSignal(SIGNAL_PRODUCTS, "{}")
             },
-            onGetStoreProducts = { products -> emitProducts(products) },
+            { products: List<StoreProduct> -> emitProducts(products) },
         )
     }
 
     @UsedByGodot
     fun purchase(productId: String) {
+        if (!Purchases.isConfigured) {
+            emitPurchase(productId, success = false, cancelled = false, error = "negozio non pronto")
+            return
+        }
         val currentActivity = activity
         if (currentActivity == null) {
             emitPurchase(productId, success = false, cancelled = false, error = "activity non disponibile")
             return
         }
 
-        Purchases.sharedInstance.getProducts(
+        Purchases.sharedInstance.getProductsWith(
             listOf(productId),
-            onError = { error ->
+            { error: PurchasesError ->
                 emitPurchase(productId, success = false, cancelled = false, error = error.message)
             },
-            onGetStoreProducts = { products ->
+            { products: List<StoreProduct> ->
                 val product = products.firstOrNull()
                 if (product == null) {
                     emitPurchase(productId, success = false, cancelled = false, error = "prodotto non trovato")
-                    return@getProducts
+                    return@getProductsWith
                 }
-                Purchases.sharedInstance.purchase(
+                Purchases.sharedInstance.purchaseWith(
                     PurchaseParams.Builder(currentActivity, product).build(),
-                    onError = { error: PurchasesError, userCancelled: Boolean ->
+                    { error: PurchasesError, userCancelled: Boolean ->
                         // L'annullamento dell'utente NON è un errore da mostrare come tale:
                         // viaggia come flag separato e il lato Godot lo tratta a parte.
                         emitPurchase(
@@ -116,7 +186,7 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
                             error = if (userCancelled) "" else error.message,
                         )
                     },
-                    onSuccess = { _: StoreTransaction?, customerInfo: CustomerInfo ->
+                    { _: StoreTransaction?, customerInfo: CustomerInfo ->
                         emitPurchase(productId, success = true, cancelled = false, error = "", customerInfo = customerInfo)
                     },
                 )
@@ -129,24 +199,30 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
      */
     @UsedByGodot
     fun restorePurchases() {
-        Purchases.sharedInstance.restorePurchases(
-            onError = { error ->
+        if (!Purchases.isConfigured) {
+            return
+        }
+        Purchases.sharedInstance.restorePurchasesWith(
+            { error: PurchasesError ->
                 Log.e(TAG, "restorePurchases: ${error.message}")
                 refreshEntitlements()
             },
-            onSuccess = { customerInfo -> emitEntitlements(activeEntitlements(customerInfo)) },
+            { customerInfo: CustomerInfo -> emitEntitlements(activeEntitlements(customerInfo)) },
         )
     }
 
     /** Rilegge lo stato dal server: utile dopo il login o al ritorno in primo piano. */
     @UsedByGodot
     fun refreshEntitlements() {
-        Purchases.sharedInstance.getCustomerInfo(
-            onError = { error ->
+        if (!Purchases.isConfigured) {
+            return
+        }
+        Purchases.sharedInstance.getCustomerInfoWith(
+            { error: PurchasesError ->
                 Log.e(TAG, "getCustomerInfo: ${error.message}")
                 emitEntitlements(emptyList())
             },
-            onSuccess = { customerInfo -> emitEntitlements(activeEntitlements(customerInfo)) },
+            { customerInfo: CustomerInfo -> emitEntitlements(activeEntitlements(customerInfo)) },
         )
     }
 

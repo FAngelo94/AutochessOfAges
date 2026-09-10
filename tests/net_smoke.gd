@@ -29,6 +29,8 @@ func _initialize() -> void:
 	_test_protocol()
 	_test_match_token()
 	_test_session_token()
+	_test_oauth_pending()
+	_test_oauth_http_parsing()
 	_test_hello_rejects()
 	_test_matchmaking_seal()
 	_test_matchmaking_relobby()
@@ -69,7 +71,7 @@ func _test_protocol() -> void:
 	check(round_trip.get("n") == 7, "encode->decode conserva i campi scalari")
 	check(round_trip.get("cell") == Vector2i(3, 4), "encode->decode conserva Vector2i")
 
-	check(Protocol.PROTOCOL_VERSION == 4, "PROTOCOL_VERSION == 4")
+	check(Protocol.PROTOCOL_VERSION == 6, "PROTOCOL_VERSION == 6")
 
 	# La cronologia passa dal master come tutto il resto: il client non parla
 	# mai HTTP col database.
@@ -81,6 +83,19 @@ func _test_protocol() -> void:
 		"matches": [{"match_id": "m", "placement": 2}]})))
 	check(Protocol.message_type(data) == Protocol.HISTORY_DATA
 		and data.get("matches", []).size() == 1, "HISTORY_DATA sopravvive alla codifica")
+
+	# Le donazioni seguono la stessa strada: il totale della barra lo somma il
+	# server, il client si limita a chiederlo.
+	var don := Protocol.decode(Protocol.encode(Protocol.make(Protocol.DONATIONS_REQUEST, {
+		"session_token": "t", "limit": 20})))
+	check(Protocol.message_type(don) == Protocol.DONATIONS_REQUEST
+		and int(don.get("limit", 0)) == 20, "DONATIONS_REQUEST sopravvive alla codifica")
+	var don_data := Protocol.decode(Protocol.encode(Protocol.make(Protocol.DONATIONS_DATA, {
+		"total_cents": 2500, "goal_cents": 100000, "supporters": 3, "mine": []})))
+	check(Protocol.message_type(don_data) == Protocol.DONATIONS_DATA
+		and int(don_data.get("total_cents", 0)) == 2500
+		and int(don_data.get("goal_cents", 0)) == 100000,
+		"DONATIONS_DATA sopravvive alla codifica")
 
 
 func _test_match_token() -> void:
@@ -117,6 +132,110 @@ func _test_session_token() -> void:
 	var v := SessionVerifier.new()
 	check(v.verify(SessionToken.mint("u2", "Sempronio")).get("sub") == "u2",
 		"SessionVerifier.verify() delega a SessionToken")
+
+
+func _test_oauth_pending() -> void:
+	section("OAuth — login Google in sospeso (rientro dal browser)")
+
+	var pend := OAuthPending.new()
+	var a := pend.begin(0.0)
+	var b := pend.begin(0.0)
+	check(String(a.state) != "" and String(a.state) != String(b.state),
+		"ogni begin() produce uno state diverso")
+	check(String(a.verifier).length() >= 43,
+		"il verifier PKCE rispetta la lunghezza minima (RFC 7636)")
+	check(String(a.challenge) == OAuthPending.challenge_for(String(a.verifier)),
+		"il challenge e' l'S256 del verifier")
+	check(not String(a.challenge).contains("=") and not String(a.challenge).contains("+"),
+		"il challenge e' base64url senza padding")
+
+	check(pend.verifier_for(String(a.state), 0.0) == String(a.verifier),
+		"il verifier si recupera dallo state, per lo scambio del code")
+	check(pend.verifier_for("stato-inventato", 0.0) == "",
+		"uno state inventato non restituisce nessun verifier")
+
+	check(String(pend.take(String(a.state), 0.0)["status"]) == OAuthPending.STATUS_WAITING,
+		"finche' il consenso e' in corso il client riceve 'waiting'")
+
+	check(pend.resolve(String(a.state), {"session_token": "tok-a"}, 1.0),
+		"resolve() deposita il bundle")
+	var got := pend.take(String(a.state), 1.0)
+	check(String(got["status"]) == OAuthPending.STATUS_READY
+			and String((got["bundle"] as Dictionary).get("session_token", "")) == "tok-a",
+		"il client ritira il bundle di sessione")
+	check(String(pend.take(String(a.state), 1.0)["status"]) == OAuthPending.STATUS_UNKNOWN,
+		"lo state e' a uso singolo: il secondo ritiro non trova nulla")
+	check(pend.verifier_for(String(a.state), 1.0) == "",
+		"uno state gia' ritirato non riapre lo scambio del code")
+
+	check(pend.fail(String(b.state), "denied", 1.0), "fail() registra l'esito negativo")
+	var bad := pend.take(String(b.state), 1.0)
+	check(String(bad["status"]) == OAuthPending.STATUS_FAILED and String(bad["reason"]) == "denied",
+		"il motivo del fallimento arriva al client")
+
+	# Scadenza: il giocatore che lascia il consenso a meta' non deve lasciare
+	# in memoria uno state valido per sempre.
+	var c := pend.begin(0.0)
+	var late := OAuthPending.TTL_SECONDS + 1.0
+	check(pend.verifier_for(String(c.state), late) == "", "uno state scaduto non e' piu' scambiabile")
+	check(String(pend.take(String(c.state), late)["status"]) == OAuthPending.STATUS_UNKNOWN,
+		"uno state scaduto non consegna nessuna sessione")
+	check(not pend.resolve(String(c.state), {"session_token": "tardi"}, late),
+		"non si puo' risolvere uno state scaduto")
+
+	var flood := OAuthPending.new()
+	for i in OAuthPending.MAX_ENTRIES + 25:
+		flood.begin(0.0)
+	check(flood.size() <= OAuthPending.MAX_ENTRIES,
+		"chi spamma AUTH_GOOGLE_BEGIN non fa crescere il dizionario oltre il tetto",
+		"size=%d" % flood.size())
+
+
+func _test_oauth_http_parsing() -> void:
+	section("OAuth — lettura della richiesta di redirect")
+
+	var target := OAuthHttp._request_target("GET /oauth/cb?code=abc%2F1&state=xyz HTTP/1.1
+Host: x
+
+")
+	check(String(target.get("path", "")) == "/oauth/cb", "la rotta si estrae dalla riga di richiesta")
+	var query: Dictionary = target.get("query", {})
+	check(String(query.get("code", "")) == "abc/1", "il code viene decodificato dall'url-encoding")
+	check(String(query.get("state", "")) == "xyz", "lo state viene letto dalla query")
+
+	# POST e' servita da quando esiste il webhook delle donazioni; tutto il
+	# resto no.
+	var posted := OAuthHttp._request_target("POST /revenuecat/webhook HTTP/1.1
+Authorization: segreto
+Content-Length: 2
+
+{}")
+	check(String(posted.get("method", "")) == "POST" and String(posted.get("path", "")) == "/revenuecat/webhook",
+		"la POST del webhook viene accettata")
+	var posted_headers: Dictionary = posted.get("headers", {})
+	# Le intestazioni HTTP non distinguono maiuscole: chi scrive il gestore non
+	# deve indovinare come le ha scritte il mittente.
+	check(String(posted_headers.get("authorization", "")) == "segreto",
+		"le intestazioni arrivano al gestore con la chiave minuscola")
+	check(int(posted_headers.get("content-length", "0")) == 2,
+		"content-length viene letta")
+
+	check(OAuthHttp._request_target("PUT /oauth/cb HTTP/1.1
+
+").is_empty(),
+		"un metodo diverso da GET/HEAD/POST viene rifiutato")
+	check(OAuthHttp._request_target("spazzatura").is_empty(),
+		"una riga di richiesta malformata non produce nessuna rotta")
+
+	var err: Dictionary = OAuthHttp._request_target("GET /oauth/cb?error=access_denied&state=s HTTP/1.1
+
+").get("query", {})
+	check(err.has("error"), "il rifiuto del consenso arriva come parametro error")
+
+	check(OAuthHttp.success_page().contains("intent://"),
+		"la pagina di ritorno offre l'intent per rimettere l'app in primo piano")
+	check(not OAuthHttp.error_page("<script>").contains("<script>"),
+		"il messaggio d'errore viene escapato nella pagina")
 
 
 func _test_hello_rejects() -> void:

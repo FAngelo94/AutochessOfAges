@@ -34,6 +34,29 @@ game.tuodominio.it {
 	#	reverse_proxy 127.0.0.1:9002
 	# }
 
+	# --- redirect del login Google ---
+	# Google redirige QUI dopo il consenso, non dentro l'app: sul telefono
+	# l'app e' in pausa mentre il browser e' in primo piano e non potrebbe
+	# ricevere niente. Il master scambia il code e tiene la sessione pronta
+	# finche' il client non la ritira (server/oauth_http.gd).
+	# Deve combaciare con GOOGLE_REDIRECT_URI in /etc/autochess/env e con gli
+	# "Authorized redirect URIs" del client OAuth su Google Cloud.
+	handle /oauth/cb {
+		reverse_proxy 127.0.0.1:9010
+	}
+
+	# --- webhook delle donazioni (RevenueCat) ---
+	# E' la SOLA scrittura di public.donations: il client non partecipa, perche'
+	# la barra del Crowdfunding Store e' pubblica e un totale sommato da chi
+	# paga sarebbe gonfiabile da chiunque. Stessa porta del redirect OAuth: il
+	# master serve entrambe le rotte (server/oauth_http.gd).
+	# Il master rifiuta la richiesta se l'header Authorization non combacia con
+	# REVENUECAT_WEBHOOK_SECRET in /etc/autochess/env, quindi conoscere questo
+	# indirizzo non basta per scrivere niente.
+	handle /revenuecat/webhook {
+		reverse_proxy 127.0.0.1:9010
+	}
+
 	# --- pagine statiche obbligatorie per il Play Store / GDPR ---
 	# installare i file: sudo install -d /opt/autochess/www &&
 	#   sudo cp deploy/www/*.html /opt/autochess/www/

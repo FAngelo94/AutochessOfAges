@@ -8,13 +8,24 @@ extends Node
 ## segnaposto, non c'è rete, o il refresh fallisce, si resta OSPITI e il
 ## single-player continua a funzionare identico, senza login e offline.
 ##
-## Login: flusso loopback + PKCE (RFC 8252). Nessun plugin nativo, nessun
-## deep link. Si apre il browser di sistema su accounts.google.com; Google
-## redirige su http://127.0.0.1:<porta>/callback; un TCPServer locale cattura il
-## `code`. Lo SCAMBIO del code NON avviene qui: `code` + `code_verifier` vengono
-## inoltrati al MASTER via WebSocket (il master tiene GOOGLE_CLIENT_SECRET e non
-## lo mette mai nell'APK). Il master risponde con AUTH_OK, che porta un token di
-## sessione firmato da lui + un refresh token opaco + il bundle del profilo.
+## Login Google: il consenso lo chiude il SERVER, non l'app. Il client chiede al
+## master un URL di consenso (AUTH_GOOGLE_BEGIN -> AUTH_GOOGLE_URL), apre il
+## browser di sistema, e poi si limita a richiedere l'esito (AUTH_GOOGLE_POLL)
+## finche' non arriva AUTH_OK. Google redirige su https://<host>/oauth/cb, che e'
+## il master: lo scambio del code e il client_secret restano dalla sua parte e
+## non finiscono mai nell'APK.
+##
+## Il flusso loopback (RFC 8252, un TCPServer su 127.0.0.1 dentro l'app) e'
+## stato tolto perche' e' un flusso DESKTOP: su Android, appena OS.shell_open()
+## manda il browser in primo piano, l'activity di Godot va in pausa e il main
+## loop si ferma. _process() non gira, nessuna connessione viene accettata, il
+## code non viene mai raccolto e il login scade. Con il consenso chiuso sul
+## server questo non conta piu': la sessione e' gia' pronta quando il giocatore
+## torna nell'app, comunque ci torni.
+##
+## Per lo stesso motivo il login in corso si salva su disco (PENDING_PATH): se
+## Android uccide il gioco mentre si e' nel browser, alla riapertura si ritira
+## la sessione invece di ricominciare.
 ##
 ## Gli autoload si prendono con get_node("/root/Auth"), MAI per nome globale:
 ## gli script compilati da riga di comando (test headless) non li risolvono.
@@ -30,10 +41,15 @@ signal account_deletion_completed(success: bool)
 
 const CONFIG_PATH := "res://data/backend.json"
 const TOKEN_PATH := "user://auth.dat"
-## Package Android — deve combaciare con `package/unique_name` in
-## export_presets.cfg. Serve solo alla pagina di callback per riportare in
-## primo piano l'app dopo il redirect (su mobile il browser non lo fa da solo).
-const ANDROID_PACKAGE := "com.afalc.autochessofages"
+## Login Google iniziato e non ancora concluso: {state, started} (unix time, non
+## ticks — l'app puo' essere stata chiusa e riaperta nel frattempo).
+const PENDING_PATH := "user://oauth_pending.dat"
+## Deve restare <= a OAuthPending.TTL_SECONDS del master: e' il tempo concesso
+## al giocatore per completare il consenso nel browser.
+const OAUTH_TTL := 600.0
+## Ritmo con cui si richiede l'esito. Basso: sono pacchetti minuscoli e il
+## giocatore sta aspettando davanti a una schermata.
+const POLL_INTERVAL := 2.0
 
 const HOST_PLACEHOLDERS := ["tuodominio", "your-", "yourdomain", "example.", "changeme", "placeholder"]
 const CLIENT_ID_PLACEHOLDER := "REPLACE_WITH_GOOGLE_CLIENT_ID"
@@ -52,11 +68,10 @@ var _access_token: String = ""
 var _refresh_token: String = ""
 var _user_id: String = ""
 
-# --- flusso loopback OAuth ---
-var _server: TCPServer = null
-var _port: int = 0
-var _code_verifier: String = ""
-var _redirect_uri: String = ""
+# --- login Google in corso ---
+var _oauth_state: String = ""
+var _poll_at: float = 0.0
+var _poll_inflight: bool = false
 var _pending: bool = false
 var _deadline: float = 0.0
 var _login_source: String = ""
@@ -76,7 +91,19 @@ func _ready() -> void:
 		print("[Auth] backend non configurato: modalità ospite")
 		return
 	print("[Auth] backend: %s" % _host)
+	# Un consenso lasciato a meta' ha la precedenza sul refresh: chi era nel
+	# browser un attimo fa sta finendo QUEL login, non riprendendo il vecchio.
+	if _resume_pending_login():
+		return
 	try_restore_session()
+
+
+func _notification(what: int) -> void:
+	# Ritorno in primo piano. Su Android il main loop e' stato fermo per tutto
+	# il tempo del consenso: si richiede subito l'esito invece di aspettare il
+	# prossimo tick di POLL_INTERVAL.
+	if what == NOTIFICATION_APPLICATION_RESUMED or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
+		_poll_at = 0.0
 
 
 func _load_config() -> void:
@@ -90,6 +117,10 @@ func _load_config() -> void:
 
 
 ## Vero solo se data/backend.json ha valori reali (non i segnaposto tracciati).
+## `google_client_id` qui serve solo da interruttore: l'URL di consenso lo
+## costruisce il master, che e' l'unico a dover conoscere davvero il client
+## OAuth. Deve comunque essere quello giusto, o il pulsante Google compare su un
+## backend che non sa fare login.
 func is_configured() -> bool:
 	if _host == "" or _google_client_id == "" or _google_client_id == CLIENT_ID_PLACEHOLDER:
 		return false
@@ -148,40 +179,37 @@ func game_host() -> String:
 # Comandi
 # --------------------------------------------------------------------------
 
-## Avvia il flusso loopback + PKCE nel browser di sistema (verso Google).
+## Apre il consenso Google nel browser di sistema. Il ritorno NON passa da qui:
+## Google redirige sul master, e da li' in poi si ritira l'esito con
+## AUTH_GOOGLE_POLL a ogni frame utile (vedi _pump_google).
 func login_google() -> void:
 	if _pending:
 		return
 	if not is_configured():
 		login_completed.emit(false, "backend non configurato")
 		return
-
-	# Porta 0 = la sceglie il sistema operativo, che dà per forza una porta
-	# libera. Un tempo si scandivano 51000..51059 a mano, ma su Windows
-	# quell'intervallo può finire fra le porte riservate da Hyper-V/WSL/WinNAT
-	# (`netsh int ipv4 show excludedportrange tcp`) e ogni bind falliva con
-	# ERR_ALREADY_IN_USE. Google accetta qualunque porta su 127.0.0.1 per un
-	# client OAuth "Desktop", quindi una porta dinamica va benissimo.
-	_server = TCPServer.new()
-	if _server.listen(0, "127.0.0.1") != OK:
-		_cleanup_server()
-		login_completed.emit(false, "nessuna porta di loopback disponibile")
-		return
-	_port = _server.get_local_port()
-
-	_code_verifier = _random_verifier()
-	var challenge := _base64url(_sha256(_code_verifier))
-	_redirect_uri = "http://127.0.0.1:%d/callback" % _port
-	var url := "https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&code_challenge=%s&code_challenge_method=S256" % [
-		_google_client_id.uri_encode(),
-		_redirect_uri.uri_encode(),
-		"openid email profile".uri_encode(),
-		challenge]
-
 	_login_source = "login"
 	_pending = true
-	_deadline = _now() + 180.0
-	OS.shell_open(url)
+	_deadline = _now() + OAUTH_TTL
+	_master_request(
+		Protocol.make(Protocol.AUTH_GOOGLE_BEGIN),
+		[Protocol.AUTH_GOOGLE_URL, Protocol.AUTH_FAIL],
+		_on_google_begin)
+
+
+## Abbandona un consenso in corso (browser chiuso, ripensamento). Non emette
+## nulla: e' la UI a sapere di averlo chiesto.
+func cancel_login() -> void:
+	if not google_pending():
+		return
+	_forget_pending()
+	_pending = false
+	_restoring = false
+
+
+## Vero fra l'apertura del browser e l'esito del consenso.
+func google_pending() -> bool:
+	return _oauth_state != ""
 
 
 ## Login con email e password. Emette login_completed(success, reason) come
@@ -301,57 +329,88 @@ func request_history(limit: int, cb: Callable) -> void:
 			cb.call(done, matches))
 
 
+## Stato del Crowdfunding Store: totale raccolto, obiettivo, sostenitori e le
+## proprie donazioni. cb.call(ok: bool, data: Dictionary).
+##
+## Il totale lo calcola il server dalle righe scritte dal webhook di RevenueCat:
+## il client non lo somma da sé, perché una barra pubblica che ognuno può
+## gonfiare non varrebbe niente. Da sloggati o da ospiti risponde subito con un
+## esito negativo e il pannello lo dice, invece di mostrare uno zero finto.
+func request_donations(limit: int, cb: Callable) -> void:
+	if not is_logged_in():
+		cb.call(false, {})
+		return
+	_master_request(
+		Protocol.make(Protocol.DONATIONS_REQUEST, {
+			"session_token": _access_token,
+			"limit": limit,
+		}),
+		[Protocol.DONATIONS_DATA, Protocol.AUTH_FAIL],
+		func(ok: bool, msg: Dictionary) -> void:
+			var done := ok and Protocol.message_type(msg) == Protocol.DONATIONS_DATA
+			cb.call(done, msg if done else {}))
+
+
 # --------------------------------------------------------------------------
 # Pompa
 # --------------------------------------------------------------------------
 
-func _process(delta: float) -> void:
-	_pump_loopback()
+func _process(_delta: float) -> void:
+	_pump_google()
 	_pump_ws()
 
 
-func _pump_loopback() -> void:
-	if not _pending or _server == null:
+## Richiede al master l'esito del consenso finche' non arriva o non scade. Una
+## richiesta alla volta: senza il guardiano, ogni frame ne accoderebbe una e la
+## coda crescerebbe piu' in fretta di quanto la si svuota.
+func _pump_google() -> void:
+	if _oauth_state == "" or _poll_inflight:
 		return
 	if _now() > _deadline:
+		_forget_pending()
 		_fail_login("timeout del login")
 		return
-	if not _server.is_connection_available():
+	if _now() < _poll_at:
 		return
-
-	var conn := _server.take_connection()
-	var request := ""
-	var guard := 0
-	while guard < 400:
-		conn.poll()
-		if conn.get_status() != StreamPeerTCP.STATUS_CONNECTED:
-			break
-		var available := conn.get_available_bytes()
-		if available > 0:
-			request += conn.get_utf8_string(available)
-			if request.contains("\r\n"):
-				break
-		guard += 1
-
-	var code := _extract_code(request)
-	var body := _callback_html().to_utf8_buffer()
-	var response := "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % body.size()
-	conn.put_data(response.to_utf8_buffer())
-	conn.put_data(body)
-	conn.disconnect_from_host()
-	_cleanup_server()
-
-	if code == "":
-		_fail_login("nessun code nella risposta OAuth")
-		return
+	_poll_inflight = true
 	_master_request(
-		Protocol.make(Protocol.AUTH_GOOGLE, {
-			"code": code,
-			"code_verifier": _code_verifier,
-			"redirect_uri": _redirect_uri,
-		}),
-		[Protocol.AUTH_OK, Protocol.AUTH_FAIL],
-		_on_auth_reply.bind("login"))
+		Protocol.make(Protocol.AUTH_GOOGLE_POLL, {"state": _oauth_state}),
+		[Protocol.AUTH_OK, Protocol.AUTH_PENDING, Protocol.AUTH_FAIL],
+		_on_google_poll)
+
+
+func _on_google_begin(ok: bool, msg: Dictionary) -> void:
+	if not ok or Protocol.message_type(msg) != Protocol.AUTH_GOOGLE_URL:
+		_fail_login(String(msg.get("reason", "server non raggiungibile")))
+		return
+	_oauth_state = String(msg.get("state", ""))
+	var url := String(msg.get("auth_url", ""))
+	if _oauth_state == "" or url == "":
+		_oauth_state = ""
+		_fail_login("risposta di login malformata")
+		return
+	_save_pending()
+	_poll_at = _now() + POLL_INTERVAL
+	OS.shell_open(url)
+
+
+func _on_google_poll(ok: bool, msg: Dictionary) -> void:
+	_poll_inflight = false
+	_poll_at = _now() + POLL_INTERVAL
+	if not ok:
+		# WebSocket caduta o scaduta. Mentre l'app e' in background succede di
+		# continuo (il main loop e' fermo, la connessione muore): non e' il
+		# login ad essere fallito, si riprova fino a _deadline.
+		return
+	match Protocol.message_type(msg):
+		Protocol.AUTH_OK:
+			_on_auth_reply(true, msg, _login_source)
+		Protocol.AUTH_PENDING:
+			pass    # consenso ancora in corso nel browser
+		_:
+			var reason := String(msg.get("reason", "sessione non valida"))
+			_forget_pending()
+			_fail_login(reason)
 
 
 func _pump_ws() -> void:
@@ -419,7 +478,7 @@ func _on_auth_reply(ok: bool, msg: Dictionary, source: String) -> void:
 	if ok and Protocol.message_type(msg) == Protocol.AUTH_OK:
 		_apply_bundle(msg)
 		_pending = false
-		_cleanup_server()
+		_forget_pending()
 		if source == "restore":
 			_restoring = false
 			session_restore_finished.emit(true)
@@ -432,7 +491,7 @@ func _on_auth_reply(ok: bool, msg: Dictionary, source: String) -> void:
 	if source == "restore":
 		# refresh fallito: si resta ospiti in silenzio
 		_pending = false
-		_cleanup_server()
+		_forget_pending()
 		_restoring = false
 		session_restore_finished.emit(false)
 		return
@@ -455,80 +514,69 @@ func _apply_bundle(msg: Dictionary) -> void:
 func _fail_login(reason: String) -> void:
 	var was_restore := _login_source == "restore"
 	_pending = false
-	_code_verifier = ""
-	_cleanup_server()
-	if not was_restore:
-		login_completed.emit(false, reason)
+	_forget_pending()
+	if was_restore:
+		# Ripresa silenziosa (refresh o consenso recuperato dal disco): si resta
+		# ospiti senza errori, ma la schermata di login aspetta comunque di
+		# sapere che ha finito, altrimenti resta su "Accesso in corso…".
+		if _restoring:
+			_restoring = false
+			session_restore_finished.emit(false)
+		return
+	login_completed.emit(false, reason)
 
 
 # --------------------------------------------------------------------------
 # Utilità
 # --------------------------------------------------------------------------
 
-func _cleanup_server() -> void:
-	if _server != null:
-		_server.stop()
-		_server = null
-
-
 func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
 
-func _random_verifier() -> String:
-	var chars := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-	var out := ""
-	for i in 64:
-		out += chars[randi() % chars.length()]
-	return out
+## Salva il consenso in corso. Serve solo su mobile, dove il sistema puo'
+## uccidere il gioco mentre il giocatore e' nel browser: senza questo, al
+## rientro il login sarebbe da rifare pur essendo gia' concluso sul server.
+func _save_pending() -> void:
+	var f := FileAccess.open(PENDING_PATH, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(JSON.stringify({
+		"state": _oauth_state,
+		"started": Time.get_unix_time_from_system(),
+	}))
+	f.close()
 
 
-func _sha256(text: String) -> PackedByteArray:
-	var ctx := HashingContext.new()
-	ctx.start(HashingContext.HASH_SHA256)
-	ctx.update(text.to_utf8_buffer())
-	return ctx.finish()
+func _forget_pending() -> void:
+	_oauth_state = ""
+	_poll_inflight = false
+	var dir := DirAccess.open("user://")
+	if dir != null and dir.file_exists(PENDING_PATH.get_file()):
+		dir.remove(PENDING_PATH.get_file())
 
 
-func _base64url(bytes: PackedByteArray) -> String:
-	return Marshalls.raw_to_base64(bytes).replace("+", "-").replace("/", "_").replace("=", "")
-
-
-func _extract_code(request: String) -> String:
-	var lines := request.split("\r\n")
-	if lines.size() == 0:
-		return ""
-	var first := lines[0]
-	var q := first.find("?")
-	if q == -1:
-		return ""
-	var query := first.substr(q + 1).split(" ")[0]
-	for pair in query.split("&"):
-		var kv := pair.split("=")
-		if kv.size() == 2 and kv[0] == "code":
-			return kv[1].uri_decode()
-	return ""
-
-
-## Pagina servita sul loopback dopo il redirect di Google. Su desktop basta un
-## messaggio: il browser è una finestra a parte, l'utente torna al gioco da solo.
-## Su Android il redirect resta a schermo intero sopra l'app e il browser non
-## la riporta in primo piano: la pagina prova a rilanciare l'activity con un
-## intent verso il package (l'app è già viva con il login in corso, quindi
-## torna semplicemente davanti), con un pulsante di ripiego se l'automatismo
-## viene bloccato.
-func _callback_html() -> String:
-	var head := "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-	var style := "<style>body{font-family:sans-serif;text-align:center;padding:3em 1.5em;background:#12121a;color:#eee}a.btn{display:inline-block;margin-top:1.5em;padding:.8em 1.6em;background:#f0c020;color:#12121a;border-radius:8px;text-decoration:none;font-weight:bold}</style>"
-	var msg := "<h2>Accesso completato ✓</h2><p>Puoi tornare ad AoA.</p>"
-	if OS.get_name() != "Android":
-		return head + style + msg
-	# MAIN/LAUNCHER: riporta davanti l'activity di Godot (già viva) invece di
-	# provare a consegnarle una VIEW, che il suo intent-filter non accetta.
-	var intent := "intent://home#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=%s;end" % ANDROID_PACKAGE
-	var script := "<script>setTimeout(function(){try{location.href=%s}catch(e){}window.close();},300);</script>" % JSON.stringify(intent)
-	var button := "<a class=\"btn\" href=\"%s\">Torna ad AoA</a>" % intent
-	return head + style + msg + button + script
+## Riprende un consenso salvato, se non e' scaduto. Come "restore": un esito
+## negativo non e' colpa di un gesto appena fatto dal giocatore, quindi non
+## mostra errori e si limita a lasciarlo sulla schermata di login.
+func _resume_pending_login() -> bool:
+	if not FileAccess.file_exists(PENDING_PATH):
+		return false
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PENDING_PATH))
+	var saved: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+	var state := String(saved.get("state", ""))
+	var age := Time.get_unix_time_from_system() - float(saved.get("started", 0.0))
+	if state == "" or age < 0.0 or age > OAUTH_TTL:
+		_forget_pending()
+		return false
+	_oauth_state = state
+	_login_source = "restore"
+	_restoring = true
+	_pending = true
+	_deadline = _now() + (OAUTH_TTL - age)
+	_poll_at = 0.0
+	print("[Auth] login Google in sospeso: ritiro la sessione")
+	return true
 
 
 static func email_looks_valid(email: String) -> bool:

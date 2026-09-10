@@ -1127,6 +1127,12 @@ func _test_monetization() -> void:
 	var catalog_text := FileAccess.get_file_as_string(Catalog.PATH)
 	check(not catalog_text.contains("sk_"), "nessuna chiave segreta nel catalogo")
 
+	# La chiave della Test Store va bene mentre si sviluppa, ma in una build
+	# pubblicata RevenueCat la rifiuta: il negozio sarebbe rotto per tutti. Qui
+	# si ricorda soltanto; a spegnere il negozio ci pensa Store._select_backend().
+	if Catalog.revenuecat_key("android").begins_with("test_"):
+		print("  nota  catalog.json usa la chiave della TEST STORE: da sostituire prima di pubblicare")
+
 	# Flusso completo sul negozio finto.
 	var store := MockStore.new()
 	store.clear()
@@ -1148,6 +1154,53 @@ func _test_monetization() -> void:
 
 	store.purchase("prodotto_inesistente")
 	check(not completed["ok"], "un entitlement sconosciuto non viene concesso")
+	store.clear()
+
+	# Donazioni: sono consumabili, non concedono niente e si ripetono. Gli importi
+	# sono fissi perche' su Google Play il prezzo di un prodotto e' fisso.
+	check(Catalog.donation_tiers() == [99, 199, 299, 499, 999, 2499],
+		"i tagli donabili sono 0,99 / 1,99 / 2,99 / 4,99 / 9,99 / 24,99 euro",
+		str(Catalog.donation_tiers()))
+	check(Catalog.donation_goal_cents() == 100000, "l'obiettivo del crowdfunding e' 1000 euro")
+
+	# Ogni taglio deve avere un prodotto su OGNI piattaforma: un taglio senza
+	# prodotto e' un pulsante che non apre nessun pagamento.
+	var senza_prodotto: Array[String] = []
+	for amount in Catalog.donation_tiers():
+		for platform in ["android", "web"]:
+			if Catalog.donation_product(int(amount), platform).is_empty():
+				senza_prodotto.append("%d/%s" % [amount, platform])
+	check(senza_prodotto.is_empty(), "ogni taglio ha un prodotto per piattaforma",
+		", ".join(senza_prodotto))
+
+	# Il giro completo importo -> prodotto -> importo: e' cosi' che il webhook
+	# risale alla cifra partendo dal product_id che gli manda RevenueCat.
+	for amount in Catalog.donation_tiers():
+		var pid := Catalog.donation_product(int(amount), "android")
+		check(Catalog.donation_amount_for_product(pid, "android") == int(amount),
+			"%s vale %d centesimi" % [pid, amount])
+
+	var donated := {"product": "", "ok": false}
+	store.product_purchase_completed.connect(func(pid: String, ok: bool, _r: String) -> void:
+		donated["product"] = pid
+		donated["ok"] = ok)
+	var tier_product := Catalog.donation_product(99, "android")
+	store.purchase_product(tier_product)
+	check(donated["ok"] and donated["product"] == tier_product, "la donazione va a buon fine")
+	check(store.donated_cents() == 99, "l'importo si somma al totale",
+		"%d" % store.donated_cents())
+	# Ripetibile: un consumabile non e' un entitlement gia' posseduto.
+	store.purchase_product(tier_product)
+	check(store.donated_cents() == 198, "una seconda donazione si somma alla prima",
+		"%d" % store.donated_cents())
+	check(store.active_entitlements().is_empty(), "donare non sblocca contenuti")
+
+	# Gli acquisti devono seguire l'account: senza identify() resterebbero
+	# legati al dispositivo e chi cambia telefono perderebbe cio' che ha pagato.
+	store.identify("account-x")
+	check(store.current_user_id() == "account-x", "identify cambia l'account di riferimento")
+	store.sign_out()
+	check(store.current_user_id() == "", "il logout torna anonimo")
 	store.clear()
 
 	# I backend reali non devono attivarsi su desktop.

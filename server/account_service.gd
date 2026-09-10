@@ -18,8 +18,8 @@ const MIN_PASSWORD_LEN := 8
 
 ## cb.call(ok: bool, bundle: Dictionary)
 ## bundle = {session_token, refresh_token, user_id, username, profile, stats, owned_civs}
-static func login_google(owner: Node, code: String, verifier: String, redirect_uri: String, cb: Callable) -> void:
-	GoogleOAuth.exchange_code(owner, code, verifier, redirect_uri, func(ok: bool, claims: Dictionary) -> void:
+static func login_google(owner: Node, code: String, verifier: String, cb: Callable) -> void:
+	GoogleOAuth.exchange_code(owner, code, verifier, func(ok: bool, claims: Dictionary) -> void:
 		if not ok:
 			cb.call(false, {"reason": String(claims.get("reason", "google"))})
 			return

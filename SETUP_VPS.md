@@ -92,7 +92,7 @@ sudo systemctl enable --now fail2ban
 sudo dpkg-reconfigure -plow unattended-upgrades   # rispondi "Sì"
 ```
 
-> Le porte `9000` (master) e `9001+` (worker) **non vanno aperte**: i processi
+> Le porte `9000` (master), `9010` (redirect OAuth) e `9001+` (worker) **non vanno aperte**: i processi
 > ascoltano solo su `127.0.0.1`, Caddy fa da unico ingresso pubblico.
 
 ---
@@ -180,7 +180,8 @@ Qui si esegue **`SETUP_DB.md` §3–§6**:
 - §4: `db/apply.sh` applica lo schema, poi `alter role autochess_auth password '<auth-pw>'`;
 - §5: binario PostgREST, `/etc/autochess/postgrest.conf` (con `<auth-pw>`),
   unit `autochess-postgrest`;
-- §2 + §6: client OAuth Google "Desktop app" e compilazione di `/etc/autochess/env`
+- §2 + §6: client OAuth Google "Web application" (redirect `https://<dominio>/oauth/cb`)
+  e compilazione di `/etc/autochess/env`
   (`DB_API_URL`, `GOOGLE_CLIENT_ID/SECRET`, `SESSION_TOKEN_SECRET`,
   `MATCH_TOKEN_SECRET`, `BACKUP_*`).
 
@@ -371,7 +372,7 @@ instrada `/ws/wN` ma dietro non risponde nessuno. Verifica su quale porta
 ascolta davvero il worker:
 
 ```sh
-sudo ss -lntp | grep -E '9000|9001'      # atteso: master 9000, worker 9001
+sudo ss -lntp | grep -E '9000|9001|9010'  # atteso: master 9000 + 9010, worker 9001
 ```
 
 Causa storica: la unit template aveva `--port=90%i`, che con `%i=1` diventa

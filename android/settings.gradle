@@ -1,0 +1,30 @@
+// Progetto Gradle che contiene il solo modulo del plugin RevenueCat.
+//
+// Esiste perche' revenuecat_plugin/build.gradle da solo non e' compilabile: un
+// modulo Android ha bisogno di un progetto che lo includa e di un wrapper che
+// lo lanci. Da qui:
+//
+//     ./gradlew :revenuecat_plugin:assembleRelease
+//
+// Non ha niente a che vedere con android/build/, che e' il modello di build
+// generato da Godot per esportare l'APK.
+
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode = RepositoriesMode.PREFER_SETTINGS
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'AoaAndroidPlugins'
+
+include ':revenuecat_plugin'
