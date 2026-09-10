@@ -237,42 +237,40 @@ static func parse_query(raw: String) -> Dictionary:
 # Pagine mostrate nel browser dopo il redirect
 # --------------------------------------------------------------------------
 
-## Package Android dell'app (export_presets.cfg -> package/unique_name).
-## Serve solo al pulsante di rientro: su Android il browser non riporta da solo
-## l'app in primo piano. Un intent MAIN/LAUNCHER rimette davanti l'activity gia'
-## viva; deve partire da un GESTO dell'utente, perche' Chrome blocca i redirect
-## automatici verso intent://.
-const ANDROID_PACKAGE_DEFAULT := "com.afalc.autochessofages"
+## NIENTE pulsante "torna all'app", ed e' una scelta obbligata.
+##
+## C'era: un link `intent://...;action=MAIN;category=LAUNCHER;package=...` che
+## avrebbe dovuto rimettere l'app in primo piano. Non poteva funzionare su
+## nessun dispositivo. Chrome lancia un intent SOLO verso activity che
+## dichiarano `android.intent.category.BROWSABLE` ("it indicates that the
+## application is safe to open from the Browser"), e l'activity di Godot
+## dichiara MAIN + DEFAULT + LAUNCHER. Il risultato era la pagina "Elemento non
+## trovato" di Chrome: un vicolo cieco proprio nel momento in cui l'utente ha
+## appena fatto il login.
+##
+## Riaggiungerlo richiede un intent-filter con BROWSABLE e uno schema custom nel
+## manifest dell'app — non nel manifest di un plugin, dove sarebbe fuori posto.
+## Finche' non c'e', la pagina si limita a dire di tornare all'app: il client
+## ritira la sessione da solo quando torna in primo piano (AUTH_GOOGLE_POLL),
+## quindi non si perde niente se non un tocco in meno.
 
 
 static func success_page() -> String:
 	return _page("Accesso completato",
-		"<h2>Accesso completato &#10003;</h2><p>Torna ad AoA: la partita ti aspetta gi&agrave; connesso.</p>",
-		true)
+		"<h2>Accesso completato &#10003;</h2>"
+		+ "<p>Puoi chiudere questa pagina e tornare ad AoA: "
+		+ "ti ritroverai gi&agrave; connesso.</p>")
 
 
 static func error_page(message: String) -> String:
 	return _page("Accesso non riuscito",
-		"<h2>Accesso non riuscito</h2><p>%s</p><p>Riprova dall'app.</p>" % message.xml_escape(),
-		false)
+		"<h2>Accesso non riuscito</h2><p>%s</p><p>Riprova dall'app.</p>" % message.xml_escape())
 
 
-static func _page(title: String, body: String, with_button: bool) -> String:
-	var package := OS.get_environment("ANDROID_PACKAGE")
-	if package == "":
-		package = ANDROID_PACKAGE_DEFAULT
-	var intent := "intent://home#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=%s;end" % package
+static func _page(title: String, body: String) -> String:
 	var head := "<!doctype html><html lang=\"it\"><head><meta charset=\"utf-8\">"
 	head += "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
 	head += "<title>%s</title>" % title
 	head += "<style>body{font-family:system-ui,sans-serif;text-align:center;padding:3em 1.5em;"
-	head += "background:#12121a;color:#eee}a.btn{display:none;margin-top:2em;padding:.9em 1.8em;"
-	head += "background:#f0c020;color:#12121a;border-radius:8px;text-decoration:none;font-weight:bold}"
-	head += "</style></head><body>"
-	var button := ""
-	if with_button:
-		button = "<a class=\"btn\" id=\"back\" href=\"%s\">Torna ad AoA</a>" % intent
-		# Il pulsante compare solo su Android: altrove non c'e' nessun intent da
-		# lanciare e mostrarlo sarebbe un vicolo cieco.
-		button += "<script>if(/Android/i.test(navigator.userAgent)){document.getElementById('back').style.display='inline-block';}</script>"
-	return head + body + button + "</body></html>"
+	head += "background:#12121a;color:#eee}</style></head><body>"
+	return head + body + "</body></html>"

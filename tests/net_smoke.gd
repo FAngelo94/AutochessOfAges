@@ -194,10 +194,15 @@ func _test_oauth_pending() -> void:
 func _test_oauth_http_parsing() -> void:
 	section("OAuth — lettura della richiesta di redirect")
 
-	var target := OAuthHttp._request_target("GET /oauth/cb?code=abc%2F1&state=xyz HTTP/1.1
-Host: x
+	# I terminatori sono CRLF ESPLICITI, non a capo del sorgente: HTTP separa le
+	# righe con \r\n e _request_target divide su quello. Scritte con a capo veri,
+	# queste prove dipendono da come git ha salvato il file — e infatti una di
+	# esse ha smesso di passare nel momento in cui i terminatori sono stati
+	# normalizzati a LF.
+	var crlf := "\r\n"
 
-")
+	var target := OAuthHttp._request_target(
+		"GET /oauth/cb?code=abc%2F1&state=xyz HTTP/1.1" + crlf + "Host: x" + crlf + crlf)
 	check(String(target.get("path", "")) == "/oauth/cb", "la rotta si estrae dalla riga di richiesta")
 	var query: Dictionary = target.get("query", {})
 	check(String(query.get("code", "")) == "abc/1", "il code viene decodificato dall'url-encoding")
@@ -205,11 +210,10 @@ Host: x
 
 	# POST e' servita da quando esiste il webhook delle donazioni; tutto il
 	# resto no.
-	var posted := OAuthHttp._request_target("POST /revenuecat/webhook HTTP/1.1
-Authorization: segreto
-Content-Length: 2
-
-{}")
+	var posted := OAuthHttp._request_target(
+		"POST /revenuecat/webhook HTTP/1.1" + crlf
+		+ "Authorization: segreto" + crlf
+		+ "Content-Length: 2" + crlf + crlf + "{}")
 	check(String(posted.get("method", "")) == "POST" and String(posted.get("path", "")) == "/revenuecat/webhook",
 		"la POST del webhook viene accettata")
 	var posted_headers: Dictionary = posted.get("headers", {})
@@ -220,20 +224,23 @@ Content-Length: 2
 	check(int(posted_headers.get("content-length", "0")) == 2,
 		"content-length viene letta")
 
-	check(OAuthHttp._request_target("PUT /oauth/cb HTTP/1.1
-
-").is_empty(),
+	check(OAuthHttp._request_target("PUT /oauth/cb HTTP/1.1" + crlf + crlf).is_empty(),
 		"un metodo diverso da GET/HEAD/POST viene rifiutato")
 	check(OAuthHttp._request_target("spazzatura").is_empty(),
 		"una riga di richiesta malformata non produce nessuna rotta")
 
-	var err: Dictionary = OAuthHttp._request_target("GET /oauth/cb?error=access_denied&state=s HTTP/1.1
-
-").get("query", {})
+	var err: Dictionary = OAuthHttp._request_target(
+		"GET /oauth/cb?error=access_denied&state=s HTTP/1.1" + crlf + crlf).get("query", {})
 	check(err.has("error"), "il rifiuto del consenso arriva come parametro error")
 
-	check(OAuthHttp.success_page().contains("intent://"),
-		"la pagina di ritorno offre l'intent per rimettere l'app in primo piano")
+	# NIENTE intent:// nella pagina. Chrome lancia un intent solo verso activity
+	# che dichiarano BROWSABLE, e quella di Godot non lo fa: il pulsante portava
+	# alla pagina "Elemento non trovato" del browser, proprio dopo un login
+	# riuscito. Il client ritira la sessione da solo al rientro in primo piano.
+	check(not OAuthHttp.success_page().contains("intent://"),
+		"la pagina di ritorno non promette un intent che Chrome rifiuterebbe")
+	check(OAuthHttp.success_page().contains("AoA"),
+		"la pagina dice comunque di tornare all'app")
 	check(not OAuthHttp.error_page("<script>").contains("<script>"),
 		"il messaggio d'errore viene escapato nella pagina")
 
