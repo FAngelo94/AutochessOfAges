@@ -33,6 +33,14 @@ func total_available_of_cost(cost: int) -> int:
 	return total
 
 
+## Copie che quella fascia di costo aveva a inizio partita. Ricavata dai dati,
+## non memorizzata: così non c'è uno stato in più da serializzare e da tenere
+## allineato fra server e client.
+func initial_capacity_of_cost(cost: int) -> int:
+	var copies_per_cost: Dictionary = GameData.balance()["pool"]["copies_per_cost"]
+	return GameData.units_of_cost(cost).size() * int(copies_per_cost.get(str(cost), 0))
+
+
 ## Estrae una copia. Restituisce false se il pool è esaurito per quell'unità.
 func take(unit_id: String, count: int = 1) -> bool:
 	if available(unit_id) < count:
@@ -70,18 +78,48 @@ func draw_of_cost(cost: int, rng: SimRNG) -> UnitDef:
 	return drawn
 
 
-## Pesca rispettando le probabilità per livello, con fallback verso i costi
-## più bassi se la fascia estratta è esaurita.
-func draw_for_level(level: int, rng: SimRNG) -> UnitDef:
+## Peso di ogni fascia di costo a un dato livello: la riga di `shop_odds`
+## corretta per le copie che alla fascia restano davvero.
+##
+##   peso = odds * (residuo / capacità iniziale) ^ esponente
+##
+## A pool intatto il residuo vale 1 ovunque e i pesi coincidono con la tabella,
+## che resta la verità dichiarata a inizio partita; man mano che una fascia si
+## svuota il suo peso cala e si redistribuisce sulle altre. Una fascia a zero
+## pesa zero QUALUNQUE sia l'esponente — `pow(0, 0)` vale 1, quindi il caso va
+## intercettato prima — ed è ciò che rende inutile un fallback verso i costi
+## più bassi.
+##
+## `exponent` negativo significa "quello configurato": i test possono passare
+## 0.0 o 1.0 espliciti senza dover toccare il balance.json vero.
+func band_weights(level: int, exponent: float = -1.0) -> Array:
 	var odds := GameData.shop_odds(level)
-	var cost_index := rng.pick_weighted(odds)
-	for offset in range(odds.size()):
-		var cost := cost_index + 1 - offset
-		if cost >= 1:
-			var def := draw_of_cost(cost, rng)
-			if def != null:
-				return def
-	return null
+	var power := GameData.pool_scarcity_exponent() if exponent < 0.0 else exponent
+	var weights: Array = []
+	for index in odds.size():
+		var cost := index + 1
+		var capacity := initial_capacity_of_cost(cost)
+		var remaining := total_available_of_cost(cost)
+		if capacity <= 0 or remaining <= 0:
+			weights.append(0.0)
+			continue
+		weights.append(float(odds[index]) * pow(float(remaining) / float(capacity), power))
+	return weights
+
+
+## Pesca rispettando le probabilità per livello, pesate sul residuo del pool
+## (vedi `band_weights`). Restituisce null solo se il pool è esaurito ovunque:
+## una fascia con peso maggiore di zero ha per costruzione almeno una copia,
+## quindi `draw_of_cost` non può fallire.
+func draw_for_level(level: int, rng: SimRNG) -> UnitDef:
+	var weights := band_weights(level)
+	var total := 0.0
+	for weight in weights:
+		total += float(weight)
+	# Il controllo sta PRIMA di pick_weighted, che ha un assert sulla somma.
+	if total <= 0.0:
+		return null
+	return draw_of_cost(rng.pick_weighted(weights) + 1, rng)
 
 
 func snapshot() -> Dictionary:

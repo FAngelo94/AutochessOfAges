@@ -53,6 +53,14 @@ func local_index() -> int:
 	return 0
 
 
+## L'indice del giocatore che il posto locale affronterà alla fine di questa
+## preparazione, o -1 se non è noto: fuori dalla preparazione, posto eliminato,
+## o — online — il server non l'ha ancora comunicato. La UI ci segna la riga
+## corrispondente nella classifica.
+func next_opponent_index() -> int:
+	return -1
+
+
 func request_buy(_slot: int) -> void:
 	pass
 

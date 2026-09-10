@@ -71,7 +71,7 @@ func _test_protocol() -> void:
 	check(round_trip.get("n") == 7, "encode->decode conserva i campi scalari")
 	check(round_trip.get("cell") == Vector2i(3, 4), "encode->decode conserva Vector2i")
 
-	check(Protocol.PROTOCOL_VERSION == 6, "PROTOCOL_VERSION == 6")
+	check(Protocol.PROTOCOL_VERSION == 7, "PROTOCOL_VERSION == 7")
 
 	# La cronologia passa dal master come tutto il resto: il client non parla
 	# mai HTTP col database.

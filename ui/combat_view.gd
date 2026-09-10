@@ -134,11 +134,19 @@ func _build_scene() -> void:
 	# Aggiunto prima del riquadro 3D: fra fratelli entrambi `show_behind_parent`
 	# l'ordine di disegno resta quello dell'albero, quindi lo sfondo finisce
 	# sotto la scacchiera e le unità.
+	# L'arena si vede PER INTERO dentro la fascia di battaglia: KEEP_ASPECT (non
+	# COVERED) non ritaglia nulla, e il rapporto dell'arte (2:3) è quasi identico
+	# a quello del riquadro, quindi le bande di crepuscolo ai lati sono minime.
+	# L'accampamento romano resta sopra la griglia, quello barbaro sotto.
 	_backdrop = TextureRect.new()
-	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	# KEEP_ASPECT_COVERED: l'immagine è quadrata, il riquadro no. Ritagliare i
-	# bordi è preferibile a deformare l'arena o a lasciare bande vuote.
-	_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	# EXPAND_IGNORE_SIZE: senza questo il TextureRect tiene come dimensione minima
+	# quella della texture (1024×1536) e le ancore FULL_RECT non riescono a
+	# rimpicciolirlo — restava grande quanto l'immagine e se ne vedeva solo la
+	# parte alta. Così invece obbedisce al riquadro e KEEP_ASPECT vi fa entrare
+	# l'arena PER INTERO (romani sopra, barbari sotto), con bande minime ai lati.
+	_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_backdrop.show_behind_parent = true
 	if ResourceLoader.exists(ARENA_BACKGROUND):

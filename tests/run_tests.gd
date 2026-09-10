@@ -19,6 +19,7 @@ func _initialize() -> void:
 	_test_hex_grid()
 	_test_rng_determinism()
 	_test_pool_conservation()
+	_test_shop_scarcity()
 	_test_upgrade_cascade()
 	_test_heroes()
 	_test_economy()
@@ -30,9 +31,11 @@ func _initialize() -> void:
 	_test_live_ranking()
 	_test_eliminated_cannot_shop()
 	_test_rematch_avoidance()
+	_test_matchup_preview()
 	_test_ghost_uses_eliminated_formation()
 	_test_spectate_ghost_matchup()
 	_test_replay_log()
+	_test_battle_view_orientation()
 	_test_monetization()
 	_test_serialization_roundtrip()
 	_test_view_filtering()
@@ -1003,6 +1006,48 @@ func _matchup_trace(seed_value: int) -> Array:
 	return trace
 
 
+## preview_matchups() deve annunciare esattamente lo scontro che poi avverrà,
+## senza spostare la partita: stessa sequenza di accoppiamenti con o senza le
+## anteprime, e l'avversario previsto = quello effettivamente combattuto.
+func _test_matchup_preview() -> void:
+	section("Anteprima del prossimo avversario")
+
+	# Riproducibilità: una partita che chiama preview_matchups() a ogni round
+	# deve dare gli stessi accoppiamenti di una che non lo fa mai.
+	var clean := MatchState.new(2024, 0)
+	var peeked := MatchState.new(2024, 0)
+	var identical := true
+	var previews_matched := true
+	for _r in 6:
+		for _p in 3:
+			peeked.preview_matchups()  # scartato: non deve lasciare traccia
+		var preview := peeked.upcoming_opponent(peeked.players[0].index)
+		var a := clean.resolve_round()
+		var b := peeked.resolve_round()
+		if str(_matchup_keys(a)) != str(_matchup_keys(b)):
+			identical = false
+		# L'avversario previsto per il posto 0 = quello con cui ha combattuto.
+		var actual_opp := -1
+		for row in b:
+			if row["player"].index == 0:
+				actual_opp = row["opponent"].index if row["opponent"] != null else -1
+		if not preview.is_empty() and int(preview.get("index", -1)) != actual_opp:
+			previews_matched = false
+		clean.start_round()
+		peeked.start_round()
+	check(identical, "gli accoppiamenti sono identici con o senza preview_matchups()")
+	check(previews_matched, "l'avversario previsto è quello poi affrontato")
+
+
+func _matchup_keys(results: Array) -> Array:
+	var keys: Array = []
+	for row in results:
+		var opp: int = row["opponent"].index if row["opponent"] != null else -1
+		keys.append([row["player"].index, opp, bool(row.get("ghost", false))])
+	keys.sort()
+	return keys
+
+
 ## A7b — con un numero dispari di vivi lo spaiato affronta il fantasma di un
 ## eliminato (il suo ultimo schieramento), non la copia di un vivo.
 func _test_ghost_uses_eliminated_formation() -> void:
@@ -1378,3 +1423,138 @@ func _test_replay_log() -> void:
 		if unit.is_alive() and cells[unit.uid] != unit.cell:
 			positions_ok = false
 	check(positions_ok, "rigiocando il log le unità finiscono nelle celle giuste")
+
+
+# --------------------------------------------------------------------------
+
+## Orientamento della vista di battaglia. `CombatSim.board_cell_to_arena`
+## specchia la squadra 1 su ENTRAMBI gli assi, quindi chi guarda da quel lato
+## deve vedere il campo ruotato di 180°: negare la sola profondità gli mostrava
+## la propria formazione rovesciata sinistra/destra rispetto alla preparazione.
+## Il difetto compariva a round alterni, perché `build_matchups()` assegna gli
+## slot a caso, ed era invisibile ai test: la simulazione era già corretta.
+func _test_battle_view_orientation() -> void:
+	section("Orientamento della vista di battaglia")
+
+	var balance := GameData.balance()
+	var columns := int(balance["match"]["board_columns"])
+	var rows := int(balance["match"]["board_rows"])
+
+	var sim := CombatSim.new(SimRNG.new(1))
+	var board := BattleBoard3D.new()
+	board.columns = columns
+	board.rows = rows * 2
+
+	# La camera sta a z positivo e guarda verso -z: z maggiore = più vicino a
+	# chi guarda. La x del mondo è la x dello schermo (imbardata 0).
+	for viewer in [0, 1]:
+		board.flip = viewer == 0
+		var own := func(cell: Vector2i) -> Vector3:
+			return board.cell_to_world(sim.board_cell_to_arena(cell, viewer))
+		var foe := func(cell: Vector2i) -> Vector3:
+			return board.cell_to_world(sim.board_cell_to_arena(cell, 1 - viewer))
+
+		var left: Vector3 = own.call(Vector2i(0, 0))
+		var right: Vector3 = own.call(Vector2i(columns - 1, 0))
+		check(left.x < right.x,
+			"spettatore %d: la propria colonna 0 resta a sinistra" % viewer,
+			"%.2f vs %.2f" % [left.x, right.x])
+
+		var front: Vector3 = own.call(Vector2i(0, 0))
+		var back: Vector3 = own.call(Vector2i(0, rows - 1))
+		check(front.z < back.z,
+			"spettatore %d: la propria prima riga è la più lontana" % viewer,
+			"%.2f vs %.2f" % [front.z, back.z])
+
+		var enemy_front: Vector3 = foe.call(Vector2i(0, 0))
+		check(back.z > enemy_front.z,
+			"spettatore %d: la propria metà è quella vicina" % viewer,
+			"%.2f vs %.2f" % [back.z, enemy_front.z])
+
+		# Due schieramenti che si fronteggiano: la colonna 0 dell'avversario —
+		# la sua sinistra — sta di fronte alla propria destra.
+		var enemy_right: Vector3 = foe.call(Vector2i(columns - 1, 0))
+		check(enemy_front.x > enemy_right.x,
+			"spettatore %d: l'ala sinistra avversaria è di fronte alla propria destra" % viewer,
+			"%.2f vs %.2f" % [enemy_front.x, enemy_right.x])
+
+		# La colonna 0 propria e quella avversaria non possono cadere sulla
+		# stessa verticale: sarebbe il segno che una delle due riflessioni manca.
+		check(absf(left.x - enemy_front.x) > 0.01,
+			"spettatore %d: le due colonne 0 non si sovrappongono" % viewer,
+			"%.2f vs %.2f" % [left.x, enemy_front.x])
+
+	board.free()
+
+
+# --------------------------------------------------------------------------
+
+## Le probabilità del negozio sono pesate sulle copie che restano alla fascia
+## (`UnitPool.band_weights`). Due invarianti da non perdere: a pool intatto la
+## tabella di `shop_odds` è ancora la verità — chi bilancia deve poterla leggere
+## per quello che dice — e una fascia esaurita non può più produrre una casella
+## vuota, come faceva il vecchio fallback quando toccava al costo 1.
+func _test_shop_scarcity() -> void:
+	section("Probabilità del negozio e residuo del pool")
+
+	var max_level := int(GameData.balance()["levels"]["max_level"])
+	var pool := UnitPool.new()
+
+	var mismatch := ""
+	for level in range(1, max_level + 1):
+		var odds := GameData.shop_odds(level)
+		var weights := pool.band_weights(level, 1.0)
+		for index in odds.size():
+			if absf(float(weights[index]) - float(odds[index])) > 0.001:
+				mismatch = "livello %d fascia %d: %f vs %f" % [
+					level, index + 1, float(weights[index]), float(odds[index])]
+	check(mismatch == "", "a pool intatto i pesi coincidono con shop_odds", mismatch)
+
+	# Prosciuga il costo 1: è la fascia senza fallback possibile.
+	for def in GameData.units_of_cost(1):
+		pool.take(def.id, pool.available(def.id))
+	check(pool.total_available_of_cost(1) == 0, "la fascia di costo 1 è esaurita",
+		str(pool.total_available_of_cost(1)))
+
+	var drained := pool.band_weights(5, 1.0)
+	check(float(drained[0]) == 0.0, "una fascia esaurita pesa zero", str(drained[0]))
+	var rest := 0.0
+	for index in range(1, drained.size()):
+		rest += float(drained[index])
+	check(rest > 0.0, "le altre fasce reggono da sole l'estrazione", str(rest))
+
+	# L'esponente zero è la via di fuga verso il comportamento nominale: le
+	# fasce ancora fornite tornano ai valori scritti in tabella.
+	var nominal := pool.band_weights(5, 0.0)
+	var odds_5 := GameData.shop_odds(5)
+	var nominal_ok := true
+	for index in range(1, nominal.size()):
+		if absf(float(nominal[index]) - float(odds_5[index])) > 0.001:
+			nominal_ok = false
+	check(nominal_ok, "con esponente 0 le fasce fornite tornano ai valori di tabella")
+	check(float(nominal[0]) == 0.0, "con esponente 0 una fascia vuota pesa comunque zero",
+		str(nominal[0]))
+
+	# Il difetto vero: a livello 3 le probabilità sono 0.75/0.25, quindi prima
+	# quasi ogni pescata cadeva sul costo 1 esaurito e la casella restava vuota.
+	var rng := SimRNG.new(99)
+	var empty_slots := 0
+	var cheap_drawn := 0
+	for i in 50:
+		var def := pool.draw_for_level(3, rng)
+		if def == null:
+			empty_slots += 1
+		else:
+			if def.cost == 1:
+				cheap_drawn += 1
+			pool.give_back(def.id)
+	check(empty_slots == 0, "una fascia esaurita non lascia più caselle vuote",
+		"%d slot vuoti su 50" % empty_slots)
+	check(cheap_drawn == 0, "e non pesca dalla fascia esaurita", str(cheap_drawn))
+
+	# Pool esaurito ovunque: lì la casella vuota è la risposta giusta.
+	var empty_pool := UnitPool.new()
+	for def in GameData.all_units():
+		empty_pool.take(def.id, empty_pool.available(def.id))
+	check(empty_pool.draw_for_level(9, SimRNG.new(1)) == null,
+		"a pool completamente esaurito la casella resta vuota")

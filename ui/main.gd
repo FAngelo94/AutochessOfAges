@@ -50,6 +50,15 @@ const CONTENT_HEADROOM := 124.0
 ## disponibile, e una copia sfasata darebbe una stima sbagliata di poco, che è
 ## il modo peggiore di sbagliare.
 const SIDE_MARGIN := 16
+
+## In preparazione la scheda delle sinergie sta a destra della plancia, in una
+## colonna di larghezza fissa che ospita una griglia 2×N di chip a simbolo. La
+## plancia (minimo 76×5.5 = 418 px) resta comodamente dentro lo spazio che
+## avanza su una tela da 720 (688 − 210 − 8 = 470). Il tetto di larghezza della
+## plancia in _slot_scales() sottrae questi due valori.
+const SYNERGY_COL_WIDTH := 210.0
+const SYNERGY_COL_GAP := 8
+
 const TOP_MARGIN := 38
 const BOTTOM_MARGIN := 18
 const ROOT_SEPARATION := 12
@@ -107,7 +116,7 @@ var _shop_row: HBoxContainer
 var _board_rows: VBoxContainer
 var _bench_row: HBoxContainer
 var _ranking_list: HFlowContainer
-var _synergy_row: HFlowContainer
+var _synergy_row: GridContainer
 var _fight_button: Button
 var _sell_button: Button
 
@@ -314,13 +323,31 @@ func _build_ui() -> void:
 	# colonne per costruzione, e mostrerebbe adiacenze che in battaglia non
 	# esistono — chi schiera deve vedere gli stessi vicini che vedrà il
 	# risolutore.
+	# Plancia a sinistra, sinergie in colonna a destra. La plancia non è più
+	# centrata: si àncora a sinistra e la colonna dei simboli si prende la
+	# fascia di destra, così le due cose che cambiano a ogni mossa — dove
+	# stanno le unità e quali tratti sono attivi — si guardano senza scorrere.
+	var board_row := HBoxContainer.new()
+	board_row.add_theme_constant_override("separation", SYNERGY_COL_GAP)
+	body.add_child(board_row)
+
 	_board_rows = VBoxContainer.new()
-	_board_rows.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_board_rows.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	# Separazione negativa: due righe di esagoni si incastrano risalendo di un
 	# quarto d'altezza l'una sull'altra. Con una separazione positiva resterebbero
 	# due file di esagoni staccate, che non è una griglia esagonale.
 	_board_rows.add_theme_constant_override("separation", int(-CELL_SIZE.y * 0.25))
-	body.add_child(_board_rows)
+	board_row.add_child(_board_rows)
+
+	var synergy_side := VBoxContainer.new()
+	synergy_side.custom_minimum_size = Vector2(SYNERGY_COL_WIDTH, 0)
+	synergy_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	synergy_side.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	synergy_side.add_theme_constant_override("separation", 4)
+	board_row.add_child(synergy_side)
+
+	synergy_side.add_child(_section_title("SINERGIE"))
+	synergy_side.add_child(_build_synergy_card())
 
 	# Gli avversari stanno SOTTO la plancia, in striscia. Da colonna a fianco
 	# rubavano 164 px di larghezza in permanenza all'unica cosa con cui si
@@ -329,10 +356,6 @@ func _build_ui() -> void:
 	body.add_child(_spacer(6))
 	body.add_child(_section_title("CLASSIFICA"))
 	body.add_child(_build_ranking_strip())
-
-	body.add_child(_spacer(6))
-	body.add_child(_section_title("SINERGIE"))
-	body.add_child(_build_synergy_card())
 
 	body.add_child(_spacer(6))
 	body.add_child(_section_title("PANCHINA"))
@@ -391,6 +414,11 @@ func _build_ui() -> void:
 	_build_spectator_screen()
 	_build_combat_overlay()
 	_build_spectate_overlay()
+
+	# Il dettaglio di una sinergia si può aprire anche DURANTE la battaglia
+	# (una chip nelle barre alto/basso): va costruito per ultimo, o resterebbe
+	# sotto l'overlay di combattimento e il click non mostrerebbe nulla.
+	_build_synergy_detail()
 
 
 ## Barra di stato: round, vita, oro, livello. Sono i quattro numeri su cui si
@@ -791,24 +819,27 @@ func _refresh_combat_synergy_row(row: HBoxContainer, units: Array) -> void:
 		child.queue_free()
 	for synergy_row in TraitResolver.summary(units):
 		if bool(synergy_row["active"]):
-			row.add_child(_combat_chip(synergy_row))
+			row.add_child(_combat_chip(synergy_row, units))
 
 
-## Versione compatta e non interattiva di _synergy_chip(), per le barre della
-## schermata di battaglia: qui serve solo leggere a colpo d'occhio, non aprire
-## il dettaglio — e il riquadro non ha spazio per pulsanti a grandezza piena.
-func _combat_chip(row: Dictionary) -> Control:
-	var panel := PanelContainer.new()
+## Versione compatta di _synergy_chip() per le barre della schermata di
+## battaglia: mostra solo il simbolo del tratto, ma è cliccabile — apre il
+## dettaglio di quella sinergia contato sulla squadra `units` (la propria o
+## quella dell'avversario, a seconda della barra).
+func _combat_chip(row: Dictionary, units: Array) -> Control:
 	var tint: Color = Style.origin_color(String(row["id"])) if bool(row["is_origin"]) else Style.BLUE
-	panel.add_theme_stylebox_override("panel", Style.plate(tint.darkened(0.55), tint, 8, 3))
 
-	var label := Label.new()
-	label.text = "● %s" % row["name"]
-	label.add_theme_font_size_override("font_size", 13)
-	label.add_theme_color_override("font_color", tint.lightened(0.35))
-	panel.add_child(label)
+	var button := Button.new()
+	button.text = String(row["symbol"])
+	button.tooltip_text = String(row["name"])
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(0, 30)
+	button.add_theme_font_size_override("font_size", 16)
+	button.add_theme_color_override("font_color", tint.lightened(0.35))
+	Style.apply_plate(button, tint.darkened(0.55), tint, 8, 3)
+	button.pressed.connect(_open_synergy_detail.bind(String(row["id"]), units))
 
-	return panel
+	return button
 
 
 ## Overlay per RIVEDERE la battaglia dell'ultimo round di un altro giocatore:
@@ -952,10 +983,14 @@ func _refresh_ranking() -> void:
 	# fra quale coppia di chip ci si trova.
 	var standings := match_state.live_ranking()
 	var width := _chip_width(RANKING_CHIPS_PER_ROW)
+	# -1 fuori dalla preparazione, da eliminato, o (online) finché il server non
+	# l'ha comunicato: nessuna chip viene segnata, ed è il comportamento giusto.
+	var next_opp := _session.next_opponent_index() if _session != null else -1
 	var position := 0
 	for pl in standings:
 		position += 1
-		_ranking_list.add_child(_standing_chip(pl, position, width, pl == player()))
+		_ranking_list.add_child(
+			_standing_chip(pl, position, width, pl == player(), pl.index == next_opp))
 
 
 ## Larghezza di una chip perché ne stiano RANKING_CHIPS_PER_ROW per riga: la
@@ -995,7 +1030,14 @@ func _scrollbar_width() -> float:
 ## di servirle entrambe produrrebbe una funzione fatta di rami.
 const CHIP_FONT := 15
 
-func _standing_chip(pl: Player, position: int, width: float, own: bool = false) -> Button:
+## Aria interna di una chip della classifica, fra il bordo e il suo contenuto
+## (posizione, nome, vita). Orizzontale più generoso del verticale: la chip è
+## bassa e un margine alto/basso grande la farebbe crescere di riga.
+const CHIP_INNER_PAD := 8
+const CHIP_INNER_PAD_V := 3
+
+func _standing_chip(pl: Player, position: int, width: float, own: bool = false,
+		next_opponent: bool = false) -> Button:
 	var out := pl.eliminated or pl.hp <= 0
 	var watchable: bool = _session != null and _session.can_spectate(pl.index)
 
@@ -1004,15 +1046,34 @@ func _standing_chip(pl: Player, position: int, width: float, own: bool = false) 
 	chip.disabled = not watchable
 	chip.tooltip_text = "Rivedi l'ultima battaglia di %s" % pl.display_name if watchable \
 		else "%s non ha una battaglia da rivedere" % pl.display_name
-	_style_ranking_row(chip)
+	# La spada e il bordo acceso segnano l'avversario del round che sta per
+	# iniziare: la riga resta comunque toccabile (o spenta) come le altre.
+	if next_opponent:
+		chip.tooltip_text = "Prossimo avversario. " + chip.tooltip_text
+	_style_ranking_row(chip, next_opponent)
 	if watchable:
 		chip.pressed.connect(_open_spectate.bind(pl))
 
 	var inner := HBoxContainer.new()
 	inner.add_theme_constant_override("separation", 5)
 	inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Il contenuto è ancorato al pulsante (così il tocco arriva sempre alla chip),
+	# quindi i content_margin dello stylebox non lo toccano: l'aria interna la
+	# danno questi offset — senza, "1°" e la vita restano incollati ai bordi.
+	inner.offset_left = CHIP_INNER_PAD
+	inner.offset_right = -CHIP_INNER_PAD
+	inner.offset_top = CHIP_INNER_PAD_V
+	inner.offset_bottom = -CHIP_INNER_PAD_V
 	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.add_child(inner)
+
+	if next_opponent:
+		var sword := Label.new()
+		sword.text = "⚔"
+		sword.add_theme_font_size_override("font_size", CHIP_FONT)
+		sword.add_theme_color_override("font_color", Style.TORCH)
+		sword.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.add_child(sword)
 
 	var place_label := Label.new()
 	place_label.text = "%d°" % position
@@ -1304,16 +1365,24 @@ func _refresh_spectator_rows() -> void:
 ## mouse e una faccia incassata da premuta — lo stesso linguaggio di
 ## Style.apply_plate ma con margini ridotti, perché la riga è alta poche
 ## decine di pixel e larga 150.
-func _style_ranking_row(row: Button) -> void:
+func _style_ranking_row(row: Button, highlight: bool = false) -> void:
 	var clear := Style.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6)
 	clear.content_margin_left = 6
 	clear.content_margin_right = 6
 	clear.content_margin_top = 3
 	clear.content_margin_bottom = 3
+	# Riga del prossimo avversario: un velo e un bordo color torcia che restano
+	# anche da ferma e da spenta (la chip è disabled finché non c'è una battaglia
+	# da rivedere), così il segno non sparisce prima del primo combattimento.
+	if highlight:
+		clear.bg_color = Color(Style.TORCH.r, Style.TORCH.g, Style.TORCH.b, 0.14)
+		clear.border_color = Style.TORCH
+		clear.set_border_width_all(2)
 	var hover := clear.duplicate() as StyleBoxFlat
-	hover.bg_color = Style.PLATE.lightened(0.06)
-	hover.border_color = Style.PLATE.lightened(0.25)
-	hover.set_border_width_all(1)
+	if not highlight:
+		hover.bg_color = Style.PLATE.lightened(0.06)
+		hover.border_color = Style.PLATE.lightened(0.25)
+		hover.set_border_width_all(1)
 	var pressed := hover.duplicate() as StyleBoxFlat
 	pressed.bg_color = Style.PLATE_DARK
 	row.add_theme_stylebox_override("normal", clear)
@@ -1328,20 +1397,20 @@ func _style_ranking_row(row: Button) -> void:
 	row.add_theme_stylebox_override("disabled", clear)
 
 
-## Riquadro sinergie sulla schermata principale: una fila di chip che va a capo
-## da sola, una per tratto presente in squadra. Sostituisce la vecchia lista
-## testuale nel foglio informazioni — qui si controlla senza dover aprire
-## nulla, ed è cliccabile per il dettaglio dei bonus.
+## Riquadro sinergie sulla schermata principale: una griglia 2×N di chip, una
+## per tratto presente in squadra. Sta nella colonna a destra della plancia;
+## ogni chip è cliccabile e apre il dettaglio dei bonus. Lo sfondo della chip
+## (tinta della civiltà / classe se attiva, piastra scura se no) dice a colpo
+## d'occhio se la soglia è raggiunta — niente pallino.
 func _build_synergy_card() -> Control:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
 
-	_synergy_row = HFlowContainer.new()
+	_synergy_row = GridContainer.new()
+	_synergy_row.columns = 2
 	_synergy_row.add_theme_constant_override("h_separation", 6)
 	_synergy_row.add_theme_constant_override("v_separation", 6)
 	panel.add_child(_synergy_row)
-
-	_build_synergy_detail()
 
 	return panel
 
@@ -1378,9 +1447,15 @@ func _synergy_chip(row: Dictionary) -> Button:
 	var progress := "%d" % int(row["count"])
 	if int(row["next_threshold"]) > 0:
 		progress = "%d/%d" % [int(row["count"]), int(row["next_threshold"])]
-	button.text = "%s %s %s" % ["●" if bool(row["active"]) else "○", row["name"], progress]
-	button.add_theme_font_size_override("font_size", 16)
+	# Il simbolo al posto del nome; nessun pallino di stato — ci pensa lo sfondo.
+	# Il nome per esteso resta nel dettaglio (si apre col tocco) e nel tooltip.
+	button.text = "%s %s" % [row["symbol"], progress]
+	button.tooltip_text = String(row["name"])
+	button.add_theme_font_size_override("font_size", 19)
 	button.custom_minimum_size = Vector2(0, 44)
+	# In griglia a due colonne: entrambe le celle della stessa larghezza, così
+	# le chip si allineano invece di seguire la lunghezza del testo.
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	var tint: Color = Style.origin_color(String(row["id"])) if bool(row["is_origin"]) else Style.BLUE
 	if bool(row["active"]):
@@ -1479,9 +1554,13 @@ func _close_synergy_detail() -> void:
 
 ## Popola e apre il dettaglio di una sinergia: tutte le soglie definite in
 ## traits.json, non solo quella attiva, così si vede anche cosa serve ancora.
-func _open_synergy_detail(trait_id: String) -> void:
+## `units` vuoto = la propria squadra (chip di preparazione). In battaglia le
+## chip passano la squadra della barra su cui si è cliccato, così le soglie
+## mostrate sono quelle davvero raggiunte da quel giocatore.
+func _open_synergy_detail(trait_id: String, units: Array = []) -> void:
 	var def := GameData.trait_def(trait_id)
-	var count := int(TraitResolver.count_traits(player().board_units()).get(trait_id, 0))
+	var source: Array = units if not units.is_empty() else player().board_units()
+	var count := int(TraitResolver.count_traits(source).get(trait_id, 0))
 
 	_synergy_detail_title.text = String(def.get("name", trait_id))
 	_synergy_detail_description.text = String(def.get("description", ""))
@@ -2433,10 +2512,12 @@ func _slot_scales() -> Vector3:
 	var shop_slots := float(match_data["shop_slots"])
 
 	# Tetti di larghezza. La plancia conta mezza colonna in più per lo
-	# sfalsamento delle righe dispari; le altre due scontano il pulsante icona
-	# e le separazioni fra le caselle (4 px in panchina, 6 nel negozio).
+	# sfalsamento delle righe dispari e sconta la colonna delle sinergie che
+	# le sta a fianco; le altre due scontano il pulsante icona e le separazioni
+	# fra le caselle (4 px in panchina, 6 nel negozio).
 	var caps := Vector3(
-		available_width / (CELL_SIZE.x * (columns + 0.5)),
+		(available_width - SYNERGY_COL_WIDTH - SYNERGY_COL_GAP)
+			/ (CELL_SIZE.x * (columns + 0.5)),
 		(available_width - ICON_BUTTON_SIZE.x - 6.0 - 4.0 * (bench_slots - 1.0))
 			/ (BENCH_SLOT_SIZE.x * bench_slots),
 		(available_width - ICON_BUTTON_SIZE.x - 6.0 - 6.0 * (shop_slots - 1.0))

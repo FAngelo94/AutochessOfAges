@@ -23,6 +23,11 @@
       "body": "Solo le unità sul campo combattono: quelle in panchina restano a guardare. La prima fila del campo è quella a contatto con il nemico, quindi è lì che vanno le unità pensate per incassare i colpi. Avete {preparation_seconds} secondi per sistemare tutto — la barra in fondo li conta — poi il round parte da solo."
     },
     {
+      "id": "classifica",
+      "title": "La classifica",
+      "body": "Sotto il campo, il riquadro CLASSIFICA elenca tutti i giocatori ordinati per vita rimasta, la vostra riga in blu. L'avversario del round che sta per iniziare è segnato con la spada ⚔ e un bordo acceso: toccando la sua riga rivedete com'era schierato l'ultimo round, così potete adattare la formazione prima di affrontarlo. Le altre righe mostrano l'ultima battaglia di ciascuno."
+    },
+    {
       "id": "sinergie",
       "title": "Sinergie",
       "body": "Unità della stessa civiltà o dello stesso ruolo attivano bonus di squadra al raggiungimento di certe soglie. Le trovate elencate come chip sotto al campo: piene quando sono attive, vuote quando manca ancora qualche unità."
@@ -66,7 +71,7 @@
     },
     "ranking": {
       "title": "Spiare gli avversari",
-      "body": "Il riquadro AVVERSARI elenca chi è ancora in gioco, ordinato per vita. Toccate una riga per rivedere lo schieramento con cui quell'avversario ha combattuto l'ultimo round: utile per capire cosa vi aspetta e correggere la formazione."
+      "body": "Il riquadro CLASSIFICA elenca chi è ancora in gioco, ordinato per vita. L'avversario che affronterete al via del prossimo round è quello con la spada ⚔ e il bordo acceso. Toccate una riga per rivedere lo schieramento con cui quel giocatore ha combattuto l'ultimo round: utile per capire cosa vi aspetta e correggere la formazione."
     },
     "economy": {
       "title": "Interessi",

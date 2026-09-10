@@ -55,7 +55,9 @@
 
   "pool": {
     "_comment": "Copie disponibili nel pool CONDIVISO per ogni unità, in base al costo. È la meccanica di contesa: se gli avversari comprano, tu peschi meno.",
-    "copies_per_cost": { "1": 29, "2": 29, "3": 29, "4": 29, "5": 29 }
+    "copies_per_cost": { "1": 29, "2": 29, "3": 29, "4": 29, "5": 29 },
+    "_scarcity_doc": "Quanto le copie rimaste in una fascia di costo pesano sulla probabilità di pescarla: 0 = si usa shop_odds nuda, 1 = peso proporzionale al residuo della fascia. A pool intatto il risultato è identico a shop_odds in entrambi i casi.",
+    "scarcity_exponent": 1.0
   },
 
   "star_scaling": {
@@ -81,9 +83,9 @@
   },
 
   "damage_to_player": {
-    "_comment": "Danno alla vita del giocatore che perde: base per stage + 1 per ogni unità nemica sopravvissuta, pesata per stella.",
+    "_comment": "Danno alla vita del giocatore che perde: base per stage + un contributo per ogni unità nemica sopravvissuta, pesato per stella (indice 0 = 1★, fino a max_star = 4).",
     "stage_base": [1, 1, 1, 2, 3, 4, 6, 8],
-    "per_surviving_unit": [1, 1, 1]
+    "per_surviving_unit": [1, 2, 3, 4]
   },
 
   "rounds": {

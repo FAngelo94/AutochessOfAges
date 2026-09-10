@@ -21,6 +21,7 @@ parallelo, stesso identico report in ~1/4-1/5 del tempo). JSON grezzo in
 | Durata partita | `starting_hp` 20→55, `damage_to_player.stage_base` e `per_surviving_unit` ammorbiditi su tutti gli stage |
 | Livellamento | `xp_per_round` 2→4 |
 | Negozio | `shop_odds` livelli 7-9 spostati verso il costo 5; `pool.copies_per_cost.5` 10→14 |
+| Negozio (pool) | Peso della fascia di costo moltiplicato per le copie che le restano (`UnitPool.band_weights`, `pool.scarcity_exponent` 1.0). A pool intatto le probabilità restano quelle di `shop_odds`; a pool eroso le fasce prosciugate cedono peso alle altre. Su 150 partite bot: quota di round schierati per costo 1 dal 63,8% al 53,3%, redistribuita su costo 2 (24,9→31,3%), 3 (11,0→14,6%) e 4 (0,3→0,8%); durata (18,8→19,1 round) e livello finale medio (5,34→5,36) invariati. Sparisce anche la casella vuota quando il costo 1 è esaurito. |
 | Sinergie | `legionary@2` attenuata (hp_percent 0.18→0.12), `legionary@4` attenuata (0.40→0.28); `gaul@2` rinforzata con bonus flat non condizionato alla morte di alleati |
 | Unità | Balistari ribuffato (danno/velocità/resistenze); Pretoriano nerfato due volte; Arminio e Solduros nerfati dopo l'apertura del costo 5 |
 | IA bot | `core/bot_brain.gd`: i bot ora **vendono** la panchina più debole quando serve fare spazio a un acquisto voluto o per finanziare l'ultimo salto di livello |

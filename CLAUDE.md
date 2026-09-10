@@ -308,6 +308,15 @@ the local ones. Guest or offline, it shows the local ones and no error.
 All tunable constants live in `data/balance.json` — economy, interest, XP curve, shop odds per
 level, pool size, star scaling, damage to player health. No magic numbers in code.
 
+`shop_odds` is not the final word on what the shop offers: `UnitPool.band_weights()` multiplies
+each cost band by how many copies that band has left (`remaining / initial ^
+pool.scarcity_exponent`), so a band the eight players have drained becomes rarer and its weight
+spreads over the others. With a full pool the weights equal the table exactly — that invariant is
+what keeps the table readable — and `pool.scarcity_exponent: 0.0` restores the nominal
+distribution without touching code. A band at zero weighs zero whatever the exponent, which is
+what removed the old downward fallback: drawing cost 1 when cost 1 was exhausted had no cheaper
+band to fall back on and left the shop slot empty.
+
 ### Monetization — Crowdfunding Store
 
 The store sells nothing: it collects **donations** toward a €1000 goal. Every civilization is

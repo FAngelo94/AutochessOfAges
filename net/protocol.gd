@@ -8,7 +8,7 @@ extends RefCounted
 ## 4.7 e var_to_bytes preserva Vector2i nativamente (serve all'event log del
 ## combattimento). decode() non decodifica mai oggetti: accetta solo dati puri.
 
-const PROTOCOL_VERSION := 6
+const PROTOCOL_VERSION := 7
 const MAX_PACKET_BYTES := 262144        # 256 KiB: pacchetti piu' grandi -> scartati
 
 ## Chiave del tipo di messaggio.
@@ -75,7 +75,7 @@ const SPECTATE_REQUEST := "SPECTATE_REQUEST" # {player_index}
 const SURRENDER := "SURRENDER"          # {}
 
 # --- Worker -> Client -------------------------------------------------------
-const MATCH_STATE := "MATCH_STATE"          # MatchState.to_dict(for_index)
+const MATCH_STATE := "MATCH_STATE"          # {state: MatchState.to_dict(for_index), for_index, next_opponent_index?}
 const ROUND_STARTED := "ROUND_STARTED"      # {stage, round_index, prep_seconds}
 const COMBAT := "COMBAT"                    # {combat, team, opponent_hero_id}
 const ROUND_CONCLUDED := "ROUND_CONCLUDED"  # {results[]}

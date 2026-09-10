@@ -262,7 +262,8 @@ func _update_unit(unit: CombatUnit) -> void:
 			_kill(unit)
 			return
 
-	var target := _acquire_target(unit)
+	var flood := _path_flood(unit.cell)
+	var target := _acquire_target(unit, flood)
 	if target == null:
 		unit.state = CombatUnit.State.IDLE
 		return
@@ -275,7 +276,7 @@ func _update_unit(unit: CombatUnit) -> void:
 	else:
 		unit.state = CombatUnit.State.MOVING
 		if unit.move_cooldown <= 0.0:
-			if _step_towards(unit, target):
+			if _step_towards(unit, target, flood):
 				unit.move_cooldown = unit.move_interval(time)
 
 
@@ -323,13 +324,77 @@ func _distance(a: Vector2i, b: Vector2i) -> int:
 	return Hex.distance(a, b)
 
 
-func _acquire_target(unit: CombatUnit) -> CombatUnit:
+## Costo irraggiungibile: piu' grande di qualunque percorso possibile nell'arena.
+const PATH_UNREACHABLE := 1 << 30
+
+
+## Ricerca in ampiezza sulle celle libere a partire da `start` (sempre libera:
+## e' la cella dell'unita' stessa). Stessi vincoli di `_step_towards`: ordine dei
+## vicini fissato da Hex, si saltano le celle occupate, si resta nell'arena.
+## Restituisce le distanze per cella, i predecessori e l'ordine di visita — che
+## `_step_towards` riusa per scegliere il primo passo senza rifare la BFS.
+func _path_flood(start: Vector2i) -> Dictionary:
+	var dist := {start: 0}
+	var came_from := {start: start}
+	var order: Array[Vector2i] = [start]
+	var queue: Array[Vector2i] = [start]
+	var head := 0
+	while head < queue.size():
+		var current: Vector2i = queue[head]
+		head += 1
+		for neighbour in _neighbours(current):
+			if came_from.has(neighbour):
+				continue
+			if _occupancy.has(neighbour):
+				continue
+			came_from[neighbour] = current
+			dist[neighbour] = int(dist[current]) + 1
+			order.append(neighbour)
+			queue.append(neighbour)
+	return {"dist": dist, "came_from": came_from, "order": order}
+
+
+## Numero di passi che l'unita' deve fare per portare `enemy` a tiro, dato un
+## flood gia' calcolato dalla sua cella. 0 se e' gia' a portata,
+## `PATH_UNREACHABLE` se il nemico e' murato da ogni lato utile.
+func _path_cost_to_attack(flood: Dictionary, unit: CombatUnit, enemy: CombatUnit) -> int:
+	if enemy == null or not enemy.is_alive():
+		return PATH_UNREACHABLE
+	var attack_range := unit.effective_range(time)
+	var dist: Dictionary = flood["dist"]
+	# `order` e' in distanza non decrescente: la prima cella a portata e' anche
+	# quella piu' vicina, e la stessa che sceglierebbe `_step_towards`.
+	for cell in flood["order"]:
+		if _distance(cell, enemy.cell) <= attack_range:
+			return int(dist[cell])
+	return PATH_UNREACHABLE
+
+
+## Bersaglio ri-valutato a ogni tick per distanza di PERCORSO, non in linea
+## d'aria: un nemico dietro la propria linea di alleati non viene inseguito con
+## un giro lungo se ce n'e' uno raggiungibile prima. Isteresi: il bersaglio
+## corrente si abbandona solo per uno STRETTAMENTE piu' vicino, cosi' l'unita'
+## non oscilla fra due nemici equidistanti. A parita' resta il corrente; se sono
+## tutti irraggiungibili si ripiega sul piu' vicino in linea d'aria, come prima,
+## per continuare comunque ad avanzare.
+func _acquire_target(unit: CombatUnit, flood: Dictionary) -> CombatUnit:
 	var current: CombatUnit = _by_uid.get(unit.target_uid)
+	var best: CombatUnit = null
+	var best_cost := PATH_UNREACHABLE
 	if current != null and current.is_alive():
-		return current
-	var nearest := _find_nearest_enemy(unit)
-	unit.target_uid = nearest.uid if nearest != null else -1
-	return nearest
+		best = current
+		best_cost = _path_cost_to_attack(flood, unit, current)
+	for enemy in units:
+		if enemy == current or enemy.team == unit.team or not enemy.is_alive():
+			continue
+		var cost := _path_cost_to_attack(flood, unit, enemy)
+		if cost < best_cost:
+			best = enemy
+			best_cost = cost
+	if best == null or best_cost >= PATH_UNREACHABLE:
+		best = _find_nearest_enemy(unit)
+	unit.target_uid = best.uid if best != null else -1
+	return best
 
 
 ## Nemico più vicino. A parità di distanza vince l'uid più basso: qualunque
@@ -347,34 +412,21 @@ func _find_nearest_enemy(unit: CombatUnit) -> CombatUnit:
 	return best
 
 
-## Un passo verso il bersaglio, aggirando le unità con una ricerca in ampiezza
-## sulle celle libere. Restituisce false se non esiste un percorso.
-func _step_towards(unit: CombatUnit, target: CombatUnit) -> bool:
+## Un passo verso il bersaglio, aggirando le unità: legge il `flood` già
+## calcolato in `_update_unit` invece di rifare la ricerca in ampiezza.
+## Restituisce false se non esiste un percorso.
+func _step_towards(unit: CombatUnit, target: CombatUnit, flood: Dictionary) -> bool:
 	var attack_range := unit.effective_range(time)
 	var start := unit.cell
+	var came_from: Dictionary = flood["came_from"]
 
-	var came_from := {start: start}
-	var queue: Array[Vector2i] = [start]
-	var head := 0
-
-	while head < queue.size():
-		var current: Vector2i = queue[head]
-		head += 1
-
-		if current != start and _distance(current, target.cell) <= attack_range:
+	for cell in flood["order"]:
+		if cell != start and _distance(cell, target.cell) <= attack_range:
 			# Risale il percorso fino al primo passo da compiere.
-			var step := current
+			var step: Vector2i = cell
 			while came_from[step] != start:
 				step = came_from[step]
 			return _move_unit(unit, step)
-
-		for neighbour in _neighbours(current):
-			if came_from.has(neighbour):
-				continue
-			if _occupancy.has(neighbour):
-				continue
-			came_from[neighbour] = current
-			queue.append(neighbour)
 
 	return false
 

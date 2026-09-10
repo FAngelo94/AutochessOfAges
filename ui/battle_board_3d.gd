@@ -29,9 +29,18 @@ const CAMERA_MARGIN := 0.9
 const OWN_COLOR := Color(0.40, 0.80, 0.45)
 const ENEMY_COLOR := Color(0.92, 0.42, 0.38)
 
-const TILE_OWN := Color(0.16, 0.19, 0.24)
-const TILE_ENEMY := Color(0.22, 0.16, 0.17)
-const TILE_EDGE := Color(0.30, 0.32, 0.38)
+# Tinte delle caselle: un vetro colorato, non una superficie piena. La
+# trasparenza vera è nell'alpha (vedi _tile_material / TILE_ALPHA), qui c'è solo
+# la tinta — fredda per la propria metà, calda per quella avversaria — abbastanza
+# viva da leggersi anche lasciando intravedere l'arena sotto.
+const TILE_OWN := Color(0.34, 0.52, 0.72)
+const TILE_ENEMY := Color(0.72, 0.34, 0.34)
+const TILE_EDGE := Color(0.60, 0.66, 0.82)
+
+## Opacità delle caselle di vetro (0 = invisibili, 1 = piene). La linea di
+## mezzeria è un filo più densa per restare leggibile.
+const TILE_ALPHA := 0.5
+const DIVIDER_ALPHA := 0.72
 
 var columns: int = 7
 var rows: int = 8
@@ -175,7 +184,7 @@ func _build_tiles() -> void:
 			var own_half := (y < rows / 2) if flip else (y >= rows / 2)
 			var tile := MeshInstance3D.new()
 			tile.mesh = tile_mesh
-			tile.material_override = _tile_material(TILE_OWN if own_half else TILE_ENEMY)
+			tile.material_override = _tile_material(TILE_OWN if own_half else TILE_ENEMY, TILE_ALPHA)
 			tile.position = cell_to_world(Vector2(x, y)) - Vector3(0, TILE_HEIGHT * 0.5, 0)
 			tile.rotation_degrees = Vector3(0, 0, 0)
 			_tiles.add_child(tile)
@@ -185,15 +194,30 @@ func _build_tiles() -> void:
 	var divider_mesh := BoxMesh.new()
 	divider_mesh.size = Vector3((float(columns) + 0.5) * CELL, TILE_HEIGHT * 0.6, 0.05)
 	divider.mesh = divider_mesh
-	divider.material_override = _tile_material(TILE_EDGE)
+	divider.material_override = _tile_material(TILE_EDGE, DIVIDER_ALPHA)
 	divider.position = Vector3(0, -TILE_HEIGHT * 0.2, 0)
 	_tiles.add_child(divider)
 
 
-func _tile_material(color: Color) -> StandardMaterial3D:
+## Vetro colorato: alpha per lasciar passare l'arena, superficie lucida
+## (roughness bassa + specular) perché prenda un riflesso e si legga come una
+## lastra e non come una macchia piatta. Un filo di emissione la tiene visibile
+## anche sopra le zone scure dello sfondo.
+func _tile_material(color: Color, alpha: float) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.95
+	material.albedo_color = Color(color.r, color.g, color.b, alpha)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.metallic = 0.0
+	material.roughness = 0.16
+	material.metallic_specular = 0.75
+	# Bordo acceso: da vista dall'alto lo specular della lastra sfugge alla
+	# camera, il rim ne ridisegna il contorno e tiene l'esagono riconoscibile.
+	material.rim_enabled = true
+	material.rim = 0.9
+	material.rim_tint = 0.2
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 0.12
 	return material
 
 
@@ -210,11 +234,18 @@ func _tile_material(color: Color) -> StandardMaterial3D:
 ## quali righe sono sfalsate: due celle adiacenti per il risolutore
 ## finirebbero disegnate come non adiacenti. Una riflessione, invece, conserva
 ## tutte le distanze.
+##
+## Gli assi si ribaltano uno per volta perché il risolutore ha già specchiato
+## la squadra 1 su ENTRAMBI (`CombatSim.board_cell_to_arena`): chi guarda da
+## quel lato deve quindi vedere il campo ruotato di 180°, non riflesso in
+## profondità. Con la sola `z` negata la formazione dello spettatore 1
+## comparirebbe rovesciata sinistra/destra rispetto a come l'ha disposta in
+## preparazione.
 func cell_to_world(cell: Vector2) -> Vector3:
 	var plane := Hex.to_plane(cell)
 	var x := (plane.x - _centre_offset().x) * CELL
 	var z := (plane.y - _centre_offset().y) * CELL
-	return Vector3(x, 0.0, -z if flip else z)
+	return Vector3(x if flip else -x, 0.0, -z if flip else z)
 
 
 ## Centro geometrico del campo, in unità di cella: le righe dispari sporgono di

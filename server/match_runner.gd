@@ -430,7 +430,15 @@ func _on_rank_update(update: Dictionary) -> void:
 
 func _match_state_msg(for_index: int) -> Dictionary:
 	# Invariante 3: mai lo stato privato altrui — sempre to_dict(for_index).
-	return Protocol.make(Protocol.MATCH_STATE, {"state": _state.to_dict(for_index), "for_index": for_index})
+	var fields := {"state": _state.to_dict(for_index), "for_index": for_index}
+	# In preparazione, chi si affronterà a fine round: anteprima pura sugli
+	# accoppiamenti (non tocca l'RNG del match), così il client la può mostrare
+	# nella classifica senza accoppiare per conto suo — cosa che non fa mai.
+	if _phase == Phase.PREPARATION:
+		var next_idx := int(_state.upcoming_opponent(for_index).get("index", -1))
+		if next_idx >= 0:
+			fields["next_opponent_index"] = next_idx
+	return Protocol.make(Protocol.MATCH_STATE, fields)
 
 
 func _broadcast_state() -> void:

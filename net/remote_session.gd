@@ -70,6 +70,11 @@ var _last_public_results: Array = []
 ## Tempo di preparazione rimasto, scalato localmente per il countdown.
 var prep_seconds_left: float = 0.0
 
+## Prossimo avversario comunicato dal server nell'ultimo MATCH_STATE, o -1: il
+## client non accoppia, quindi questo dato può arrivare solo da fuori. Lo
+## snapshot di fine combattimento non porta il campo e lo riazzera da sé.
+var _next_opponent_index: int = -1
+
 var _poller = null   # _Poller (untyped: it carries a `session` member Node lacks)
 
 
@@ -169,6 +174,10 @@ func state() -> MatchState:
 
 func local_index() -> int:
 	return _local_index
+
+
+func next_opponent_index() -> int:
+	return _next_opponent_index
 
 
 func request_buy(slot: int) -> void:
@@ -372,6 +381,7 @@ func _handle_worker(msg: Dictionary) -> void:
 			if not st.is_empty():
 				_state.apply_dict(st)
 				_fix_local_seat()
+			_next_opponent_index = int(msg.get("next_opponent_index", -1))
 			state_changed.emit()
 		Protocol.ROUND_STARTED:
 			_state.stage = int(msg.get("stage", _state.stage))

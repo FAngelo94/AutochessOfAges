@@ -187,6 +187,13 @@ static func shop_odds(level: int) -> Array:
 	return odds.get(key, [1.0, 0.0, 0.0, 0.0, 0.0])
 
 
+## Quanto il residuo di una fascia di costo pesa sulla probabilità di pescarla.
+## Zero a chiave mancante: un balance.json incompleto deve comportarsi come
+## prima, non spostare il bilanciamento di nascosto.
+static func pool_scarcity_exponent() -> float:
+	return float(balance()["pool"].get("scarcity_exponent", 0.0))
+
+
 static func tutorial() -> Dictionary:
 	ensure_loaded()
 	return _tutorial

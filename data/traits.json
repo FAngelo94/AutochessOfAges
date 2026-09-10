@@ -3,6 +3,7 @@
   "origins": {
     "roman": {
       "name": "Romani",
+      "symbol": "🦅",
       "description": "La formazione compatta trasforma la fanteria in un muro. Ogni soglia irrobustisce l'intera squadra, non solo i Romani.",
       "tiers": [
         {
@@ -58,6 +59,7 @@
     },
     "gaul": {
       "name": "Galli",
+      "symbol": "🐓",
       "description": "Combattono meglio quando la battaglia va male: ogni alleato caduto fa salire la furia dei Galli sopravvissuti.",
       "tiers": [
         {
@@ -113,6 +115,7 @@
     },
     "teuton": {
       "name": "Teutonici",
+      "symbol": "🛡️",
       "description": "Entrano in campo già protetti da uno scudo che assorbe i primi colpi.",
       "tiers": [
         {
@@ -162,6 +165,7 @@
   "classes": {
     "legionary": {
       "name": "Legionario",
+      "symbol": "🧱",
       "description": "Prima linea. Più legionari schierati, più a lungo regge il fronte.",
       "tiers": [
         {
@@ -194,6 +198,7 @@
     },
     "archer": {
       "name": "Arciere",
+      "symbol": "🏹",
       "description": "Danno dalla distanza: colpi critici e gittata aumentata.",
       "tiers": [
         {
@@ -230,6 +235,7 @@
     },
     "cavalry": {
       "name": "Cavalleria",
+      "symbol": "🐎",
       "description": "Carica iniziale: parte più avanti e con un colpo d'apertura potenziato.",
       "tiers": [
         {
@@ -262,6 +268,7 @@
     },
     "druid": {
       "name": "Druido",
+      "symbol": "🌿",
       "description": "Supporto: rigenerazione costante per gli alleati feriti.",
       "tiers": [
         {
@@ -294,6 +301,7 @@
     },
     "berserker": {
       "name": "Berserker",
+      "symbol": "🪓",
       "description": "Gli attacchi colpiscono anche i nemici adiacenti al bersaglio.",
       "tiers": [
         {
@@ -326,6 +334,7 @@
     },
     "siege": {
       "name": "Assedio",
+      "symbol": "🪨",
       "description": "Macchine da guerra: danno proporzionale alla salute massima del bersaglio.",
       "tiers": [
         {

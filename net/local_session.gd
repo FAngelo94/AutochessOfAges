@@ -41,6 +41,12 @@ func local_index() -> int:
 	return _state.human_player().index
 
 
+func next_opponent_index() -> int:
+	if _state == null or _state.phase != MatchState.Phase.PREPARATION:
+		return -1
+	return int(_state.upcoming_opponent(_state.human_player().index).get("index", -1))
+
+
 func request_buy(slot: int) -> void:
 	_human().buy(slot)
 	state_changed.emit()

@@ -73,6 +73,7 @@ static func summary(board_units: Array[UnitInstance]) -> Array[Dictionary]:
 		rows.append({
 			"id": trait_id,
 			"name": def.get("name", trait_id),
+			"symbol": def.get("symbol", def.get("name", trait_id)),
 			"is_origin": GameData.is_origin(trait_id),
 			"count": count,
 			"active": not tier.is_empty(),

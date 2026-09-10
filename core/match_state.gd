@@ -251,6 +251,38 @@ func _remember(who: int, opponent: int) -> void:
 	_recent_opponents[who] = history
 
 
+## Anteprima degli accoppiamenti del round CORRENTE senza spostare la partita di
+## un bit: opera su una copia dello stato dell'RNG e della cronologia avversari e
+## li ripristina prima di restituire. Serve alla UI in preparazione per dire chi
+## si affronterà; quando resolve_round() chiamerà build_matchups() sul serio
+## troverà RNG e cronologia identici e produrrà esattamente lo stesso risultato.
+func preview_matchups() -> Array[Dictionary]:
+	var saved_rng := _rng.get_state()
+	var saved_recent: Dictionary = _recent_opponents.duplicate(true)
+	var result := build_matchups()
+	_rng.set_state(saved_rng)
+	_recent_opponents = saved_recent
+	return result
+
+
+## L'avversario che `player_index` incontrerà alla risoluzione di questo round,
+## come {index, ghost}. {} se quel posto non combatte: eliminato, oppure spaiato
+## senza un fantasma disponibile. Anteprima pura — vedi preview_matchups().
+func upcoming_opponent(player_index: int) -> Dictionary:
+	for m in preview_matchups():
+		var a: Player = m["a"]
+		var b: Player = m["b"]
+		if a != null and a.index == player_index:
+			if b == null:
+				return {}
+			return {"index": b.index, "ghost": bool(m["ghost"])}
+		# Il lato `b` di un matchup fantasma non "affronta" lo spaiato: ha il
+		# proprio scontro (se vivo) o è eliminato — non gli si annuncia nulla.
+		if not bool(m["ghost"]) and b != null and b.index == player_index:
+			return {"index": a.index, "ghost": false}
+	return {}
+
+
 ## Risolve il round: combattimenti, danni, eliminazioni, reddito.
 ## Restituisce un risultato per giocatore, che la UI può mostrare o riprodurre.
 func resolve_round() -> Array[Dictionary]:
