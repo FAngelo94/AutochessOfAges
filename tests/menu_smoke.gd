@@ -282,18 +282,28 @@ func _check_store_panel(menu: Control) -> void:
 				tutti_bloccati = false
 		check(tutti_bloccati, "senza account non si puo' donare")
 
-	# L'esito di un tributo deve SOPRAVVIVERE al refresh che lo segue.
-	# Prima non succedeva: _on_donation_completed scriveva il messaggio e poi
-	# _refresh() lo sovrascriveva con quello generico nello stesso frame, dando
-	# l'impressione che premere il pulsante non facesse niente.
+	# L'esito di un tributo passa da una MODALE, non dalla riga di stato: quella
+	# riga descrive la schermata, e un messaggio che va e viene la renderebbe
+	# illeggibile proprio mentre serve. In piu' un esito scritto li' spariva al
+	# primo refresh, e premere il pulsante sembrava non fare niente.
+	var stato_prima := panel._status.text
 	panel._on_donation_completed(499, true, "")
-	check(panel._status.text.contains("Grazie"),
-		"il ringraziamento resta visibile dopo l'esito", panel._status.text)
+	check(_modale_con(panel, "Grazie"), "il ringraziamento appare in una modale")
+	check(panel._status.text == stato_prima,
+		"la riga di stato non viene toccata dall'esito", panel._status.text)
+	_chiudi_modali(panel)
+
+	# Un annullamento e' un gesto deliberato: nessuna modale da smaltire.
 	panel._on_donation_completed(499, false, "cancelled")
-	check(panel._status.text.contains("annullat"),
-		"anche l'annullamento resta visibile", panel._status.text)
-	# Riportare il pannello allo stato neutro per le verifiche successive.
-	panel._refresh()
+	check(not _modale_con(panel, "Grazie") and not _modale_con(panel, "tributo non"),
+		"annullare non apre nessuna modale")
+
+	# Un fallimento vero invece va fermato davanti agli occhi, e la prima cosa
+	# da dire e' che non e' stato addebitato niente.
+	panel._on_donation_completed(499, false, "network error")
+	check(_modale_con(panel, "addebitato"),
+		"il fallimento avvisa che non e' stato addebitato nulla")
+	_chiudi_modali(panel)
 
 	# La modalita' 'shared' non deve mai togliere civilta' dalla partita.
 	check(store.playable_origins().size() == GameData.origin_ids().size(),
@@ -325,3 +335,23 @@ func check(condition: bool, label: String, detail: String = "") -> void:
 	else:
 		_failed += 1
 		printerr("  FAIL %s%s" % [label, ("  -> " + detail) if detail != "" else ""])
+
+
+## Le modali sono CanvasLayer figli del pannello: si cercano fra i figli invece
+## di tenerne un riferimento, cosi' il test non dipende da come il pannello le
+## conserva.
+## Le modali congedate restano figlie fino a fine frame (queue_free è differito),
+## quindi vanno scartate: altrimenti il test le conta come ancora aperte.
+func _modale_con(panel: Control, frammento: String) -> bool:
+	for figlio in panel.get_children():
+		if figlio is ModalDialog and not figlio.is_queued_for_deletion() and (
+				figlio._title_text.contains(frammento)
+				or figlio._message_text.contains(frammento)):
+			return true
+	return false
+
+
+func _chiudi_modali(panel: Control) -> void:
+	for figlio in panel.get_children():
+		if figlio is ModalDialog:
+			(figlio as ModalDialog).dismiss()

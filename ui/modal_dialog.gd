@@ -201,6 +201,19 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		_on_cancel()
 
 
+## Chiusura senza risposta, decisa dal codice e non dall'utente.
+##
+## Serve alle modali che descrivono un'attesa ("pagamento in corso") e devono
+## sparire quando l'attesa finisce. NON emette `confirmed` né `cancelled`:
+## nessuno ha premuto niente, e chi ascolta quei segnali si aspetta una scelta
+## dell'utente, non un cambio di stato.
+func dismiss() -> void:
+	if _answered:
+		return
+	_answered = true
+	queue_free()
+
+
 func _on_confirm() -> void:
 	_close(true)
 

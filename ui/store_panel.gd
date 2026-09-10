@@ -36,6 +36,9 @@ var _quick: Dictionary = {}
 
 var _total_cents := 0
 var _total_known := false
+## Modale d'attesa aperta mentre il pagamento e' in corso, da congedare quando
+## l'esito arriva.
+var _pending: ModalDialog = null
 
 ## L'autoload si recupera dall'albero anziché usare il nome globale "Store":
 ## quando gli script vengono compilati da riga di comando (test headless) gli
@@ -69,7 +72,7 @@ func _build() -> void:
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 22)
 	margin.add_theme_constant_override("margin_right", 22)
-	margin.add_theme_constant_override("margin_top", 38)
+	margin.add_theme_constant_override("margin_top", _safe_top_margin())
 	margin.add_theme_constant_override("margin_bottom", 18)
 	add_child(margin)
 
@@ -114,6 +117,28 @@ func _build() -> void:
 		visible = false
 		closed.emit())
 	column.add_child(close)
+
+
+## Margine superiore che tiene conto del ritaglio della fotocamera frontale.
+##
+## Su molti telefoni la fotocamera sta in alto al centro e si mangia i primi
+## ~100 px: con un margine fisso il titolo ci finisce sotto. Il sistema sa dove
+## comincia l'area sicura, quindi la si chiede a lui invece di indovinare un
+## numero che andrebbe bene su un solo modello.
+##
+## La conversione non e' un dettaglio: l'area sicura e' in pixel di SCHERMO,
+## mentre il progetto disegna in unita' di una viewport larga 720
+## (stretch canvas_items). Usare i pixel cosi' come arrivano darebbe un margine
+## enorme su un telefono ad alta densita'.
+func _safe_top_margin() -> int:
+	const BASE := 38
+	var screen := DisplayServer.screen_get_size()
+	if screen.x <= 0:
+		return BASE   # headless o schermo non interrogabile
+	var safe := DisplayServer.get_display_safe_area()
+	var ui_width := float(ProjectSettings.get_setting("display/window/size/viewport_width", 720))
+	var inset := int(safe.position.y * (ui_width / float(screen.x)))
+	return maxi(BASE, inset + 12)
 
 
 ## I tagli, tre per riga. L'importo È il pulsante: donare è un gesto singolo e
@@ -217,26 +242,33 @@ func _is_logged_in() -> bool:
 func _donate(amount_cents: int) -> void:
 	if not _can_donate() or amount_cents <= 0:
 		return
-	_status.text = "Tributo di %s in corso…" % _euro(amount_cents)
+	# L'attesa e l'esito stanno in una modale, non nella riga di stato: quella
+	# riga dice cos'è questa schermata, e un messaggio che va e viene la
+	# renderebbe illeggibile proprio mentre serve.
+	_pending = ModalDialog.notice(self, "Tributo in corso",
+		"Stiamo aprendo il pagamento di %s." % _euro(amount_cents))
 	_store.donate(amount_cents)
 
 
-## `keep_status` conserva il messaggio di esito di un tributo appena concluso.
-##
-## Senza, l'esito durava una frazione di secondo: _on_donation_completed
-## scriveva "Grazie, benefattore!" e poi chiamava _refresh(), che rimetteva
-## subito il messaggio generico. Il fallimento sembrava funzionare solo perche'
-## ha anche una modale, che resta; il successo spariva prima di essere letto, e
-## dava l'impressione che premere il pulsante non facesse niente.
-func _refresh(keep_status := false) -> void:
+## Chiude la modale d'attesa, se c'è ancora: l'utente può averla già congedata
+## a mano, e in quel caso è già stata liberata.
+func _dismiss_pending() -> void:
+	if _pending != null and is_instance_valid(_pending):
+		_pending.dismiss()
+	_pending = null
+
+
+## La riga di stato descrive la SCHERMATA, non l'ultimo evento: dice cos'e'
+## questo posto e perche' i pulsanti sono o non sono premibili. Gli esiti dei
+## pagamenti passano dalle modali, che restano finche' non le si congeda.
+func _refresh() -> void:
 	var available: bool = _store.backend.is_available() or _store.backend is MockStore
-	if not keep_status:
-		if not available:
-			_status.text = "Pagamenti non disponibili su questa piattaforma. Tutti i contenuti di gioco restano accessibili."
-		elif not _is_logged_in():
-			_status.text = "Accedi con un account per lasciare un tributo: serve ad attribuirtelo."
-		else:
-			_status.text = "Ogni tributo sostiene lo sviluppo del gioco."
+	if not available:
+		_status.text = "Pagamenti non disponibili su questa piattaforma. Tutti i contenuti di gioco restano accessibili."
+	elif not _is_logged_in():
+		_status.text = "Accedi con un account per lasciare un tributo: serve ad attribuirtelo."
+	else:
+		_status.text = "Ogni tributo sostiene lo sviluppo del gioco."
 
 	for amount in _quick:
 		var button: Button = _quick[amount]
@@ -288,35 +320,35 @@ func _request_total() -> void:
 
 
 func _on_donation_completed(amount_cents: int, success: bool, reason: String) -> void:
+	_dismiss_pending()
 	if success:
-		_status.text = "Grazie, benefattore! Il tuo tributo di %s è stato accolto." % _euro(amount_cents)
+		ModalDialog.notice(self, "Grazie, benefattore!",
+			"Il tuo tributo di %s è stato accolto." % _euro(amount_cents))
 		# La riga la scrive il webhook di RevenueCat, che arriva in pochi
 		# secondi: il totale si richiede subito e poi ancora una volta, invece
 		# di inventare uno stato "in attesa" da riconciliare.
 		_request_total()
 		get_tree().create_timer(3.0).timeout.connect(_request_total)
 	elif reason == "cancelled":
-		# L'utente ha cambiato idea: non è un errore e non va presentato come tale.
-		_status.text = "Tributo annullato."
+		# Chi annulla sa di averlo fatto: una modale che glielo ripete e' solo
+		# un tocco in piu' da smaltire.
+		pass
 	else:
-		var detail := reason if reason != "" else "errore sconosciuto"
-		# Il motivo grezzo dell'SDK resta QUI e non nella modale: e' in inglese,
-		# in gergo, e a chi ha appena visto fallire un pagamento non dice niente.
-		# Nella riga di stato serve a chi sviluppa; nella modale sarebbe rumore.
-		_status.text = "Tributo non riuscito: %s" % detail
-		# Un fallimento vero (non un ripensamento) ferma l'utente: la riga di
-		# stato da sola passa inosservata, e chi resta col dubbio di essere
-		# stato addebitato riprova.
+		# Il motivo grezzo dell'SDK non entra nella modale: e' in inglese, in
+		# gergo, e a chi ha appena visto fallire un pagamento non dice niente.
+		# Resta nel log, dove serve a chi sviluppa.
+		push_warning("StorePanel: tributo non riuscito (%s)"
+			% (reason if reason != "" else "errore sconosciuto"))
+		# Un fallimento vero (non un ripensamento) va fermato davanti agli occhi:
+		# chi resta col dubbio di essere stato addebitato riprova.
 		#
 		# L'ambientazione si ferma al titolo: la frase sull'addebito e' in
-		# italiano piano, perche' e' la prima domanda di chi vede fallire un
-		# pagamento e non deve costargli un secondo di interpretazione.
+		# italiano piano e sta per prima, perche' e' la prima domanda di chi vede
+		# fallire un pagamento e non deve costargli un secondo di interpretazione.
 		ModalDialog.notice(self, "Il tributo non è giunto a destinazione",
 			"Non ti è stato addebitato nulla.\n\n"
 			+ "Il pagamento non è andato a buon fine. Puoi riprovare quando vuoi.")
-	# keep_status: l'esito appena scritto non va sovrascritto dal messaggio
-	# generico, o sparisce prima che qualcuno riesca a leggerlo.
-	_refresh(true)
+	_refresh()
 
 
 static func _euro(cents: int) -> String:
