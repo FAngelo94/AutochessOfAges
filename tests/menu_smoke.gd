@@ -282,6 +282,19 @@ func _check_store_panel(menu: Control) -> void:
 				tutti_bloccati = false
 		check(tutti_bloccati, "senza account non si puo' donare")
 
+	# L'esito di un tributo deve SOPRAVVIVERE al refresh che lo segue.
+	# Prima non succedeva: _on_donation_completed scriveva il messaggio e poi
+	# _refresh() lo sovrascriveva con quello generico nello stesso frame, dando
+	# l'impressione che premere il pulsante non facesse niente.
+	panel._on_donation_completed(499, true, "")
+	check(panel._status.text.contains("Grazie"),
+		"il ringraziamento resta visibile dopo l'esito", panel._status.text)
+	panel._on_donation_completed(499, false, "cancelled")
+	check(panel._status.text.contains("annullat"),
+		"anche l'annullamento resta visibile", panel._status.text)
+	# Riportare il pannello allo stato neutro per le verifiche successive.
+	panel._refresh()
+
 	# La modalita' 'shared' non deve mai togliere civilta' dalla partita.
 	check(store.playable_origins().size() == GameData.origin_ids().size(),
 		"in modalita' condivisa tutte le civilta' restano giocabili")

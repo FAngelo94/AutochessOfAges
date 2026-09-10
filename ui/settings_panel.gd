@@ -68,6 +68,8 @@ func _build() -> void:
 	if auth != null and auth.game_host() != "":
 		column.add_child(_privacy_link(auth.game_host()))
 
+	column.add_child(_credits_button())
+
 	var grow := Control.new()
 	grow.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(grow)
@@ -248,6 +250,83 @@ func _guest_card(is_guest: bool) -> Control:
 		LoginScreen.force_prompt = true
 		get_tree().change_scene_to_file("res://ui/login.tscn"))
 	inner.add_child(login)
+
+	return card
+
+
+## Pulsante nella colonna delle impostazioni che apre la schermata "Crediti".
+func _credits_button() -> Control:
+	var button := Button.new()
+	button.text = "Crediti"
+	button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	button.add_theme_font_size_override("font_size", 22)
+	Style.apply_plate(button, Style.BLUE, Style.BLUE_DEEP, 14, 4)
+	button.pressed.connect(_show_credits)
+	return button
+
+
+## Elenco di chi ha collaborato al gioco. Overlay a tutto schermo sopra le
+## impostazioni, con lo stesso impianto (backdrop + colonna + Chiudi): si
+## rimuove alla chiusura e lascia le impostazioni invariate sotto.
+func _show_credits() -> void:
+	var overlay := Control.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(Style.backdrop(Style.SKY_TOP, Style.SKY_BOTTOM))
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 38)
+	margin.add_theme_constant_override("margin_bottom", 18)
+	overlay.add_child(margin)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 16)
+	margin.add_child(column)
+
+	var title := Label.new()
+	title.text = "CREDITI"
+	title.add_theme_font_size_override("font_size", 34)
+	title.add_theme_color_override("font_color", Style.GOLD)
+	column.add_child(title)
+
+	column.add_child(_person_card("Angelo Falci", "Sviluppatore e Game Designer"))
+
+	var grow := Control.new()
+	grow.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(grow)
+
+	var close := Button.new()
+	close.text = "Chiudi"
+	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	close.add_theme_font_size_override("font_size", 26)
+	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
+	close.pressed.connect(overlay.queue_free)
+	column.add_child(close)
+
+	add_child(overlay)
+
+
+func _person_card(name: String, role: String) -> Control:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 4)
+	card.add_child(inner)
+
+	var name_label := Label.new()
+	name_label.text = name
+	name_label.add_theme_font_size_override("font_size", 20)
+	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
+	inner.add_child(name_label)
+
+	var role_label := Label.new()
+	role_label.text = role
+	role_label.add_theme_font_size_override("font_size", 16)
+	role_label.add_theme_color_override("font_color", Style.TEXT_DIM)
+	inner.add_child(role_label)
 
 	return card
 

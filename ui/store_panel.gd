@@ -217,18 +217,26 @@ func _is_logged_in() -> bool:
 func _donate(amount_cents: int) -> void:
 	if not _can_donate() or amount_cents <= 0:
 		return
-	_status.text = "Supporto di %s in corso…" % _euro(amount_cents)
+	_status.text = "Tributo di %s in corso…" % _euro(amount_cents)
 	_store.donate(amount_cents)
 
 
-func _refresh() -> void:
+## `keep_status` conserva il messaggio di esito di un tributo appena concluso.
+##
+## Senza, l'esito durava una frazione di secondo: _on_donation_completed
+## scriveva "Grazie, benefattore!" e poi chiamava _refresh(), che rimetteva
+## subito il messaggio generico. Il fallimento sembrava funzionare solo perche'
+## ha anche una modale, che resta; il successo spariva prima di essere letto, e
+## dava l'impressione che premere il pulsante non facesse niente.
+func _refresh(keep_status := false) -> void:
 	var available: bool = _store.backend.is_available() or _store.backend is MockStore
-	if not available:
-		_status.text = "Pagamenti non disponibili su questa piattaforma. Tutti i contenuti di gioco restano accessibili."
-	elif not _is_logged_in():
-		_status.text = "Accedi con un account per supportare: serve ad attribuirti il supporto."
-	else:
-		_status.text = "Ogni supporto sostiene lo sviluppo del gioco."
+	if not keep_status:
+		if not available:
+			_status.text = "Pagamenti non disponibili su questa piattaforma. Tutti i contenuti di gioco restano accessibili."
+		elif not _is_logged_in():
+			_status.text = "Accedi con un account per lasciare un tributo: serve ad attribuirtelo."
+		else:
+			_status.text = "Ogni tributo sostiene lo sviluppo del gioco."
 
 	for amount in _quick:
 		var button: Button = _quick[amount]
@@ -281,7 +289,7 @@ func _request_total() -> void:
 
 func _on_donation_completed(amount_cents: int, success: bool, reason: String) -> void:
 	if success:
-		_status.text = "Grazie! Supporto di %s ricevuto." % _euro(amount_cents)
+		_status.text = "Grazie, benefattore! Il tuo tributo di %s è stato accolto." % _euro(amount_cents)
 		# La riga la scrive il webhook di RevenueCat, che arriva in pochi
 		# secondi: il totale si richiede subito e poi ancora una volta, invece
 		# di inventare uno stato "in attesa" da riconciliare.
@@ -289,17 +297,26 @@ func _on_donation_completed(amount_cents: int, success: bool, reason: String) ->
 		get_tree().create_timer(3.0).timeout.connect(_request_total)
 	elif reason == "cancelled":
 		# L'utente ha cambiato idea: non è un errore e non va presentato come tale.
-		_status.text = "Supporto annullato."
+		_status.text = "Tributo annullato."
 	else:
 		var detail := reason if reason != "" else "errore sconosciuto"
-		_status.text = "Supporto non riuscito: %s" % detail
+		# Il motivo grezzo dell'SDK resta QUI e non nella modale: e' in inglese,
+		# in gergo, e a chi ha appena visto fallire un pagamento non dice niente.
+		# Nella riga di stato serve a chi sviluppa; nella modale sarebbe rumore.
+		_status.text = "Tributo non riuscito: %s" % detail
 		# Un fallimento vero (non un ripensamento) ferma l'utente: la riga di
 		# stato da sola passa inosservata, e chi resta col dubbio di essere
 		# stato addebitato riprova.
-		ModalDialog.notice(self, "Supporto non riuscito",
-			"Non è stato possibile completare il supporto (%s).\n\n" % detail
-			+ "Non ti è stato addebitato nulla. Riprova più tardi.")
-	_refresh()
+		#
+		# L'ambientazione si ferma al titolo: la frase sull'addebito e' in
+		# italiano piano, perche' e' la prima domanda di chi vede fallire un
+		# pagamento e non deve costargli un secondo di interpretazione.
+		ModalDialog.notice(self, "Il tributo non è giunto a destinazione",
+			"Non ti è stato addebitato nulla.\n\n"
+			+ "Il pagamento non è andato a buon fine. Puoi riprovare quando vuoi.")
+	# keep_status: l'esito appena scritto non va sovrascritto dal messaggio
+	# generico, o sparisce prima che qualcuno riesca a leggerlo.
+	_refresh(true)
 
 
 static func _euro(cents: int) -> String:

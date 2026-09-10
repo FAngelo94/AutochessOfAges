@@ -43,6 +43,12 @@ func initialize(api_key: String, user_id: String) -> void:
 	_plugin = Engine.get_singleton(SINGLETON_NAME)
 	_build_product_map()
 
+	# I log dell'SDK vanno accesi PRIMA di configure(), o i messaggi
+	# dell'inizializzazione si perdono. Solo in debug: in produzione
+	# riempirebbero il logcat del giocatore con dettagli di pagamento.
+	if OS.is_debug_build():
+		_plugin.setVerboseLogs(true)
+
 	_connect_if_present("on_entitlements", _on_entitlements)
 	_connect_if_present("on_purchase", _on_purchase)
 	_connect_if_present("on_products", _on_products)
@@ -111,22 +117,26 @@ func restore_purchases() -> void:
 		_plugin.restorePurchases()
 
 
-## Un `.aar` più vecchio dei metodi che chiediamo non deve far cadere il gioco:
-## vale la stessa prudenza di _connect_if_present.
+## I metodi del plugin si chiamano DIRETTAMENTE, senza has_method().
+##
+## Non e' una svista: su un singleton Android has_method() risponde false anche
+## per metodi che esistono — i metodi @UsedByGodot sono registrati in un modo
+## che quella verifica non vede. Con la guardia, logIn() e logOut() venivano
+## saltati in silenzio e gli acquisti restavano legati al dispositivo: esattamente
+## il difetto che questo codice doveva risolvere, reintrodotto dalla prudenza.
+##
+## has_signal() invece funziona (i segnali sono dichiarati in getPluginSignals()),
+## ed e' il motivo per cui _connect_if_present puo' restare com'e'.
 func identify(user_id: String) -> void:
 	if _plugin == null or user_id.is_empty():
 		return
-	if _plugin.has_method("logIn"):
-		_plugin.logIn(user_id)
-	else:
-		push_warning("RevenueCatAndroid: il plugin non espone logIn(); gli acquisti restano legati al dispositivo")
+	_plugin.logIn(user_id)
 
 
 func sign_out() -> void:
 	if _plugin == null:
 		return
-	if _plugin.has_method("logOut"):
-		_plugin.logOut()
+	_plugin.logOut()
 
 
 func active_entitlements() -> PackedStringArray:

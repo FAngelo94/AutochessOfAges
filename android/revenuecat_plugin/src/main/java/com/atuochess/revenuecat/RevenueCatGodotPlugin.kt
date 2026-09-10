@@ -2,6 +2,7 @@ package com.atuochess.revenuecat
 
 import android.util.Log
 import com.revenuecat.purchases.CustomerInfo
+import com.revenuecat.purchases.LogLevel
 import com.revenuecat.purchases.PurchaseParams
 import com.revenuecat.purchases.Purchases
 import com.revenuecat.purchases.PurchasesConfiguration
@@ -117,6 +118,19 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
         )
     }
 
+    /**
+     * Accende i log dell'SDK. Da chiamare PRIMA di configure(), o i messaggi
+     * dell'inizializzazione si perdono.
+     *
+     * Non e' acceso di default: in produzione riempirebbe il logcat dell'utente
+     * con dettagli di pagamento. Lo attiva il lato Godot solo in debug.
+     */
+    @UsedByGodot
+    fun setVerboseLogs(enabled: Boolean) {
+        Purchases.logLevel = if (enabled) LogLevel.VERBOSE else LogLevel.WARN
+        Log.i(TAG, "log dell'SDK: ${Purchases.logLevel}")
+    }
+
     /** Torna all'utente anonimo, al logout. */
     @UsedByGodot
     fun logOut() {
@@ -163,12 +177,15 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
             return
         }
 
+        Log.i(TAG, "purchase($productId): cerco il prodotto")
         Purchases.sharedInstance.getProductsWith(
             listOf(productId),
             { error: PurchasesError ->
+                Log.e(TAG, "purchase($productId): prodotto non recuperato: ${error.message}")
                 emitPurchase(productId, success = false, cancelled = false, error = error.message)
             },
             { products: List<StoreProduct> ->
+                Log.i(TAG, "purchase($productId): trovati ${products.size} prodotti")
                 val product = products.firstOrNull()
                 if (product == null) {
                     emitPurchase(productId, success = false, cancelled = false, error = "prodotto non trovato")
@@ -177,6 +194,7 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
                 Purchases.sharedInstance.purchaseWith(
                     PurchaseParams.Builder(currentActivity, product).build(),
                     { error: PurchasesError, userCancelled: Boolean ->
+                        Log.i(TAG, "purchase($productId): esito NEGATIVO cancelled=$userCancelled ${error.message}")
                         // L'annullamento dell'utente NON è un errore da mostrare come tale:
                         // viaggia come flag separato e il lato Godot lo tratta a parte.
                         emitPurchase(
@@ -186,7 +204,8 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
                             error = if (userCancelled) "" else error.message,
                         )
                     },
-                    { _: StoreTransaction?, customerInfo: CustomerInfo ->
+                    { transaction: StoreTransaction?, customerInfo: CustomerInfo ->
+                        Log.i(TAG, "purchase($productId): esito POSITIVO, transazione=${transaction?.orderId}")
                         emitPurchase(productId, success = true, cancelled = false, error = "", customerInfo = customerInfo)
                     },
                 )
@@ -263,6 +282,7 @@ class RevenueCatGodotPlugin(godot: Godot) : GodotPlugin(godot) {
         if (customerInfo != null) {
             payload.put("active_entitlements", JSONArray(activeEntitlements(customerInfo)))
         }
+        Log.i(TAG, "emetto on_purchase: $payload")
         emitSignal(SIGNAL_PURCHASE, payload.toString())
 
         // Dopo un acquisto riuscito lo stato è cambiato: va comunicato anche a chi
