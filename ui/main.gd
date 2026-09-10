@@ -12,9 +12,78 @@ extends Control
 ## lasciare spazio alla figura sopra il distintivo di costo o stelle.
 ## Proporzioni di un esagono con la punta in alto: la larghezza sta all'altezza
 ## come √3 sta a 2. Rispettarle è ciò che permette alle righe di incastrarsi.
+## Queste tre non sono la dimensione delle caselle: sono la dimensione MINIMA.
+## Il viewport è 720×1280 con stretch keep_width, quindi su uno schermo 20:9 la
+## tela è alta 1600 e restano trecento pixel che nessuno reclama. _apply_metrics()
+## li distribuisce ingrandendo le caselle; dove non avanza niente (16:9, o una
+## finestra piccola sul desktop) il fattore vale 1.0 e valgono esattamente questi
+## numeri.
 const CELL_SIZE := Vector2(76, 88)
 const SHOP_SLOT_SIZE := Vector2(92, 96)
 const BENCH_SLOT_SIZE := SHOP_SLOT_SIZE
+
+## Pulsanti icona a destra di panchina (esperienza) e negozio (aggiorna). La
+## larghezza è fissa, l'altezza la detta la casella a cui stanno a fianco.
+const ICON_BUTTON_SIZE := Vector2(84, 56)
+
+## Le righe dispari della plancia risalgono di un quarto d'altezza su quella
+## sopra: è ciò che incastra gli esagoni invece di lasciarli in file staccate.
+const BOARD_OVERLAP := 0.25
+
+## Oltre non si va: i ritratti sono renderizzati a 192 px (Portraits.SIZE) e i
+## distintivi di costo e stelle hanno un corpo fisso, quindi una casella più
+## grande non guadagna più nulla — comincerebbe solo a sgranare.
+const MAX_SLOT_SCALE := 1.6
+
+## Spazio tenuto da parte per ciò che cresce a partita in corso.
+##
+## La misura si fa al primo round, quando la scheda delle sinergie ha una riga
+## sola; a squadra piena ne ha due o tre, e sono una cinquantina di pixel
+## ciascuna. Senza questa riserva le caselle si prenderebbero tutto lo spazio
+## disponibile al minuto zero, e la barra di scorrimento comparirebbe da sola
+## alla terza unità schierata. Riscalare le caselle a ogni cambio di sinergia
+## sarebbe l'alternativa, ma una plancia che si ridimensiona mentre si gioca è
+## peggio di un po' di spazio tenuto libero.
+const CONTENT_HEADROOM := 124.0
+
+## Margini e spaziature del guscio: servono anche al calcolo dello spazio
+## disponibile, e una copia sfasata darebbe una stima sbagliata di poco, che è
+## il modo peggiore di sbagliare.
+const SIDE_MARGIN := 16
+const TOP_MARGIN := 38
+const BOTTOM_MARGIN := 18
+const ROOT_SEPARATION := 12
+
+## Margine interno e bordo della piastra sotto la striscia avversari: entrano
+## nel conto della larghezza delle chip, che devono starci in quattro per riga.
+const RANKING_PLATE_INSET := 8
+const RANKING_PLATE_BORDER := 2
+
+## Quante chip per riga nella striscia della classifica. Due righe da quattro
+## invece di una da otto: un nome tagliato a meta' non dice chi e' l'avversario,
+## e la seconda riga costa molta meno altezza di quanta leggibilita' restituisca.
+const RANKING_CHIPS_PER_ROW := 4
+
+## Aria fra una chip e l'altra. A 4 px la vita di una finiva appiccicata alla
+## posizione della successiva e le due si leggevano come un unico numero: qui
+## la separazione conta più della larghezza, perché le chip non hanno una
+## cornice che dica dove finisce l'una e comincia l'altra.
+const RANKING_CHIP_H_SEPARATION := 14
+const RANKING_CHIP_V_SEPARATION := 6
+
+## Altezze della barra comandi. Sono sotto i minimi tattili di Style
+## (TOUCH_MIN / TOUCH_PRIMARY) di proposito: quei valori nascono per pulsanti
+## isolati, mentre qui la riga e' larga quanto lo schermo e il bersaglio resta
+## enorme in orizzontale. L'altezza recuperata va alla plancia, che e' la cosa
+## che si guarda.
+const BAR_BUTTON_HEIGHT := 52.0
+const PRIMARY_BUTTON_HEIGHT := 76.0
+
+## Quanti caratteri di un nome si mostrano nella classifica prima di troncarlo.
+## I nomi arrivano dal server e possono essere lunghi a piacere; una chip larga
+## un quarto di striscia non li regge, e tagliare a una misura dichiarata e'
+## meglio che lasciar decidere al clip_text quanto testo sparisce.
+const MAX_NAME_CHARS := 10
 
 ## In locale il MatchState e' quello di _session; in remoto sara' lo stesso
 ## oggetto, solo riempito dagli snapshot del server. La UI lo legge e basta.
@@ -37,7 +106,7 @@ var _log_label: RichTextLabel
 var _shop_row: HBoxContainer
 var _board_rows: VBoxContainer
 var _bench_row: HBoxContainer
-var _ranking_list: VBoxContainer
+var _ranking_list: HFlowContainer
 var _synergy_row: HFlowContainer
 var _fight_button: Button
 var _sell_button: Button
@@ -66,6 +135,26 @@ var _reconnect_panel: Panel
 var _shop_buttons: Array[UnitSlot] = []
 var _cell_buttons: Dictionary = {}
 var _bench_buttons: Array[UnitSlot] = []
+
+## Spaziatori di mezza cella in testa alle righe dispari della plancia. Vanno
+## tenuti da parte perché lo sfalsamento è metà della LARGHEZZA di una cella:
+## se le celle crescono e lo spaziatore no, le righe smettono di incastrarsi.
+var _row_offsets: Array[Control] = []
+## Acquista esperienza (accanto alla panchina) e aggiorna il negozio (accanto al
+## negozio): servono come membri solo per pareggiarne l'altezza a quella delle
+## caselle a cui stanno a fianco, in _apply_metrics().
+var _xp_button: Button
+var _reroll_button: Button
+
+## Il guscio della preparazione, tenuto da parte per misurare quanto spazio
+## resta al corpo che scorre: colonna radice, scroll centrale e suo contenuto.
+var _root_column: VBoxContainer
+var _scroll: ScrollContainer
+var _body: VBoxContainer
+## Fattore di scala in vigore per plancia, panchina e negozio (x, y, z). Serve a
+## _apply_metrics() per risalire alla parte FISSA dell'altezza del corpo
+## sottraendo dalla misura attuale ciò che dipende dal fattore stesso.
+var _slot_scale := Vector3.ONE
 
 var _store: Node
 var _profile: Node
@@ -146,6 +235,13 @@ func _ready() -> void:
 	_build_slot_buttons()
 	_start_new_match()
 
+	# Le caselle nascono alla dimensione minima e vengono subito riscalate allo
+	# schermo vero. Dopo _start_new_match(), non dentro _build_slot_buttons():
+	# la misura del corpo ha senso solo quando sinergie e avversari hanno già le
+	# loro chip, o si calcolerebbe lo spazio di una schermata che non esiste.
+	_apply_metrics()
+	get_viewport().size_changed.connect(_apply_metrics)
+
 
 func player() -> Player:
 	return match_state.human_player()
@@ -182,16 +278,17 @@ func _build_ui() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 16)
-	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_left", SIDE_MARGIN)
+	margin.add_theme_constant_override("margin_right", SIDE_MARGIN)
 	# In alto la tacca del telefono, in basso la barra dei gesti.
-	margin.add_theme_constant_override("margin_top", 38)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_top", TOP_MARGIN)
+	margin.add_theme_constant_override("margin_bottom", BOTTOM_MARGIN)
 	add_child(margin)
 
 	var root := VBoxContainer.new()
-	root.add_theme_constant_override("separation", 12)
+	root.add_theme_constant_override("separation", ROOT_SEPARATION)
 	margin.add_child(root)
+	_root_column = root
 
 	root.add_child(_build_hud())
 
@@ -202,20 +299,15 @@ func _build_ui() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(scroll)
+	_scroll = scroll
 
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 8)
 	scroll.add_child(body)
+	_body = body
 
 	body.add_child(_section_title("SCHIERAMENTO — la prima fila è a contatto col nemico"))
-
-	# Il campo e la classifica avversari stanno affiancati: si guardano insieme
-	# mentre si decide come schierare, invece di dover aprire un altro foglio.
-	var battlefield_row := HBoxContainer.new()
-	battlefield_row.add_theme_constant_override("separation", 14)
-	battlefield_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	body.add_child(battlefield_row)
 
 	# Una riga per HBox invece di una griglia unica: il campo è esagonale, e le
 	# righe dispari vanno sfalsate di mezza cella. Una GridContainer allinea le
@@ -228,9 +320,15 @@ func _build_ui() -> void:
 	# quarto d'altezza l'una sull'altra. Con una separazione positiva resterebbero
 	# due file di esagoni staccate, che non è una griglia esagonale.
 	_board_rows.add_theme_constant_override("separation", int(-CELL_SIZE.y * 0.25))
-	battlefield_row.add_child(_board_rows)
+	body.add_child(_board_rows)
 
-	battlefield_row.add_child(_build_ranking_panel())
+	# Gli avversari stanno SOTTO la plancia, in striscia. Da colonna a fianco
+	# rubavano 164 px di larghezza in permanenza all'unica cosa con cui si
+	# gioca davvero; in orizzontale ne costano una cinquantina in altezza e
+	# restano comunque sempre visibili, senza aprire nessun foglio.
+	body.add_child(_spacer(6))
+	body.add_child(_section_title("CLASSIFICA"))
+	body.add_child(_build_ranking_strip())
 
 	body.add_child(_spacer(6))
 	body.add_child(_section_title("SINERGIE"))
@@ -239,36 +337,41 @@ func _build_ui() -> void:
 	body.add_child(_spacer(6))
 	body.add_child(_section_title("PANCHINA"))
 
+	# Ogni riga di caselle ha il proprio pulsante icona a destra, accoppiato per
+	# significato invece che per comodità di layout: l'esperienza governa il
+	# livello, cioè quante unità si schierano dalla panchina; l'aggiornamento
+	# governa il negozio. Il costo sta nel tooltip e nella monetina, non scritto
+	# per esteso, così le caselle si prendono tutta la larghezza che avanza.
+	var bench_row_wrap := HBoxContainer.new()
+	bench_row_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	bench_row_wrap.add_theme_constant_override("separation", 6)
+	body.add_child(bench_row_wrap)
+
 	_bench_row = HBoxContainer.new()
-	_bench_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_bench_row.add_theme_constant_override("separation", 4)
-	body.add_child(_bench_row)
+	bench_row_wrap.add_child(_bench_row)
+
+	_xp_button = _shop_icon_button(
+		"📈", "Esperienza", int(GameData.balance()["economy"]["buy_xp_cost"]))
+	_xp_button.pressed.connect(_on_buy_xp_pressed)
+	bench_row_wrap.add_child(_xp_button)
 
 	body.add_child(_spacer(6))
 	body.add_child(_section_title("NEGOZIO"))
 
-	# Aggiorna ed esperienza affiancano la riga del negozio invece di stare
-	# sotto: due pulsanti icona ai lati, con il costo nel tooltip invece che
-	# scritto per esteso — libera spazio orizzontale per le caselle del
-	# negozio, che sono ciò che si guarda per primo.
 	var shop_row_wrap := HBoxContainer.new()
 	shop_row_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	shop_row_wrap.add_theme_constant_override("separation", 6)
 	body.add_child(shop_row_wrap)
 
-	var buy_xp := _shop_icon_button(
-		"📈", "Esperienza", int(GameData.balance()["economy"]["buy_xp_cost"]))
-	buy_xp.pressed.connect(_on_buy_xp_pressed)
-	shop_row_wrap.add_child(buy_xp)
-
 	_shop_row = HBoxContainer.new()
 	_shop_row.add_theme_constant_override("separation", 6)
 	shop_row_wrap.add_child(_shop_row)
 
-	var reroll := _shop_icon_button(
+	_reroll_button = _shop_icon_button(
 		"🔄", "Aggiorna", int(GameData.balance()["economy"]["reroll_cost"]))
-	reroll.pressed.connect(_on_reroll_pressed)
-	shop_row_wrap.add_child(reroll)
+	_reroll_button.pressed.connect(_on_reroll_pressed)
+	shop_row_wrap.add_child(_reroll_button)
 
 	# Nel flusso del layout, non come overlay ancorato: quando compare, spinge
 	# la barra dei comandi verso il basso invece di coprire COMBATTI.
@@ -374,7 +477,7 @@ func _chip(row: HBoxContainer, glyph: Control, stretch: float = 1.0, tip: String
 func _shop_icon_button(icon: String, action_label: String, cost: int) -> Button:
 	var button := Button.new()
 	button.tooltip_text = "%s · %d oro" % [action_label, cost]
-	button.custom_minimum_size = Vector2(84, 56)
+	button.custom_minimum_size = ICON_BUTTON_SIZE
 	Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 14, 4)
 
 	# Il testo del pulsante resta vuoto: la moneta è un nodo disegnato e il testo
@@ -411,7 +514,7 @@ func _build_action_bar() -> Control:
 	minor.add_theme_constant_override("separation", 8)
 	column.add_child(minor)
 
-	# Vendi porta una parola e un numero, gli altri tre una sola icona: a fette
+	# Vendi porta una parola e un numero, gli altri due una sola icona: a fette
 	# uguali il primo verrebbe troncato e gli altri sprecherebbero spazio.
 	_sell_button = _bar_button(minor, "Vendi", Style.PLATE)
 	_sell_button.size_flags_stretch_ratio = 2.0
@@ -419,11 +522,17 @@ func _build_action_bar() -> Control:
 	_sell_button.pressed.connect(_on_sell_pressed)
 
 	_bar_button(minor, "ⓘ", Style.PLATE).pressed.connect(func() -> void: _info_sheet.visible = true)
-	_bar_button(minor, "☰", Style.PLATE).pressed.connect(_on_menu_button_pressed)
+
+	# Una freccia che esce da una sponda, non le tre righe del menu a panino:
+	# il pulsante non apre un pannello, riporta alla home, e la freccia lo dice
+	# senza doverlo leggere nel tooltip.
+	var leave_button := _bar_button(minor, "⇤", Style.PLATE)
+	leave_button.tooltip_text = "Torna al menu principale"
+	leave_button.pressed.connect(_on_menu_button_pressed)
 
 	_fight_button = Button.new()
 	_fight_button.text = "COMBATTI"
-	_fight_button.custom_minimum_size = Vector2(0, Style.TOUCH_PRIMARY)
+	_fight_button.custom_minimum_size = Vector2(0, PRIMARY_BUTTON_HEIGHT)
 	_fight_button.add_theme_font_size_override("font_size", 38)
 	_fight_button.add_theme_color_override("font_color", Style.INK)
 	_fight_button.add_theme_color_override("font_hover_color", Style.INK)
@@ -448,7 +557,7 @@ func _build_action_bar() -> Control:
 
 	_ready_button = Button.new()
 	_ready_button.text = "PRONTO"
-	_ready_button.custom_minimum_size = Vector2(0, Style.TOUCH_PRIMARY)
+	_ready_button.custom_minimum_size = Vector2(0, PRIMARY_BUTTON_HEIGHT)
 	_ready_button.add_theme_font_size_override("font_size", 34)
 	_ready_button.add_theme_color_override("font_color", Style.INK)
 	_ready_button.add_theme_color_override("font_hover_color", Style.INK)
@@ -473,7 +582,7 @@ func _build_action_bar() -> Control:
 func _bar_button(row: HBoxContainer, text: String, fill: Color) -> Button:
 	var button := Button.new()
 	button.text = text
-	button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	button.custom_minimum_size = Vector2(0, BAR_BUTTON_HEIGHT)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.add_theme_font_size_override("font_size", 24)
 	Style.apply_plate(button, fill, Style.PLATE_DARK, 16, 5)
@@ -791,34 +900,42 @@ func _on_spectate_ready(player_index: int, combat: Dictionary, team: int, oppone
 	_spectate_view.play()
 
 
-## Riquadro accanto allo schieramento con gli avversari ordinati per vita
-## rimasta: dice a colpo d'occhio chi è messo peggio, senza dover aprire il
-## foglio delle sinergie per controllare i piazzamenti.
-func _build_ranking_panel() -> Control:
+## Striscia sotto lo schieramento con tutti gli otto giocatori ordinati per vita
+## rimasta — la propria riga compresa, in blu — su due righe da quattro: dice a
+## colpo d'occhio chi è messo peggio e a che altezza si sta, senza dover aprire
+## il foglio delle sinergie per controllare i piazzamenti.
+##
+## HFlowContainer e non una ScrollContainer orizzontale: le chip sono larghe un
+## quarto della striscia, quindi va a capo da sé dopo la quarta. Uno scorrimento
+## orizzontale annidato dentro quello verticale del corpo si contenderebbe
+## invece il gesto del dito, che è un modo di fallire che l'andare a capo non ha.
+func _build_ranking_strip() -> Control:
+	# La piastra la mette il riquadro, non le chip: _style_ranking_row lascia lo
+	# stato normale trasparente (era dentro un PanelContainer anche prima), e
+	# senza uno sfondo dietro le righe galleggerebbero sul fondale. Stessa
+	# scheda delle sinergie, che sta appena sotto.
+	# I 18 px di margine interno di Style.plate qui sono troppi: tolgono 36 px
+	# alle chip, che sono già la cosa più stretta della schermata. La
+	# piastra resta la stessa, con il fianco ridotto.
+	var plate := Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4)
+	plate.content_margin_left = RANKING_PLATE_INSET
+	plate.content_margin_right = RANKING_PLATE_INSET
+	plate.content_margin_top = 6
+	plate.content_margin_bottom = 6
+
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(150, 0)
-	panel.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
+	panel.add_theme_stylebox_override("panel", plate)
 
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 4)
-	panel.add_child(column)
-
-	var title := Label.new()
-	title.text = "AVVERSARI"
-	title.add_theme_font_size_override("font_size", 15)
-	title.add_theme_color_override("font_color", Style.GOLD.darkened(0.2))
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_child(title)
-
-	_ranking_list = VBoxContainer.new()
-	_ranking_list.add_theme_constant_override("separation", 2)
-	column.add_child(_ranking_list)
+	_ranking_list = HFlowContainer.new()
+	_ranking_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ranking_list.add_theme_constant_override("h_separation", RANKING_CHIP_H_SEPARATION)
+	_ranking_list.add_theme_constant_override("v_separation", RANKING_CHIP_V_SEPARATION)
+	panel.add_child(_ranking_list)
 
 	return panel
 
 
-## Ricostruisce la classifica: gli avversari sono pochi (fino a 7) e cambiano
+## Ricostruisce la classifica: le righe sono poche (otto) e cambiano
 ## posizione a ogni round, quindi rifare le righe da zero costa meno che
 ## tenerle in sincrono manualmente.
 func _refresh_ranking() -> void:
@@ -830,12 +947,127 @@ func _refresh_ranking() -> void:
 	# Ordine dell'intera classifica, non solo degli avversari: la posizione
 	# mostrata deve essere quella vera fra otto, quindi si numera live_ranking()
 	# e si saltano le proprie righe invece di ordinare un sottoinsieme.
+	# Ci sta dentro anche la propria riga, evidenziata: la posizione degli altri
+	# si legge solo rispetto alla propria, e saltarla obbligava a contare a mente
+	# fra quale coppia di chip ci si trova.
+	var standings := match_state.live_ranking()
+	var width := _chip_width(RANKING_CHIPS_PER_ROW)
 	var position := 0
-	for pl in match_state.live_ranking():
+	for pl in standings:
 		position += 1
-		if pl == player():
-			continue
-		_standing_row(_ranking_list, pl, position, 15)
+		_ranking_list.add_child(_standing_chip(pl, position, width, pl == player()))
+
+
+## Larghezza di una chip perché ne stiano RANKING_CHIPS_PER_ROW per riga: la
+## divisione è esatta, così l'HFlowContainer va a capo esattamente dove previsto
+## — due righe da quattro — senza doverglielo imporre.
+##
+## Serve dichiararla: il contenuto della chip è ancorato dentro il pulsante
+## (come in UnitSlot, così il tocco arriva sempre al pulsante e non a
+## un'etichetta), e un figlio ancorato non concorre alla dimensione minima del
+## genitore. Senza questa, le chip si accavallerebbero tutte a larghezza
+## zero. Sotto gli 84 px non si scende: si preferisce che vadano a capo.
+func _chip_width(count: int) -> float:
+	var available := get_viewport_rect().size.x - SIDE_MARGIN * 2.0 \
+		- (RANKING_PLATE_INSET + RANKING_PLATE_BORDER) * 2.0 - _scrollbar_width()
+	return maxf(84.0, floorf((available - float(RANKING_CHIP_H_SEPARATION) * (count - 1)) / float(count)))
+
+
+## Larghezza della barra di scorrimento verticale, contata SEMPRE, anche quando
+## non c'è. Su uno schermo 16:9 il corpo scorre e la barra si prende una decina
+## di pixel: senza tenerne conto le chip stanno larghe esattamente quanto lo
+## spazio calcolato, ne avanza una, e la striscia va a capo dove non deve solo
+## su certi schermi. Meglio dieci pixel d'aria ovunque che un layout che cambia
+## forma a seconda del telefono.
+func _scrollbar_width() -> float:
+	if _scroll == null:
+		return 0.0
+	var bar := _scroll.get_v_scroll_bar()
+	if bar == null:
+		return 0.0
+	return maxf(bar.get_combined_minimum_size().x, bar.size.x)
+
+
+## Una chip della striscia avversari: gli stessi dati di _standing_row messi su
+## una riga sola. Sono due funzioni e non una parametrizzata perché le due viste
+## hanno forme opposte — qui si comprime in orizzontale e si taglia il nome, là
+## (schermata di chi è eliminato) si occupa tutta la larghezza — e il tentativo
+## di servirle entrambe produrrebbe una funzione fatta di rami.
+const CHIP_FONT := 15
+
+func _standing_chip(pl: Player, position: int, width: float, own: bool = false) -> Button:
+	var out := pl.eliminated or pl.hp <= 0
+	var watchable: bool = _session != null and _session.can_spectate(pl.index)
+
+	var chip := Button.new()
+	chip.custom_minimum_size = Vector2(width, Style.TOUCH_MIN * 0.55)
+	chip.disabled = not watchable
+	chip.tooltip_text = "Rivedi l'ultima battaglia di %s" % pl.display_name if watchable \
+		else "%s non ha una battaglia da rivedere" % pl.display_name
+	_style_ranking_row(chip)
+	if watchable:
+		chip.pressed.connect(_open_spectate.bind(pl))
+
+	var inner := HBoxContainer.new()
+	inner.add_theme_constant_override("separation", 5)
+	inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_child(inner)
+
+	var place_label := Label.new()
+	place_label.text = "%d°" % position
+	place_label.add_theme_font_size_override("font_size", CHIP_FONT)
+	place_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.1))
+	place_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(place_label)
+
+	# Il nome si taglia, la vita no: in una striscia stretta è il numero che si
+	# cerca, e un "55" mozzato a "5" racconterebbe una partita diversa.
+	var name_label := Label.new()
+	name_label.text = _short_name(pl.display_name)
+	name_label.add_theme_font_size_override("font_size", CHIP_FONT)
+	name_label.custom_minimum_size = Vector2(float(CHIP_FONT) * 2.6, 0)
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.clip_text = true
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(name_label)
+
+	var hp_label := Label.new()
+	hp_label.text = "☠" if out else str(pl.hp)
+	hp_label.add_theme_font_size_override("font_size", CHIP_FONT)
+	hp_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.add_child(hp_label)
+
+	if out:
+		name_label.add_theme_color_override("font_color", Style.TEXT_DIM)
+		hp_label.add_theme_color_override("font_color", Style.TEXT_DIM)
+	else:
+		hp_label.add_theme_color_override("font_color", Color(0.92, 0.45, 0.45))
+
+	# Il proprio nome in blu, e nient'altro: è l'unica riga che si cerca senza
+	# leggere, e il blu è il colore che nel resto della schermata vuol dire
+	# "io". Una piastra colorata dietro la chip diceva la stessa cosa gridando,
+	# e in una striscia di otto chip vicine pesava più della classifica stessa.
+	# Vale anche da eliminato, dove sovrascrive il grigio di TEXT_DIM: sapere
+	# dove si è finiti conta più che vedersi spenti come gli altri.
+	if own:
+		name_label.add_theme_color_override("font_color", Style.BLUE)
+
+	# Niente lente in coda, a differenza di _standing_row: su una chip da ~94 px
+	# quei quattordici pixel li toglierebbe al nome, che è l'unica cosa già
+	# costretta a tagliarsi. L'affordance la dà la piastra di _style_ranking_row,
+	# spenta quando non c'è battaglia da rivedere.
+	return chip
+
+
+## Nome accorciato a MAX_NAME_CHARS con i puntini: il taglio è dichiarato qui e
+## non lasciato al clip_text della chip, che sparirebbe una quantità di testo
+## diversa a ogni larghezza di schermo — due giocatori con lo stesso prefisso
+## finirebbero indistinguibili su un telefono e distinti su un altro.
+func _short_name(name: String) -> String:
+	if name.length() <= MAX_NAME_CHARS:
+		return name
+	return name.substr(0, MAX_NAME_CHARS - 1).strip_edges() + "…"
 
 
 ## Una riga di classifica: posizione, nome, vita (o teschio) e la lente se c'è
@@ -1088,6 +1320,12 @@ func _style_ranking_row(row: Button) -> void:
 	row.add_theme_stylebox_override("hover", hover)
 	row.add_theme_stylebox_override("pressed", pressed)
 	row.add_theme_stylebox_override("focus", clear)
+	# Anche da spenta, e con la STESSA piastra trasparente: la chip è disabled
+	# finché quel giocatore non ha una battaglia da rivedere, cioè per tutto il
+	# primo round, e senza questo override Godot ci disegna sopra la piastra
+	# scura del tema di serie — otto riquadri neri che a fine prima battaglia
+	# sparivano da soli, come se la classifica si accendesse.
+	row.add_theme_stylebox_override("disabled", clear)
 
 
 ## Riquadro sinergie sulla schermata principale: una fila di chip che va a capo
@@ -1673,7 +1911,7 @@ func _on_playback_finished() -> void:
 	_combat_controls.visible = false
 	_tips.queue_tip("combat")
 	# Vista la prima battaglia, il giocatore ha un motivo concreto per aprire il
-	# riquadro AVVERSARI: spiegargli che le righe sono toccabili.
+	# riquadro CLASSIFICA: spiegargli che le righe sono toccabili.
 	_tips.queue_tip("ranking")
 	if own.get("opponent") != null and not bool(own.get("ghost", false)):
 		_combat_view.show_result_beam(bool(own["won"]), int(own["damage_dealt"] if bool(own["won"]) else own["damage"]))
@@ -2093,6 +2331,7 @@ func _build_slot_buttons() -> void:
 			offset.custom_minimum_size = Vector2(CELL_SIZE.x * 0.5, 0)
 			offset.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			row_box.add_child(offset)
+			_row_offsets.append(offset)
 		for x in int(match_data["board_columns"]):
 			var cell := Vector2i(x, y)
 			var button := UnitSlot.new()
@@ -2118,6 +2357,130 @@ func _build_slot_buttons() -> void:
 	# I ritratti si preparano subito: generarli mentre il giocatore compra
 	# farebbe comparire le figure a scoppio ritardato.
 	get_node("/root/Portraits").preload_units(_all_unit_ids())
+
+
+# --------------------------------------------------------------------------
+# Adattamento allo schermo
+# --------------------------------------------------------------------------
+
+## Riscrive la dimensione di caselle, spaziatori e pulsanti icona in base allo
+## spazio che c'è davvero, invece di lasciarne trecento pixel vuoti in fondo
+## allo scroll come farebbero tre costanti.
+func _apply_metrics() -> void:
+	if _board_rows == null or _cell_buttons.is_empty():
+		return
+
+	# Si aspettano due fotogrammi prima di misurare, ed è la parte fragile di
+	# questa funzione. L'altezza minima dichiarata da un HFlowContainer prima di
+	# avere una larghezza è quella del caso peggiore, con tutti i figli
+	# incolonnati: le sinergie e la striscia avversari si dichiarano insieme
+	# alte quasi settecento pixel invece di un centinaio, e lo stesso fa una
+	# Label con autowrap, che a larghezza zero va a capo a ogni lettera. Misurato
+	# troppo presto, il calcolo conclude sempre che non c'è spazio per crescere.
+	# Un fotogramma non basta: al primo il layout assegna le larghezze, al
+	# secondo i contenitori a flusso hanno rifatto i conti.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if not is_inside_tree():
+		return
+
+	_slot_scale = _slot_scales()
+	var cell := (CELL_SIZE * _slot_scale.x).floor()
+	var bench := (BENCH_SLOT_SIZE * _slot_scale.y).floor()
+	var shop := (SHOP_SLOT_SIZE * _slot_scale.z).floor()
+
+	for key in _cell_buttons:
+		(_cell_buttons[key] as UnitSlot).custom_minimum_size = cell
+	# Lo sfalsamento è metà cella: se cresce la casella e non lo spaziatore, le
+	# righe dispari smettono di incastrarsi con quelle pari.
+	for offset in _row_offsets:
+		offset.custom_minimum_size = Vector2(cell.x * 0.5, 0)
+	_board_rows.add_theme_constant_override("separation", int(-cell.y * BOARD_OVERLAP))
+
+	for button in _bench_buttons:
+		button.custom_minimum_size = bench
+	for button in _shop_buttons:
+		button.custom_minimum_size = shop
+
+	# I due pulsanti icona pareggiano l'altezza della fila accanto: uno da 56 px
+	# a fianco di caselle da 120 sembrerebbe dimenticato lì.
+	if _xp_button != null:
+		_xp_button.custom_minimum_size = Vector2(ICON_BUTTON_SIZE.x, bench.y)
+	if _reroll_button != null:
+		_reroll_button.custom_minimum_size = Vector2(ICON_BUTTON_SIZE.x, shop.y)
+
+
+## Il fattore di ingrandimento di plancia (x), panchina (y) e negozio (z).
+##
+## Ogni zona ha un suo tetto di larghezza — la plancia può crescere molto di più
+## delle altre due, che devono lasciare posto al pulsante icona — mentre il
+## vincolo di altezza è uno solo e condiviso: il corpo non deve superare
+## l'altezza dello scroll. Si cerca quindi per bisezione il più grande fattore
+## comune che rispetta l'altezza, e ogni zona lo usa fino al proprio tetto.
+##
+## Il risultato non scende mai sotto 1.0: dove non avanza spazio la schermata
+## resta quella di prima, scroll compreso.
+func _slot_scales() -> Vector3:
+	var canvas := get_viewport_rect().size
+	var available_width := canvas.x - SIDE_MARGIN * 2.0
+	var available_height := _scroll_height(canvas)
+	if available_width <= 0.0 or available_height <= 0.0:
+		return Vector3.ONE  # headless, o prima che il viewport abbia una misura
+
+	var match_data: Dictionary = GameData.balance()["match"]
+	var columns := float(match_data["board_columns"])
+	var bench_slots := float(match_data["bench_size"])
+	var shop_slots := float(match_data["shop_slots"])
+
+	# Tetti di larghezza. La plancia conta mezza colonna in più per lo
+	# sfalsamento delle righe dispari; le altre due scontano il pulsante icona
+	# e le separazioni fra le caselle (4 px in panchina, 6 nel negozio).
+	var caps := Vector3(
+		available_width / (CELL_SIZE.x * (columns + 0.5)),
+		(available_width - ICON_BUTTON_SIZE.x - 6.0 - 4.0 * (bench_slots - 1.0))
+			/ (BENCH_SLOT_SIZE.x * bench_slots),
+		(available_width - ICON_BUTTON_SIZE.x - 6.0 - 6.0 * (shop_slots - 1.0))
+			/ (SHOP_SLOT_SIZE.x * shop_slots))
+	caps = caps.clamp(Vector3.ONE, Vector3.ONE * MAX_SLOT_SCALE)
+
+	# La parte del corpo che NON dipende dal fattore: titoli, spaziatori,
+	# sinergie, striscia avversari, separazioni. Si ricava per differenza dalla
+	# misura attuale invece di riscriverla a mano — così resta giusta anche
+	# quando le chip vanno a capo o un titolo si spezza su due righe.
+	var fixed := _body.get_combined_minimum_size().y - _scalable_height(_slot_scale)
+
+	var low := 1.0
+	var high := MAX_SLOT_SCALE
+	for _i in 24:
+		var mid := (low + high) * 0.5
+		if fixed + _scalable_height(caps.min(Vector3.ONE * mid)) <= available_height:
+			low = mid
+		else:
+			high = mid
+	return caps.min(Vector3.ONE * low)
+
+
+## Altezza delle tre zone che scalano, dato un fattore per ciascuna.
+func _scalable_height(scale: Vector3) -> float:
+	var rows := float(GameData.balance()["match"]["board_rows"])
+	# Con la sovrapposizione, n righe alte h occupano h * (n - 0.25*(n-1)).
+	var board := CELL_SIZE.y * scale.x * (rows - BOARD_OVERLAP * (rows - 1.0))
+	return board + BENCH_SLOT_SIZE.y * scale.y + SHOP_SLOT_SIZE.y * scale.z
+
+
+## Quanto spazio verticale resta al corpo che scorre: la tela meno i margini,
+## meno le barre che non scorrono (stato in cima, comandi in fondo, bolla dei
+## suggerimenti in mezzo) e le separazioni fra loro.
+func _scroll_height(canvas: Vector2) -> float:
+	if _root_column == null or _scroll == null:
+		return 0.0
+	var height := canvas.y - TOP_MARGIN - BOTTOM_MARGIN
+	var children := _root_column.get_child_count()
+	height -= ROOT_SEPARATION * maxf(0.0, float(children) - 1.0)
+	for child in _root_column.get_children():
+		if child != _scroll:
+			height -= (child as Control).get_combined_minimum_size().y
+	return height - CONTENT_HEADROOM
 
 
 func _all_unit_ids() -> Array:

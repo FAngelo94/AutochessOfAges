@@ -234,6 +234,23 @@ Favorite civilization in the menu is a **visual hint only** (highlights that civ
 gameplay advantage, since the pool is shared). Picking an unowned civilization opens the store
 instead of doing nothing.
 
+The viewport is `720×1280` with `keep_width`, so on a 20:9 phone the canvas is **720×1600** and
+320 px belong to nobody. In the preparation screen `ui/main.gd` claims them: `CELL_SIZE`,
+`SHOP_SLOT_SIZE` and `BENCH_SLOT_SIZE` are the *minimum* sizes, and `_apply_metrics()` multiplies
+them by a factor solved from the space that actually exists — one shared vertical constraint, a
+per-zone width cap (the board can grow much more than bench and shop, which must leave room for
+their icon button). The factor never drops below 1.0, so a 16:9 screen renders exactly as before
+and still scrolls.
+
+Two traps are baked into that function and must survive any rewrite. It **awaits two frames**
+before measuring: an `HFlowContainer` with no width yet declares the height of its worst case, all
+children in one column, and an autowrapping `Label` wraps at every letter — measured early, the
+body claims to be 2700 px tall and the solver always concludes there is no room. And it keeps
+`CONTENT_HEADROOM` in reserve, because the measurement happens at round 1 when the synergy card is
+one row tall and it will be three by the time the team is full; without it the scrollbar would
+appear on its own after the third unit fielded. Rescaling the board on every synergy change is the
+alternative, and a board that resizes mid-game is worse than a little space left free.
+
 ### Unit models
 
 Every unit figure is **procedurally generated from Godot primitives** in `art/unit_models.gd` —

@@ -26,7 +26,7 @@ const PALETTES := {
 	"roman": {
 		"primary": Color(0.68, 0.16, 0.14),
 		"secondary": Color(0.82, 0.66, 0.28),
-		"metal": Color(0.66, 0.68, 0.74),
+		"metal": Color(0.50, 0.52, 0.57),
 		"wood": Color(0.46, 0.32, 0.19),
 		"cloth": Color(0.88, 0.85, 0.78),
 		"skin": Color(0.80, 0.61, 0.45),
@@ -68,6 +68,15 @@ const CUSTOM_MODEL_SCALE := {
 	"chariot": 0.85,
 }
 
+## Correzioni di ricolorazione per singolo modello, quando il nome di un
+## materiale non basta a indovinarne il ruolo (o lo indovina male). Chiave =
+## id unità/eroe; valore = { token_del_materiale: ruolo }, applicato PRIMA della
+## tabella generale `_RECOLOR_KEYWORDS`. Es. le penne del dardo della balista
+## sono impennaggio rosso, non piume color cenere.
+const CUSTOM_MODEL_RECOLOR := {
+	"ballistarius": { "penne": "primary" },
+}
+
 ## Materiali riusati fra tutte le istanze: un esercito è fatto di poche tinte
 ## ripetute, e allocarne una copia per ogni cubo sprecherebbe draw call.
 static var _materials: Dictionary = {}
@@ -89,7 +98,7 @@ static func build(unit_id: String, origin: String) -> Node3D:
 	if custom != null:
 		var tuned: float = height_of(unit_id) * float(CUSTOM_MODEL_SCALE.get(unit_id, 1.0))
 		_normalize_custom_model(custom, tuned)
-		_recolor_custom_model(custom, palette)
+		_recolor_custom_model(custom, palette, CUSTOM_MODEL_RECOLOR.get(unit_id, {}))
 		root.add_child(custom)
 		return root
 
@@ -179,16 +188,21 @@ static func _local_aabb(node: Node, xform: Transform3D) -> AABB:
 ## applica la palette della civiltà, così lo stesso modello serve romani, galli
 ## e teutoni.
 ##
-## Le parole chiave sono confrontate come sottostringhe: elencare sia il
-## singolare che il plurale quando differiscono ("asta"/"aste", "punta"/"punte").
+## Le parole chiave sono confrontate come TOKEN interi, delimitati dagli
+## underscore del nome del materiale (`MAT_Civ_Ruolo`): così "osso" non pesca
+## dentro "rosso" né "corno" dentro "ornamento". Elencare quindi ogni forma che
+## può comparire come token a sé ("asta"/"aste", "punta"/"punte",
+## "sopracciglio"/"sopracciglia"); una chiave multi-parola ("mozzo_legno") va
+## scritta con l'underscore e combacia solo con token consecutivi.
 ## La prima regola che combacia vince, quindi le più specifiche (metallo, cuoio)
 ## stanno prima delle più generiche (legno). Un materiale che non combacia con
 ## nessuna regola NON resta bianco: ricade su `cloth` e stampa un avviso, così
 ## il buco nel vocabolario si vede nei log invece che a schermo.
 const _RECOLOR_KEYWORDS: Array = [
-	[["occhi", "occhio", "iride", "pupilla", "sopraccigli"], "eyes"],
+	[["occhi", "occhio", "iride", "pupilla", "sopraccigli", "sopracciglio",
+		"sopracciglia"], "eyes"],
 	[["labbra", "bocca"], "lips"],
-	[["pelle", "skin", "incarnato", "viso", "faccia", "mani", "braccia"], "skin"],
+	[["pelle", "skin", "incarnato", "viso", "volto", "faccia", "mani", "braccia"], "skin"],
 	[["capelli", "capello", "hair", "baffi", "barba", "chioma", "crine",
 		"biondo", "bionda", "calce", "ramati", "ramato", "rossicci"], "hair"],
 	[["pelliccia", "pelo", "fur", "lupo", "orso"], "fur"],
@@ -220,9 +234,9 @@ const _RECOLOR_KEYWORDS: Array = [
 ]
 
 
-static func _recolor_custom_model(node: Node, palette: Dictionary) -> void:
+static func _recolor_custom_model(node: Node, palette: Dictionary, overrides: Dictionary = {}) -> void:
 	for child in node.get_children():
-		_recolor_custom_model(child, palette)
+		_recolor_custom_model(child, palette, overrides)
 	if not (node is MeshInstance3D):
 		return
 	var mesh_instance := node as MeshInstance3D
@@ -235,7 +249,7 @@ static func _recolor_custom_model(node: Node, palette: Dictionary) -> void:
 			mat_name = String(mesh_instance.name).to_lower()
 		if _material_already_tinted(source):
 			continue
-		mesh_instance.set_surface_override_material(surface, _material(_recolor_pick(mat_name, palette)))
+		mesh_instance.set_surface_override_material(surface, _material(_recolor_pick(mat_name, palette, overrides)))
 
 
 ## Un .glb che porta già i suoi colori (materiale non grigio uniforme) va
@@ -251,10 +265,20 @@ static func _material_already_tinted(mat: Material) -> bool:
 	return not grey_ish
 
 
-static func _recolor_pick(mat_name: String, palette: Dictionary) -> Color:
+static func _recolor_pick(mat_name: String, palette: Dictionary, overrides: Dictionary = {}) -> Color:
+	# Nome ridotto a una sequenza di token fra underscore: " Bordo-Elmo" ->
+	# "_bordo_elmo_". Una chiave combacia solo se è un token intero (o una
+	# sequenza di token consecutivi), non una sottostringa qualsiasi.
+	var tokens := "_%s_" % mat_name.replace(" ", "_").replace("-", "_").replace(".", "_")
+	while tokens.contains("__"):
+		tokens = tokens.replace("__", "_")
+	# Correzioni per singolo modello: hanno la precedenza sulla tabella generale.
+	for keyword in overrides:
+		if tokens.contains("_%s_" % String(keyword).to_lower()):
+			return _role_color(String(overrides[keyword]), palette)
 	for rule in _RECOLOR_KEYWORDS:
 		for keyword in rule[0]:
-			if mat_name.contains(keyword):
+			if tokens.contains("_%s_" % keyword):
 				return _role_color(rule[1], palette)
 	push_warning("unit_models: materiale '%s' senza regola di ricolorazione, uso 'cloth'" % mat_name)
 	return palette["cloth"].darkened(0.1)
@@ -314,7 +338,7 @@ static func build_hero(hero_id: String) -> Node3D:
 	var custom := _load_custom_model(hero_id)
 	if custom != null:
 		_normalize_custom_model(custom, height_of_hero(hero_id))
-		_recolor_custom_model(custom, palette)
+		_recolor_custom_model(custom, palette, CUSTOM_MODEL_RECOLOR.get(hero_id, {}))
 		root.add_child(custom)
 		return root
 

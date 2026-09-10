@@ -3,7 +3,7 @@
 
   "match": {
     "players": 8,
-    "starting_hp": 55,
+    "starting_hp": 50,
     "board_columns": 5,
     "board_rows": 4,
     "bench_size": 5,
@@ -90,7 +90,7 @@
     "_comment": "Struttura degli stage. Ogni round è uno scontro tra giocatori.",
     "stages": 8,
     "rounds_per_stage": 5,
-    "preparation_seconds": 18.0,
-    "first_round_preparation_seconds": 18.0
+    "preparation_seconds": 30.0,
+    "first_round_preparation_seconds": 30.0
   }
 }

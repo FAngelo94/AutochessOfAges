@@ -41,13 +41,28 @@ const OWN_COLOR := Color(0.4, 0.8, 0.45)
 const ENEMY_COLOR := Color(0.92, 0.42, 0.38)
 
 const BAR_SIZE := Vector2(58.0, 8.0)
-const RESULT_BEAM_DURATION := 0.55
+
+## Fascio di fine round tra i ritratti eroe. Volutamente diverso dalle linee di
+## colpo tra unità (_draw_flash: un filo dritto che sbiadisce): qui è un dardo
+## caricato — parte una "testa" luminosa dal vincitore, il fascio la insegue
+## crepitando a più strati, e allo sconfitto scoppia un anello d'impatto. Le
+## fasi sono scandite su _result_time / RESULT_BEAM_DURATION.
+const RESULT_BEAM_DURATION := 0.62
+const RESULT_BEAM_TRAVEL := 0.34   # frazione in cui la testa raggiunge il bersaglio
+const RESULT_BEAM_SEGMENTS := 14
+const RESULT_BEAM_WOBBLE := 7.0    # ampiezza massima del crepitìo, in pixel
 
 ## Fasce riservate agli eroi sopra e sotto la scacchiera 3D: senza queste, il
 ## riquadro 3D copriva l'intero controllo e i ritratti agli angoli finivano
 ## sovrapposti alle celle estreme del campo. Restringendo il SubViewport a
 ## un'area centrale, queste fasce restano libere per i piedistalli degli eroi
 ## e per lo sfondo da arena, e non fanno mai parte della simulazione 3D.
+## Sfondo dell'arena: un'immagine 2D disegnata sotto tutto il resto — griglia
+## 3D, unità e sovrimpressione. Sta fuori dal mondo 3D di proposito: è una
+## quinta, non una superficie di gioco, e come Control segue il riquadro senza
+## dipendere da camera, luci o proiezione.
+const ARENA_BACKGROUND := "res://art/backgrounds/battle_arena.png"
+
 const HERO_ZONE_TOP := 10.0
 const HERO_ZONE_BOTTOM := 72.0
 const HERO_PORTRAIT_SIZE := 56.0
@@ -96,6 +111,7 @@ var _result_time: float = 0.0
 var _font: Font
 var _board: BattleBoard3D
 var _viewport: SubViewport
+var _backdrop: TextureRect
 var _self_hero_portrait: TextureRect
 var _opponent_hero_portrait: TextureRect
 var _self_hero_id: String = ""
@@ -115,6 +131,20 @@ func _ready() -> void:
 ## di gioco resta un'interfaccia 2D (stretch canvas_items, menu, negozio) e la
 ## battaglia è un riquadro dentro quel layout, non una scena che se lo mangia.
 func _build_scene() -> void:
+	# Aggiunto prima del riquadro 3D: fra fratelli entrambi `show_behind_parent`
+	# l'ordine di disegno resta quello dell'albero, quindi lo sfondo finisce
+	# sotto la scacchiera e le unità.
+	_backdrop = TextureRect.new()
+	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# KEEP_ASPECT_COVERED: l'immagine è quadrata, il riquadro no. Ritagliare i
+	# bordi è preferibile a deformare l'arena o a lasciare bande vuote.
+	_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_backdrop.show_behind_parent = true
+	if ResourceLoader.exists(ARENA_BACKGROUND):
+		_backdrop.texture = load(ARENA_BACKGROUND)
+	add_child(_backdrop)
+
 	var container := SubViewportContainer.new()
 	container.stretch = true
 	container.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -134,7 +164,9 @@ func _build_scene() -> void:
 
 	_viewport = SubViewport.new()
 	_viewport.own_world_3d = true
-	_viewport.transparent_bg = false
+	# Il 3D è reso su fondo trasparente perché sotto ci sia l'immagine
+	# dell'arena (l'Environment di BattleBoard3D ha il colore ad alpha 0).
+	_viewport.transparent_bg = true
 	_viewport.msaa_3d = Viewport.MSAA_2X
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	container.add_child(_viewport)
@@ -216,6 +248,7 @@ func show_result_beam(winner_is_viewer: bool, damage: int) -> void:
 		"from": source.position + source.size * 0.5,
 		"to": target.position + target.size * 0.5,
 		"color": OWN_COLOR if winner_is_viewer else ENEMY_COLOR,
+		"seed": randi(),
 	}
 	_hero_floater = {} if damage <= 0 else {
 		"text": "-%d" % damage,
@@ -614,16 +647,96 @@ func _draw_floater(floater: Dictionary) -> void:
 		HORIZONTAL_ALIGNMENT_CENTER, 0, 20, color)
 
 
+## Rumore deterministico in [-1, 1] da tre interi: stesso frame -> stesso
+## crepitìo, così il fascio non tremola in modo diverso a ogni ridisegno dello
+## stesso istante (skip, ridimensionamento) ma cambia forma da un frame all'altro.
+func _beam_noise(index: int, salt: int) -> float:
+	var h: int = index * 374761393 + salt * 668265263 + int(_hero_beam.get("seed", 0)) * 2246822519
+	h = (h ^ (h >> 13)) * 1274126177
+	h = h ^ (h >> 16)
+	return float(h & 0xffff) / 32768.0 - 1.0
+
+
 ## Fascio tra i due ritratti eroe, in coordinate schermo dirette: entrambi i
 ## ritratti sono figli diretti di questo Control, quindi la loro `position`
 ## è già nello spazio in cui _draw() lavora, senza passare da project().
+##
+## Non è la linea di colpo delle unità: è un dardo caricato in tre fasi —
+## la testa vola dal vincitore allo sconfitto, il fascio la insegue a strati
+## (alone, corpo, nucleo bianco) crepitando, e all'arrivo scoppia un anello.
 func _draw_hero_beam() -> void:
 	if not bool(_hero_beam.get("active", false)):
 		return
+
 	var progress: float = clampf(_result_time / RESULT_BEAM_DURATION, 0.0, 1.0)
-	var color: Color = _hero_beam["color"]
-	color.a = 1.0 - progress
-	draw_line(_hero_beam["from"], _hero_beam["to"], color, 5.0)
+	var from: Vector2 = _hero_beam["from"]
+	var to: Vector2 = _hero_beam["to"]
+	var base: Color = _hero_beam["color"]
+
+	# Quanto del percorso è già "acceso": la testa corre da 0 a 1 nella prima
+	# frazione RESULT_BEAM_TRAVEL, poi il fascio resta pieno e infine sbiadisce.
+	var head: float = clampf(progress / RESULT_BEAM_TRAVEL, 0.0, 1.0)
+	head = 1.0 - pow(1.0 - head, 3.0)   # decelera arrivando
+	var fade: float = 1.0 - clampf((progress - 0.55) / 0.45, 0.0, 1.0)
+
+	var axis := to - from
+	var length := axis.length()
+	if length < 1.0:
+		return
+	var dir := axis / length
+	var normal := Vector2(-dir.y, dir.x)
+
+	# Crepitìo: cambia forma ~30 volte al secondo, si smorza sui due estremi e
+	# pulsa con la testa in volo.
+	var salt := int(_result_time * 32.0)
+	var wobble := RESULT_BEAM_WOBBLE * (0.55 + 0.45 * sin(progress * TAU * 1.5))
+
+	var points := PackedVector2Array()
+	for i in RESULT_BEAM_SEGMENTS + 1:
+		var t := float(i) / float(RESULT_BEAM_SEGMENTS)
+		if t > head:
+			break
+		var taper := sin(clampf(t / maxf(head, 0.001), 0.0, 1.0) * PI)
+		var offset := _beam_noise(i, salt) * wobble * taper
+		points.append(from + dir * (length * t) + normal * offset)
+	# Punto esatto della testa, per non fermarsi allo scalino del segmento.
+	var head_pos := from + axis * head
+	if points.size() == 0 or points[points.size() - 1].distance_to(head_pos) > 1.0:
+		points.append(head_pos)
+	if points.size() < 2:
+		return
+
+	# Tre passate sullo stesso tracciato: alone morbido, corpo, nucleo bianco.
+	var glow := base.lightened(0.15)
+	glow.a = 0.20 * fade
+	draw_polyline(points, glow, 16.0, true)
+	var body := base
+	body.a = 0.75 * fade
+	draw_polyline(points, body, 6.0, true)
+	var core := base.lerp(Color.WHITE, 0.75)
+	core.a = 0.95 * fade
+	draw_polyline(points, core, 2.0, true)
+
+	# Testa luminosa in volo.
+	if progress < RESULT_BEAM_TRAVEL + 0.05:
+		var pulse := 6.0 + 2.0 * sin(_result_time * 40.0)
+		var halo := base
+		halo.a = 0.5 * fade
+		draw_circle(head_pos, pulse + 4.0, halo)
+		draw_circle(head_pos, pulse, Color(1, 1, 1, 0.95 * fade))
+
+	# Scoppio all'impatto sullo sconfitto.
+	if head >= 1.0:
+		var burst := clampf((progress - RESULT_BEAM_TRAVEL) / (1.0 - RESULT_BEAM_TRAVEL), 0.0, 1.0)
+		var ring := base.lerp(Color.WHITE, 0.35)
+		ring.a = (1.0 - burst) * fade
+		draw_arc(to, 5.0 + 32.0 * burst, 0.0, TAU, 40, ring, 3.0 * (1.0 - burst) + 0.5, true)
+		var spoke := base
+		spoke.a = (1.0 - burst) * 0.8 * fade
+		for s in 7:
+			var ang := TAU * float(s) / 7.0 + _beam_noise(s, 99) * 0.4
+			var ray := Vector2(cos(ang), sin(ang))
+			draw_line(to + ray * (6.0 + 10.0 * burst), to + ray * (10.0 + 26.0 * burst), spoke, 2.0)
 
 
 func _draw_hero_floater() -> void:

@@ -68,7 +68,10 @@ func _ready() -> void:
 func _build_environment() -> void:
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.07, 0.08, 0.10)
+	# Sfondo trasparente: la scacchiera è resa dentro un SubViewport con
+	# `transparent_bg`, e sotto di esso CombatView disegna l'immagine
+	# dell'arena. Un colore pieno qui la coprirebbe.
+	environment.background_color = Color(0.07, 0.08, 0.10, 0.0)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color(0.52, 0.56, 0.68)
 	# Ambiente generoso: con una sola direzionale i lati in ombra delle figure
