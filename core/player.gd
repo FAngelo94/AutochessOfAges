@@ -417,7 +417,7 @@ func _add_unit(def: UnitDef, star: int) -> UnitInstance:
 	return upgraded if upgraded != null else unit
 
 
-## Fonde le copie quando se ne raggiungono abbastanza. Ricorsiva: tre unità a
+## Fonde le copie quando se ne raggiungono abbastanza. Ricorsiva: due unità a
 ## 2★ create dalla stessa catena diventano immediatamente una 3★.
 func _try_upgrade(unit_id: String, star: int) -> UnitInstance:
 	var needed := int(GameData.balance()["match"]["copies_to_upgrade"])
