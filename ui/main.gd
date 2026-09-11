@@ -145,6 +145,13 @@ var _shop_buttons: Array[UnitSlot] = []
 var _cell_buttons: Dictionary = {}
 var _bench_buttons: Array[UnitSlot] = []
 
+## uid delle unità già disegnate almeno una volta su campo/panchina in questa
+## partita. Un uid che compare per la prima volta con star >= 2 non può che
+## venire da una fusione (_add_unit crea sempre a 1 stella): è il segnale che
+## fa scattare il bagliore in _style_unit_button. Azzerato a ogni nuova
+## partita in _start_new_match.
+var _known_unit_uids: Dictionary = {}
+
 ## Spaziatori di mezza cella in testa alle righe dispari della plancia. Vanno
 ## tenuti da parte perché lo sfalsamento è metà della LARGHEZZA di una cella:
 ## se le celle crescono e lo spaziatore no, le righe smettono di incastrarsi.
@@ -1631,6 +1638,7 @@ func _start_new_match() -> void:
 	_match_recorded = false
 	_fight_button.text = "COMBATTI"
 	selected = null
+	_known_unit_uids.clear()
 
 	_session = _make_session()
 	_session.begin(_requested_seed(), _profile.effective_hero())
@@ -2622,6 +2630,11 @@ func _style_unit_button(button: UnitSlot, unit: UnitInstance, front_line: bool =
 		unit.def, unit.star, UnitSlot.Badge.STARS,
 		Style.PANEL, border, 3 if unit == selected else 2, _unit_tooltip(unit.def)
 	)
+
+	if not _known_unit_uids.has(unit.uid):
+		_known_unit_uids[unit.uid] = true
+		if unit.star >= 2:
+			button.play_upgrade_glow()
 
 
 func _unit_tooltip(def: UnitDef) -> String:

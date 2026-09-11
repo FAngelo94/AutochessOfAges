@@ -43,6 +43,12 @@ var _fallback: Label
 var _badge: Label
 var _badge_mode: int = Badge.NONE
 
+## Bagliore dorato che lampeggia quando l'unità sale di stella per fusione
+## (play_upgrade_glow). Blend additivo: si somma a ciò che c'è sotto invece di
+## coprirlo, quindi legge come luce e non come una tinta piatta.
+var _glow: ColorRect
+var _glow_tween: Tween
+
 ## Il tooltip nativo di Godot si piazza dov'è comodo a lui, spesso sotto il
 ## dito — illeggibile su touch. Il testo si tiene qui e si disegna da soli con
 ## _show_hover_card, ancorata sopra la casella; tooltip_text resta vuoto così
@@ -88,6 +94,16 @@ func _init() -> void:
 	_badge.add_theme_constant_override("outline_size", 5)
 	_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_badge)
+
+	_glow = ColorRect.new()
+	_glow.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_glow.color = Color(1.0, 0.82, 0.35)
+	_glow.modulate.a = 0.0
+	_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var glow_material := CanvasItemMaterial.new()
+	glow_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_glow.material = glow_material
+	add_child(_glow)
 
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
@@ -138,6 +154,30 @@ func show_unit(def: UnitDef, star: int, badge_mode: int, fill: Color, border: Co
 			_badge.add_theme_color_override("font_color", Style.rarity_color(def.cost))
 		_:
 			_badge.text = ""
+
+
+## Lampo dorato che segna il momento in cui l'unità sale di stella per
+## fusione. Un'aggiunta di luce (blend additivo) più un breve scatto di scala,
+## poi tutto torna com'era da solo — nessun nodo da ripulire, la stessa
+## casella si anima e si resetta. Sicuro da chiamare senza schermo (test
+## headless): tocca solo proprietà di Control, mai il rendering 3D.
+func play_upgrade_glow() -> void:
+	if _glow_tween != null and _glow_tween.is_valid():
+		_glow_tween.kill()
+
+	pivot_offset = size * 0.5
+	scale = Vector2.ONE
+	_glow.modulate.a = 0.0
+
+	_glow_tween = create_tween()
+	_glow_tween.tween_property(_glow, "modulate:a", 0.85, 0.1) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_glow_tween.parallel().tween_property(self, "scale", Vector2(1.16, 1.16), 0.1) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_glow_tween.tween_property(_glow, "modulate:a", 0.0, 0.5) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	_glow_tween.parallel().tween_property(self, "scale", Vector2.ONE, 0.5) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 
 
 ## Applica i colori della casella: come rettangolo li affida al tema, come
