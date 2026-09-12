@@ -41,6 +41,7 @@ func _ready() -> void:
 		"round_end": _round_end(),
 		"berserk": _berserk(),
 		"countdown": _countdown(),
+		"denied": _denied(),
 	}
 
 	for _i in POOL_SIZE:
@@ -225,6 +226,29 @@ func _countdown() -> AudioStreamWAV:
 	for i in n:
 		var t := float(i) / MIX_RATE
 		out[i] = sin(TAU * 880.0 * t) * _env(i, n, 0.01) * 0.3
+	return _wav(out)
+
+
+## Azione negata: due impulsi bassi e secchi, "no-no" — il contrario del
+## click pulito. Riprodotto quando un pulsante è stato premuto ma l'azione
+## non può avvenire (oro insufficiente, panchina piena, comando rifiutato...),
+## per distinguere subito un tocco a vuoto da uno andato a buon fine.
+func _denied() -> AudioStreamWAV:
+	var pulse := _samples(0.045)
+	var gap := _samples(0.02)
+	var n := pulse * 2 + gap
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		if i >= pulse and i < pulse + gap:
+			out[i] = 0.0
+			continue
+		var local_i := i if i < pulse else i - pulse - gap
+		var square := 1.0 if sin(TAU * 200.0 * float(local_i) / MIX_RATE) >= 0.0 else -1.0
+		var t := float(local_i) / float(pulse)
+		# Rilascio lineare invece che esponenziale: niente coda, resta secco.
+		var env := 1.0 if t < 0.6 else (1.0 - t) / 0.4
+		out[i] = square * env * 0.4
 	return _wav(out)
 
 
