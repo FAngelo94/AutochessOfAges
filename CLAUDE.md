@@ -74,6 +74,7 @@ deploy/         VPS deploy files — Caddy, PostgREST, systemd units, backup (se
 android/        Kotlin plugin for RevenueCat (see android/README.md)
 web/            JS bridge for the HTML5 export (see web/README.md)
 tests/          headless test suites
+tools/          balance simulation, report merging, icon/preview generation — dev-only, not shipped
 ```
 
 Multiplayer (see `MULTIPLAYER_PLAN.md` for the original design; `SELFHOST_PLAN.md` +
@@ -106,7 +107,9 @@ of type **Web application** with that exact redirect URI (`GOOGLE_REDIRECT_URI`)
 sends `AUTH_EMAIL_LOGIN`/`AUTH_EMAIL_SIGNUP` and the master calls the matching Postgres RPC
 (`login_email_account`/`register_email_account`, bcrypt via `pgcrypto`) — both paths converge on
 the same `AccountService._issue_session()` and the same `AUTH_OK` bundle. No RLS (PostgREST isn't
-exposed; role `autochess_app` is least-privilege).
+exposed; role `autochess_app` is least-privilege). Email/password is deliberately scoped to just
+signup + login: no email verification, no password recovery, zero SMTP. Session lifetime
+(`REFRESH_TTL_DAYS`) is 90 days.
 
 `ui/login.tscn` is the actual main scene (`project.godot`): it gates the home behind a login —
 Google, email/password, or "gioca come ospite" (offline, no multiplayer/stats, remembered in
@@ -120,26 +123,39 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | File | Role |
 |---|---|
 | `core/rng.gd` | hand-written xorshift64\* — `RandomNumberGenerator` doesn't guarantee the same stream across engine versions/platforms |
-| `core/game_data.gd` | loads and caches the JSON from `data/` |
+| `core/game_data.gd` | loads and caches the JSON from `data/`, including `data/heroes.json` |
 | `core/unit_pool.gd` | **shared** pool — copies are finite and contested across all players |
-| `core/player.gd` | gold, health, level, bench, board, shop, star merges |
+| `core/unit_def.gd` | `UnitDef` — immutable definition of a unit as it sits in `data/units.json`, no match state |
+| `core/unit_instance.gd` | `UnitInstance` — a unit a player owns outside combat: which def, star, bench/board location |
+| `core/combat_unit.gd` | `CombatUnit` — disposable in-battle unit built from a `UnitInstance`; thrown away after the fight so damage never leaks into persistent state |
+| `core/hero_def.gd` | `HeroDef` — immutable definition of a hero as it sits in `data/heroes.json` |
+| `core/hex.gd` | `Hex` — hexagonal board geometry (odd-r offset ↔ cube coordinates); cells stay `Vector2i`, only the neighborhood (six neighbors, no diagonals) changed from the old square grid |
+| `core/player.gd` | gold, health, level, bench, board, shop, star merges, selected hero (`hero_id`) |
 | `core/trait_resolver.gd` | formation → effective bonuses per unit |
-| `core/combat_sim.gd` | fixed-step battle resolver, produces an event log |
+| `core/combat_sim.gd` | fixed-step hex-board battle resolver, produces an event log; `abilities_enabled` (static) gates unit/hero ability casts for A/B balance testing |
 | `core/match_state.gd` | rounds, pairings, damage, eliminations |
 | `core/bot_brain.gd` | opponent prep AI |
 | `ui/login.gd` | login screen — **this is the main scene**: Google, email/password, or guest |
-| `ui/menu.gd` | start screen, reached only after login/guest |
+| `ui/menu.gd` | start screen, reached only after login/guest; hero selection lives here |
 | `ui/castle_backdrop.gd` | `class_name CastleBackdrop` — the runtime-drawn castle facade, shared by login and menu |
 | `ui/lobby.gd` | matchmaking waiting room (queue count + 30s countdown) |
 | `ui/main.gd` | in-match screen; local mode unchanged, remote mode shows prep timer + PRONTO |
+| `ui/battle_board_3d.gd` | `BattleBoard3D` — the 3D battle scene: hex board, lights, top-down camera, unit nodes; knows nothing about the combat log or timing, `CombatView` feeds it positions/state |
+| `ui/style.gd` | `Style` — shared palette (rarity/civilization colors) so shop, board, bench and collection agree on one color code |
+| `ui/modal_dialog.gd` | `ModalDialog` — in-game confirm/alert dialog on its own `CanvasLayer`, replaces the stock `AcceptDialog`/`ConfirmationDialog` (system chrome, and the scene underneath stays clickable) |
+| `ui/settings_panel.gd` | `SettingsPanel` — volume + (logged in) account deletion, reachable from the menu |
 | `net/auth.gd` | autoload `Auth` — Google (server-side consent: begin → browser → poll on resume) and email/password over a short WS; degrades to guest |
-| `net/match_session.gd` | base class; `LocalSession` / `RemoteSession` back it |
+| `net/match_session.gd` | `MatchSession` base class |
+| `net/local_session.gd` / `net/remote_session.gd` | `LocalSession` owns a real `MatchState` (offline); `RemoteSession` only fills one from server snapshots, never simulates |
+| `net/dev_net.gd` | local-dev multiplayer: runs client + master + worker on one machine, no Caddy/TLS, no real Google login |
 | `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 6) |
 | `server/master_server.gd` | `SceneTree` script; auth (`AUTH_*`/`PROFILE_SET`), OAuth redirect, queue, 30s timer, worker routing |
 | `server/session_token.gd` / `session_verifier.gd` | HMAC session token minted by the master + the instance adapter injected into `Matchmaker` |
+| `server/match_token.gd` | HMAC-signs `SPAWN_MATCH` control messages between master and worker |
+| `server/spawn_channel.gd` | master ↔ worker channel that hands off a sealed lobby to a `MatchRunner` |
 | `server/google_oauth.gd` | consent URL + server-side `code`→`id_token` exchange, validates `aud`/`iss`/`exp` (no JWKS) |
 | `server/oauth_pending.gd` | `state` → pending Google login (socket-free, testable): PKCE pair, one-shot pickup, TTL, cap |
-| `server/oauth_http.gd` | the master's only HTTP route (`GET /oauth/cb`, loopback behind Caddy) + the browser page that offers the "back to AoA" intent |
+| `server/oauth_http.gd` | the master's HTTP routes (`GET /oauth/cb`, `POST /revenuecat/webhook`), loopback behind Caddy + the browser page that offers the "back to AoA" intent |
 | `server/account_service.gd` | login/refresh orchestration: OAuth → `upsert_google_account` → mint session + opaque refresh |
 | `server/db_client.gd` | PostgREST calls on `DB_API_URL` (loopback), no auth headers; replaces `supabase_admin.gd` |
 | `server/matchmaker.gd` | socket-free queue core (testable) |
@@ -148,17 +164,17 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `server/stats_writer.gd` | writes `match_history` / `player_stats` / `match_units` via PostgREST RPC `record_match_result` |
 | `ui/combat_view.gd` | replays the battle by reading the event log |
 | `ui/phase_bar.gd` | `PhaseBar` — time bar shared by preparation and battle |
-| `ui/unit_slot.gd` | shop/board/bench/collection slot; shows the 3D model |
-| `art/unit_models.gd` | procedural unit figures (see below) |
-| `art/unit_portraits.gd` | renders each model once, keeps the texture (autoload `Portraits`) |
+| `ui/unit_slot.gd` | shop/board/bench/collection slot; shows the 3D model, drag-and-drop placement |
+| `art/unit_models.gd` | procedural unit figures (see below); also builds hero figures (`build_hero`) |
+| `art/unit_portraits.gd` | renders each model once, keeps the texture (autoload `Portraits`), preloads hero portraits too |
 | `ui/collection_panel.gd` | unit encyclopedia, generated from `data/` |
 | `ui/history_panel.gd` | match history — merges the server's online matches with the local ones |
 | `ui/store_panel.gd` | Crowdfunding Store — fixed donation tiers, progress bar to €1000, goal list |
 | `ui/guide_panel.gd` | "how to play" screen, generated from `data/tutorial.json` |
 | `ui/tip_bubble.gd` | one-shot in-match tips, queued in `data/tutorial.json`, tracked in `Profile.seen_tips` |
-| `app/profile.gd` | favorite civilization, battle speed, stats (autoload `Profile`) |
+| `app/profile.gd` | favorite civilization, favorite/effective hero, battle speed, stats (autoload `Profile`) |
 | `app/match_log.gd` | local match history (`user://history.json`) + balance telemetry (`user://telemetry.jsonl`) |
-| `core/unit_telemetry.gd` | per-unit balance accumulator, shared by the sim, local matches and the server |
+| `core/unit_telemetry.gd` | per-unit balance accumulator, shared by the sim, local matches, the server and `tools/balance_sim.gd` |
 
 Autoloads (project.godot): `Profile`, `Portraits`, `Store`.
 
@@ -196,6 +212,31 @@ When `elapsed` runs out it is **always** `Outcome.DRAW` — no remaining-HP tie-
 preparation phase at the bottom of the screen. In local mode the preparation countdown lives in
 `ui/main.gd` (`_tick_preparation` / `_restart_preparation_timer`) and fires `request_ready()` at
 zero, so single-player has the same rhythm as online instead of waiting forever on COMBATTI.
+
+### Heroes and unit abilities
+
+`data/heroes.json` defines **heroes**: an optional economic bonus picked before the match, in
+`ui/menu.gd`. Heroes are **not units** — they never enter the shared `UnitPool`, and `origin` only
+picks the palette of their (procedural) 3D model. Each has one `ability_type` (`gold_on_loss`,
+`gold_on_merge`, `colossus`, …) resolved in `core/player.gd`/`core/combat_sim.gd` from
+`ability_params`; adding a hero is a JSON entry plus a `match` branch wherever that ability_type is
+read, mirroring how a civilization is added.
+
+Units themselves can carry an `ability` in `data/units.json` (`UnitDef.ability_type()`), cast
+during battle when `is_ability_ready()` — cooldown-gated, logged as a `cast` event like everything
+else. `CombatSim.abilities_enabled` (static) is a single global switch: `false` runs pure
+stat-based combat, used by `tools/balance_sim.gd --no-abilities` to A/B-test whether abilities (not
+just stats) explain a unit's win rate.
+
+### Hex board
+
+The battle board is a **hexagonal** grid (`core/hex.gd`, odd-r offset), not the original square
+grid: cells are still `Vector2i(column, row)` — no save/log format changed — but the neighborhood
+is six cells with no diagonal, and pathing/range math goes through cube coordinates internally.
+`ui/battle_board_3d.gd` (`BattleBoard3D`) renders it: a `Node3D` scene with hex tiles, a top-down
+camera and the unit nodes, driven purely by positions/state `CombatView` feeds it — it has no
+knowledge of the combat log or timing, so the rendering can change without touching resolution
+logic.
 
 ### Adding a civilization
 
@@ -316,6 +357,13 @@ what keeps the table readable — and `pool.scarcity_exponent: 0.0` restores the
 distribution without touching code. A band at zero weighs zero whatever the exponent, which is
 what removed the old downward fallback: drawing cost 1 when cost 1 was exhausted had no cheaper
 band to fall back on and left the shop slot empty.
+
+`tools/balance_sim.gd` plays N bot-only matches headlessly and reports per-unit/per-synergy stats
+via the same `core/unit_telemetry.gd` accumulator as real matches, so simulated and played numbers
+are comparable. `tools/run_parallel_sim.sh` shards a run across several headless Godot instances
+(matches split, not seeds duplicated) and merges the shard reports with `tools/merge_reports.gd` —
+built for the abilities A/B test (`--no-abilities`), but useful any time a balance change needs a
+sample larger than an evening of manual play can produce.
 
 ### Monetization — Crowdfunding Store
 
