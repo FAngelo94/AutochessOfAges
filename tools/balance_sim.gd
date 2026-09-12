@@ -13,6 +13,9 @@ var base_seed := 1
 ## scrivere ogni processo (quando se ne lanciano più in parallelo, uno per
 ## quota di partite) sul proprio file senza pestarsi i piedi a vicenda.
 var out_path := ""
+## --no-abilities disattiva CombatSim.abilities_enabled per l'intera run: test
+## A/B "solo statistiche" vs. "statistiche + abilità" a parità di seed.
+var abilities_enabled := true
 
 ## L'accumulatore vero e proprio sta in core/unit_telemetry.gd: lo stesso che
 ## raccoglie i numeri delle partite vere (locali e online), così il report di
@@ -28,19 +31,39 @@ func _initialize() -> void:
 			base_seed = int(arg.split("=")[1])
 		elif arg.begins_with("--out="):
 			out_path = arg.split("=")[1]
+		elif arg == "--no-abilities":
+			abilities_enabled = false
 
+	CombatSim.abilities_enabled = abilities_enabled
 	GameData.ensure_loaded()
 	telemetry = UnitTelemetry.new()
 
 	var t0 := Time.get_ticks_msec()
 	for m in matches:
 		_run_match(base_seed + m * 1000)
+		_write_progress(m + 1)
 		if m % 25 == 0:
 			print("  ... partita %d/%d" % [m, matches])
 	var secs := (Time.get_ticks_msec() - t0) / 1000.0
 
 	_report(secs)
 	quit(0)
+
+
+## Scritto (e chiuso subito) dopo ogni singola partita, non solo ogni 25 come
+## la stampa a console: lo stdout di Godot è bufferizzato quando reindirizzato
+## su file (tipico quando lo si lancia in background), quindi un orchestratore
+## esterno che legga i log non vedrebbe avanzamento fino alla fine. Un file a
+## parte, riscritto ad ogni partita, resta l'unico modo per seguirlo dal vivo.
+func _write_progress(done: int) -> void:
+	var f := FileAccess.open(_progress_path(), FileAccess.WRITE)
+	if f != null:
+		f.store_string("%d/%d" % [done, matches])
+		f.close()
+
+
+func _progress_path() -> String:
+	return (out_path if out_path != "" else "user://balance_report.json") + ".progress"
 
 
 func _run_match(match_seed: int) -> void:

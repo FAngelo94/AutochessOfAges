@@ -9,6 +9,10 @@ extends RefCounted
 ## dopo aver validato un comando ricevuto dal client.
 
 signal changed
+## Emesso quando una fusione produce l'unità finale (mai per uno stadio
+## intermedio subito rifuso in uno più alto): ui/main.gd lo usa per il
+## lampeggio di potenziamento sulla casella giusta.
+signal unit_upgraded(unit: UnitInstance)
 
 var index: int = 0
 var display_name: String = "Giocatore"
@@ -459,7 +463,13 @@ func _try_upgrade(unit_id: String, star: int) -> UnitInstance:
 	units.append(upgraded)
 
 	var further := _try_upgrade(unit_id, star + 1)
-	return further if further != null else upgraded
+	if further != null:
+		# La 2★ appena creata è già stata rifusa in una 3★ dalla chiamata
+		# ricorsiva sopra, che ha già emesso il segnale per lei: non è mai
+		# stata visibile, quindi non deve lampeggiare una seconda volta.
+		return further
+	unit_upgraded.emit(upgraded)
+	return upgraded
 
 
 ## Aggiunge un'unità senza pagarla e senza toccare il pool: per i round contro

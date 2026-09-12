@@ -298,7 +298,7 @@ func clear_units() -> void:
 ## all'id; la squadra si legge dal disco colorato sotto i piedi, non dalla
 ## tinta della figura — così la civiltà resta riconoscibile in entrambi gli
 ## schieramenti.
-func spawn_unit(uid: int, unit_id: String, origin: String, team: int, cell: Vector2i, star: int) -> void:
+func spawn_unit(uid: int, unit_id: String, origin: String, team: int, cell: Vector2i, star: int, model_scale: float = 1.0) -> void:
 	var pivot := Node3D.new()
 	pivot.name = "Unit_%d" % uid
 	pivot.position = cell_to_world(Vector2(cell))
@@ -349,7 +349,10 @@ func spawn_unit(uid: int, unit_id: String, origin: String, team: int, cell: Vect
 	# visivamente, non solo nelle statistiche.
 	# Le figure partono sopra la scala nominale: in una cella da 1.0 unità viste
 	# di scorcio, a scala 1 restavano piccole rispetto alla casella.
-	var star_scale := 1.18 + 0.10 * float(clampi(star, 1, 3) - 1)
+	# `model_scale` è il bonus di un'eventuale abilità eroe (Teutobod: l'unità
+	# più costosa schierata diventa un gigante) e si compone con quello delle
+	# stelle invece di sostituirlo.
+	var star_scale := (1.18 + 0.10 * float(clampi(star, 1, 3) - 1)) * model_scale
 	model.scale = Vector3.ONE * star_scale
 	# La squadra vicina alla camera guarda verso il campo avversario.
 	model.rotation_degrees = Vector3(0, 180.0 if team == viewer_team else 0.0, 0)

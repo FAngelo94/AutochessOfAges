@@ -52,7 +52,7 @@ const PALETTES := {
 ## Archetipi noti, in ordine di priorità: un'unità con più classi prende il
 ## modello della prima che compare qui. La cavalleria vince sull'assedio perché
 ## il carro falcato si riconosce dal cavallo, non dal cassone.
-const ARCHETYPE_PRIORITY := ["cavalry", "siege", "archer", "druid", "berserker", "legionary"]
+const ARCHETYPE_PRIORITY := ["cavalry", "siege", "archer", "druid", "berserker", "infantry"]
 
 ## Modelli d'artista, se forniti: un file res://models/<unit_id>.glb ha sempre
 ## la precedenza sulla figura procedurale per quello stesso id. Un'unità senza
@@ -307,11 +307,11 @@ static func _role_color(role: String, palette: Dictionary) -> Color:
 static func archetype_of(unit_id: String) -> String:
 	var def := GameData.unit(unit_id)
 	if def == null:
-		return "legionary"
+		return "infantry"
 	for archetype in ARCHETYPE_PRIORITY:
 		if def.classes.has(archetype):
 			return archetype
-	return "legionary"
+	return "infantry"
 
 
 ## Altezza approssimativa del modello, per piazzare barre e testi sopra la
@@ -345,15 +345,18 @@ static func build_hero(hero_id: String) -> Node3D:
 	match hero_id:
 		"cesare": _build_cesare(root, palette)
 		"vercingetorige": _build_vercingetorige(root, palette)
-		_: _build_archetype(root, palette, "legionary")
+		"teutobod": _build_teutobod(root, palette)
+		_: _build_archetype(root, palette, "infantry")
 
 	return root
 
 
 ## Gli eroi sono figure di comando: leggermente più alte degli archetipi
 ## regolari, per distinguersi a colpo d'occhio nel ritratto e in battaglia.
-static func height_of_hero(_hero_id: String) -> float:
-	return 0.95
+static func height_of_hero(hero_id: String) -> float:
+	match hero_id:
+		"teutobod": return 1.15
+		_: return 0.95
 
 
 # --------------------------------------------------------------------------
@@ -391,6 +394,22 @@ static func _build_vercingetorige(root: Node3D, palette: Dictionary) -> void:
 	shield.scale = Vector3(1.0, 1.0, 1.35)
 	_add(root, _sphere(0.055), palette["metal"],
 		_xf(Vector3(-0.30, 0.42, 0.06), Vector3.ZERO, Vector3(0.6, 1, 1)))
+
+
+## Teutobod: il Re Gigante. Nessuno scudo, nessuna lancia — solo statura
+## colossale (la scala più alta di ogni eroe) e un maglio a due mani tenuto
+## basso e di scorcio, non una piastra larga che dall'alto letta come un corpo
+## disteso. La corona è un anello di ferro grezzo, non l'alloro di un console:
+## Teutobod era un condottiero eletto per il valore, non un magistrato.
+static func _build_teutobod(root: Node3D, palette: Dictionary) -> void:
+	_humanoid(root, palette, {"tunic": palette["primary"], "scale": 1.32, "shoulders": 0.40, "helmet": false})
+	_add(root, _torus(0.075, 0.10), palette["metal"],
+		_xf(Vector3(0, 0.79, 0), Vector3(90, 0, 0)))
+	_cloak(root, palette["secondary"].darkened(0.2), 0.46, 0.50)
+	_add(root, _cylinder(0.030, 0.48), palette["wood"],
+		_xf(Vector3(0.03, 0.42, 0.16), Vector3(68, 0, 6)))
+	_add(root, _tapered(0.12, 0.09, 0.20), palette["metal"],
+		_xf(Vector3(0.05, 0.62, 0.33), Vector3(68, 0, 6)))
 
 
 # --------------------------------------------------------------------------

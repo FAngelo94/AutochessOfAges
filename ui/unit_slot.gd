@@ -43,12 +43,20 @@ var _fallback: Label
 var _badge: Label
 var _badge_mode: int = Badge.NONE
 
+## Lampo dorato additivo che segna il potenziamento: sopra a tutto il resto
+## (figura e badge), trasparente a riposo.
+var _level_up_glow: ColorRect
+
 ## Il tooltip nativo di Godot si piazza dov'è comodo a lui, spesso sotto il
 ## dito — illeggibile su touch. Il testo si tiene qui e si disegna da soli con
 ## _show_hover_card, ancorata sopra la casella; tooltip_text resta vuoto così
 ## il popup di sistema non compare mai.
 var _hover_text: String = ""
 var _hover_card: PanelContainer = null
+
+## Vero mentre un'unità in trascinamento sorvola questa casella ed è un
+## bersaglio valido: fa risaltare l'esagono su cui atterrerebbe.
+var _drag_hover := false
 
 ## L'autoload si prende dall'albero e non per nome globale: gli script
 ## compilati da riga di comando non lo vedrebbero. In _init il nodo non è
@@ -88,6 +96,15 @@ func _init() -> void:
 	_badge.add_theme_constant_override("outline_size", 5)
 	_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_badge)
+
+	_level_up_glow = ColorRect.new()
+	_level_up_glow.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_level_up_glow.color = Color(1.0, 0.9, 0.55, 0.0)
+	_level_up_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var glow_material := CanvasItemMaterial.new()
+	glow_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_level_up_glow.material = glow_material
+	add_child(_level_up_glow)
 
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
@@ -140,6 +157,21 @@ func show_unit(def: UnitDef, star: int, badge_mode: int, fill: Color, border: Co
 			_badge.text = ""
 
 
+## Lampo dorato temporaneo più un breve "pop" di scala: la conferma visiva che
+## qui è appena arrivata un'unità fusa a una stella più alta. Solo estetico —
+## non tocca lo stato di gioco, quindi è sicuro chiamarlo a refresh completato.
+func play_level_up_flash() -> void:
+	pivot_offset = size * 0.5
+	_level_up_glow.color = Color(1.0, 0.9, 0.55, 0.0)
+	scale = Vector2.ONE
+	var tween := create_tween()
+	tween.tween_property(_level_up_glow, "color:a", 0.9, 0.08)
+	tween.parallel().tween_property(self, "scale", Vector2(1.15, 1.15), 0.08) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(_level_up_glow, "color:a", 0.0, 0.5).set_trans(Tween.TRANS_SINE)
+	tween.parallel().tween_property(self, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_SINE)
+
+
 ## Applica i colori della casella: come rettangolo li affida al tema, come
 ## esagono se li tiene per disegnarli e azzera gli sfondi del tema, altrimenti
 ## il rettangolo comparirebbe sotto l'esagono.
@@ -162,7 +194,14 @@ func _draw() -> void:
 	draw_colored_polygon(points, _fill)
 	var outline := points.duplicate()
 	outline.append(points[0])
-	draw_polyline(outline, _border, _border_width, true)
+	if _drag_hover:
+		# L'esagono su cui il drag sta per atterrare si illumina: un riempimento
+		# chiaro più il bordo dell'evidenziazione, sopra allo stile normale della
+		# casella così resta leggibile anche su una cella già occupata.
+		draw_colored_polygon(points, Color(Style.SELECTED, 0.35))
+		draw_polyline(outline, Style.SELECTED, _border_width + 1.5, true)
+	else:
+		draw_polyline(outline, _border, _border_width, true)
 
 
 ## Esagono con la punta in alto inscritto nella casella, rientrato di un paio
@@ -240,12 +279,28 @@ func _get_drag_data(_at_position: Vector2) -> Variant:
 
 
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
-	return drag_agent != null and drag_agent.slot_can_drop(self, data)
+	# Chiamata da Godot a ogni movimento del mouse/dito sopra la casella
+	# durante un trascinamento: è anche il punto giusto per accendere
+	# l'evidenziazione della cella su cui l'unità sta per atterrare.
+	var can: bool = drag_agent != null and drag_agent.slot_can_drop(self, data)
+	if hexagonal and can != _drag_hover:
+		_drag_hover = can
+		queue_redraw()
+	return can
 
 
 func _drop_data(_at_position: Vector2, data: Variant) -> void:
 	if drag_agent != null:
 		drag_agent.slot_drop(self, data)
+
+
+func _notification(what: int) -> void:
+	# Fine del trascinamento (rilascio o Esc): spegne l'evidenziazione anche
+	# se il dito/puntatore non è mai uscito dalla casella, come nel caso in
+	# cui il rilascio avvenga proprio qui sopra.
+	if what == NOTIFICATION_DRAG_END and _drag_hover:
+		_drag_hover = false
+		queue_redraw()
 
 
 ## L'anteprima segue il dito/puntatore centrata su di esso (di default Godot la
@@ -283,6 +338,9 @@ func _on_mouse_entered() -> void:
 
 func _on_mouse_exited() -> void:
 	_hide_hover_card()
+	if _drag_hover:
+		_drag_hover = false
+		queue_redraw()
 
 
 ## La carta va fuori dal clipping di questa casella (clip_contents = true) e

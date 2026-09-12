@@ -14,6 +14,11 @@ const CELL := Color(0.16, 0.16, 0.21)
 const FRONT_LINE := Color(0.21, 0.17, 0.17)
 const SELECTED := Color(0.95, 0.78, 0.32)
 const TEXT_DIM := Color(0.62, 0.62, 0.7)
+## Evidenzia, nella lista unità del dettaglio sinergia, chi è schierato sul
+## campo (verde) rispetto a chi è posseduto ma fermo in panchina (arancio) —
+## distinti dal verde di rarità costo 2 in RARITY.
+const OWNED := Color(0.4, 0.85, 0.45)
+const OWNED_BENCH := Color(0.92, 0.62, 0.25)
 
 ## Colori di rarità per costo, la convenzione del genere: grigio, verde, blu,
 ## viola, oro. Indice 0 = costo 1.

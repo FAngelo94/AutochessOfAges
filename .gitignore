@@ -23,3 +23,6 @@ data/.secret.env
 # `build/` piu' sopra copre gia' android/build/ e revenuecat_plugin/build/.
 .gradle/
 android/.build_version
+
+# keystore passwords for Android export
+export_presets.cfg.credentials

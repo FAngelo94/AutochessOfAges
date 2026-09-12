@@ -323,7 +323,7 @@ func _resolve_matchup(matchup: Dictionary) -> Dictionary:
 	# round con le stesse squadre dà lo stesso risultato.
 	var combat_rng := SimRNG.new(seed_value ^ (stage * 7919 + round_index * 104729 + player_a.index * 31 + player_b.index))
 	var sim := CombatSim.new(combat_rng)
-	sim.setup(player_a.board_units(), player_b.board_units())
+	sim.setup(player_a.board_units(), player_b.board_units(), player_a.hero_id, player_b.hero_id)
 	var combat_result := sim.run()
 
 	var a_won: bool = combat_result["outcome"] == CombatSim.Outcome.TEAM_A

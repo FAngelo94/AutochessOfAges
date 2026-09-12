@@ -18,13 +18,17 @@ extends Control
 ## li distribuisce ingrandendo le caselle; dove non avanza niente (16:9, o una
 ## finestra piccola sul desktop) il fattore vale 1.0 e valgono esattamente questi
 ## numeri.
-const CELL_SIZE := Vector2(76, 88)
-const SHOP_SLOT_SIZE := Vector2(92, 96)
+const CELL_SIZE := Vector2(86, 100)
+const SHOP_SLOT_SIZE := Vector2(106, 110)
 const BENCH_SLOT_SIZE := SHOP_SLOT_SIZE
+## Casella compatta per la lista di tutte le unità di una sinergia nel
+## modale di dettaglio — più piccola delle altre perché lì serve solo
+## riconoscere il modello, non interagire con la casella.
+const SYNERGY_UNIT_SLOT_SIZE := Vector2(56, 64)
 
 ## Pulsanti icona a destra di panchina (esperienza) e negozio (aggiorna). La
 ## larghezza è fissa, l'altezza la detta la casella a cui stanno a fianco.
-const ICON_BUTTON_SIZE := Vector2(84, 56)
+const ICON_BUTTON_SIZE := Vector2(97, 64)
 
 ## Le righe dispari della plancia risalgono di un quarto d'altezza su quella
 ## sopra: è ciò che incastra gli esagoni invece di lasciarli in file staccate.
@@ -52,11 +56,12 @@ const CONTENT_HEADROOM := 124.0
 const SIDE_MARGIN := 16
 
 ## In preparazione la scheda delle sinergie sta a destra della plancia, in una
-## colonna di larghezza fissa che ospita una griglia 2×N di chip a simbolo. La
-## plancia (minimo 76×5.5 = 418 px) resta comodamente dentro lo spazio che
-## avanza su una tela da 720 (688 − 210 − 8 = 470). Il tetto di larghezza della
-## plancia in _slot_scales() sottrae questi due valori.
-const SYNERGY_COL_WIDTH := 210.0
+## colonna di larghezza fissa che ospita una colonna di chip a simbolo, una
+## per riga: una sola per riga occupa molto meno che la vecchia griglia 2×N,
+## quindi questa colonna può restare stretta e lasciare più margine alla
+## plancia. Il tetto di larghezza della plancia in _slot_scales() sottrae
+## questi due valori.
+const SYNERGY_COL_WIDTH := 180.0
 const SYNERGY_COL_GAP := 8
 
 const TOP_MARGIN := 38
@@ -181,6 +186,7 @@ var _synergy_detail_backdrop: ColorRect
 var _synergy_detail_title: Label
 var _synergy_detail_description: Label
 var _synergy_detail_tiers: VBoxContainer
+var _synergy_detail_units: GridContainer
 var _combat_view: CombatView
 var _tips: TipBubble
 var _combat_title: Label
@@ -226,6 +232,11 @@ var _auto_close_left: float = -1.0
 ## RemoteSession Array[Dictionary]). Vuota finché la partita non è decisa.
 var _final_standings: Array = []
 var _match_recorded := false
+
+## Uid delle unità appena fuse a una stella più alta (Player.unit_upgraded),
+## in attesa che _refresh_board/_refresh_bench ridisegnino la loro casella e
+## possano farla lampeggiare. Svuotato man mano che ogni casella lo consuma.
+var _level_up_pending: Dictionary = {}
 
 
 func _exit_tree() -> void:
@@ -316,8 +327,6 @@ func _build_ui() -> void:
 	scroll.add_child(body)
 	_body = body
 
-	body.add_child(_section_title("SCHIERAMENTO — la prima fila è a contatto col nemico"))
-
 	# Una riga per HBox invece di una griglia unica: il campo è esagonale, e le
 	# righe dispari vanno sfalsate di mezza cella. Una GridContainer allinea le
 	# colonne per costruzione, e mostrerebbe adiacenze che in battaglia non
@@ -349,16 +358,7 @@ func _build_ui() -> void:
 	synergy_side.add_child(_section_title("SINERGIE"))
 	synergy_side.add_child(_build_synergy_card())
 
-	# Gli avversari stanno SOTTO la plancia, in striscia. Da colonna a fianco
-	# rubavano 164 px di larghezza in permanenza all'unica cosa con cui si
-	# gioca davvero; in orizzontale ne costano una cinquantina in altezza e
-	# restano comunque sempre visibili, senza aprire nessun foglio.
 	body.add_child(_spacer(6))
-	body.add_child(_section_title("CLASSIFICA"))
-	body.add_child(_build_ranking_strip())
-
-	body.add_child(_spacer(6))
-	body.add_child(_section_title("PANCHINA"))
 
 	# Ogni riga di caselle ha il proprio pulsante icona a destra, accoppiato per
 	# significato invece che per comodità di layout: l'esperienza governa il
@@ -455,6 +455,10 @@ func _build_hud() -> Control:
 	_stats_label.add_theme_font_size_override("bold_font_size", 18)
 	_stats_label.add_theme_color_override("default_color", Style.TEXT_DIM)
 	column.add_child(_stats_label)
+
+	# Subito sotto nome/unità/serie, sempre visibile e non in fondo allo
+	# scroll: è l'altro numero che si controlla a ogni mossa.
+	column.add_child(_build_ranking_strip())
 
 	return column
 
@@ -1397,8 +1401,8 @@ func _style_ranking_row(row: Button, highlight: bool = false) -> void:
 	row.add_theme_stylebox_override("disabled", clear)
 
 
-## Riquadro sinergie sulla schermata principale: una griglia 2×N di chip, una
-## per tratto presente in squadra. Sta nella colonna a destra della plancia;
+## Riquadro sinergie sulla schermata principale: una colonna di chip, una per
+## tratto presente in squadra. Sta nella colonna a destra della plancia;
 ## ogni chip è cliccabile e apre il dettaglio dei bonus. Lo sfondo della chip
 ## (tinta della civiltà / classe se attiva, piastra scura se no) dice a colpo
 ## d'occhio se la soglia è raggiunta — niente pallino.
@@ -1407,7 +1411,7 @@ func _build_synergy_card() -> Control:
 	panel.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
 
 	_synergy_row = GridContainer.new()
-	_synergy_row.columns = 2
+	_synergy_row.columns = 1
 	_synergy_row.add_theme_constant_override("h_separation", 6)
 	_synergy_row.add_theme_constant_override("v_separation", 6)
 	panel.add_child(_synergy_row)
@@ -1426,11 +1430,6 @@ func _refresh_synergies() -> void:
 
 	var rows := TraitResolver.summary(player().board_units())
 	if rows.is_empty():
-		var label := Label.new()
-		label.text = "Nessuna sinergia attiva."
-		label.add_theme_font_size_override("font_size", 16)
-		label.add_theme_color_override("font_color", Style.TEXT_DIM)
-		_synergy_row.add_child(label)
 		return
 
 	var any_active := false
@@ -1497,7 +1496,9 @@ func _build_synergy_detail() -> void:
 	add_child(_synergy_detail)
 
 	var dialog := PanelContainer.new()
-	dialog.custom_minimum_size = Vector2(420, 0)
+	# Più largo di prima: deve ospitare anche la griglia dei modelli delle
+	# unità della sinergia, non solo il testo delle soglie.
+	dialog.custom_minimum_size = Vector2(560, 0)
 	dialog.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.GOLD_DEEP, 18, 6))
 	_synergy_detail.add_child(dialog)
 
@@ -1529,14 +1530,29 @@ func _build_synergy_detail() -> void:
 	# lista delle soglie spingerebbe il modale fuori dallo schermo su una
 	# sinergia con molti livelli.
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 260)
+	# Più alto di prima: ora contiene anche la griglia dei modelli, non solo
+	# la lista delle soglie.
+	scroll.custom_minimum_size = Vector2(0, 420)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	column.add_child(scroll)
+
+	var scroll_content := VBoxContainer.new()
+	scroll_content.add_theme_constant_override("separation", 16)
+	scroll_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(scroll_content)
 
 	_synergy_detail_tiers = VBoxContainer.new()
 	_synergy_detail_tiers.add_theme_constant_override("separation", 10)
 	_synergy_detail_tiers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_synergy_detail_tiers)
+	scroll_content.add_child(_synergy_detail_tiers)
+
+	scroll_content.add_child(_section_title("Unità"))
+
+	_synergy_detail_units = GridContainer.new()
+	_synergy_detail_units.columns = 6
+	_synergy_detail_units.add_theme_constant_override("h_separation", 6)
+	_synergy_detail_units.add_theme_constant_override("v_separation", 6)
+	scroll_content.add_child(_synergy_detail_units)
 
 	var close := Button.new()
 	close.text = "Chiudi"
@@ -1595,6 +1611,33 @@ func _open_synergy_detail(trait_id: String, units: Array = []) -> void:
 		effect_text.add_theme_font_size_override("font_size", 17)
 		inner.add_child(effect_text)
 
+	for child in _synergy_detail_units.get_children():
+		child.queue_free()
+
+	# Due insiemi distinti: sul campo (verde) o solo in panchina (arancio) —
+	# chi ha l'unità in panchina la possiede comunque, anche se al momento
+	# non conta per le soglie.
+	var board_ids := {}
+	for owned in player().board_units():
+		board_ids[owned.def.id] = true
+	var bench_ids := {}
+	for owned in player().bench_units():
+		bench_ids[owned.def.id] = true
+
+	for unit_def in GameData.units_with_trait(trait_id):
+		var slot := UnitSlot.new()
+		slot.custom_minimum_size = SYNERGY_UNIT_SLOT_SIZE
+		var fill := Style.PANEL
+		var border := Style.rarity_color(unit_def.cost)
+		if board_ids.has(unit_def.id):
+			fill = Style.OWNED.darkened(0.65)
+			border = Style.OWNED
+		elif bench_ids.has(unit_def.id):
+			fill = Style.OWNED_BENCH.darkened(0.65)
+			border = Style.OWNED_BENCH
+		slot.show_unit(unit_def, 0, UnitSlot.Badge.NONE, fill, border, 2)
+		_synergy_detail_units.add_child(slot)
+
 	_synergy_detail_backdrop.visible = true
 	_synergy_detail.visible = true
 
@@ -1648,6 +1691,8 @@ func _start_new_match() -> void:
 	# Prima di _apply_session_mode_ui(): ora quella legge lo stato per decidere
 	# se il giocatore è fuori, e senza match_state non può.
 	match_state = _session.state()
+	_level_up_pending.clear()
+	player().unit_upgraded.connect(_on_unit_upgraded)
 	_apply_session_mode_ui()
 
 	_log("[b]Nuova partita[/b] (seed %d)" % match_state.seed_value)
@@ -2594,6 +2639,13 @@ func _refresh_shop() -> void:
 		)
 
 
+## Segna l'unità come in attesa del lampeggio: lo riceve nella stessa chiamata
+## in cui è nata, prima che _refresh_board/_refresh_bench ne aggiornino la
+## casella, quindi arriva qui sempre in tempo.
+func _on_unit_upgraded(unit: UnitInstance) -> void:
+	_level_up_pending[unit.uid] = true
+
+
 func _refresh_board() -> void:
 	var p := player()
 	for cell in _cell_buttons:
@@ -2622,6 +2674,8 @@ func _style_unit_button(button: UnitSlot, unit: UnitInstance, front_line: bool =
 		unit.def, unit.star, UnitSlot.Badge.STARS,
 		Style.PANEL, border, 3 if unit == selected else 2, _unit_tooltip(unit.def)
 	)
+	if _level_up_pending.erase(unit.uid):
+		button.play_level_up_flash()
 
 
 func _unit_tooltip(def: UnitDef) -> String:

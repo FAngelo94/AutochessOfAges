@@ -11,6 +11,12 @@ extends RefCounted
 
 enum Outcome { TEAM_A, TEAM_B, DRAW }
 
+## Interruttore globale per i test A/B di bilanciamento (tools/balance_sim.gd
+## --no-abilities): a false nessuna unità lancia la propria abilità, il resto
+## della simulazione (mana comunque accumulato, danno base, sinergie) resta
+## invariato. Non tocca una partita normale, che lo lascia a true.
+static var abilities_enabled := true
+
 var arena_columns: int
 var arena_rows: int
 var tick_delta: float
@@ -42,6 +48,10 @@ var _by_uid: Dictionary = {}
 var _deaths_by_team := {0: 0, 1: 0}
 var _prune_accumulator := 0.0
 var _berserk_announced := false
+## uid rimappato -> model_scale, per l'unità resa gigante da un eroe "colossus"
+## (Teutobod). Letto solo per marcare `_initial`, la vista lo usa per ingrandire
+## il modello 3D in battaglia.
+var _colossus_scale := {}
 
 
 func _init(rng: SimRNG) -> void:
@@ -69,7 +79,7 @@ func board_cell_to_arena(cell: Vector2i, team: int) -> Vector2i:
 	return Vector2i((arena_columns - 1) - cell.x, half + cell.y)
 
 
-func setup(team_a: Array[UnitInstance], team_b: Array[UnitInstance]) -> void:
+func setup(team_a: Array[UnitInstance], team_b: Array[UnitInstance], hero_a: String = "", hero_b: String = "") -> void:
 	units.clear()
 	events.clear()
 	_occupancy.clear()
@@ -78,9 +88,10 @@ func setup(team_a: Array[UnitInstance], team_b: Array[UnitInstance]) -> void:
 	elapsed = 0.0
 	_berserk_announced = false
 	_deaths_by_team = {0: 0, 1: 0}
+	_colossus_scale.clear()
 
-	_add_team(team_a, 0)
-	_add_team(team_b, 1)
+	_add_team(team_a, 0, hero_a)
+	_add_team(team_b, 1, hero_b)
 
 	# Ordine di aggiornamento stabile: è ciò che garantisce il determinismo,
 	# perché l'esito di un pareggio di tempi dipende da chi agisce prima.
@@ -103,11 +114,18 @@ func setup(team_a: Array[UnitInstance], team_b: Array[UnitInstance]) -> void:
 			"shield": unit.shield,
 			"mana_max": unit.base_stat("mana_max"),
 			"range": unit.effective_range(0.0),
+			"model_scale": _colossus_scale.get(unit.uid, 1.0),
 		})
 
 
-func _add_team(instances: Array[UnitInstance], team: int) -> void:
+func _add_team(instances: Array[UnitInstance], team: int, hero_id: String = "") -> void:
 	var bonuses := TraitResolver.bonuses_by_uid(instances)
+	var colossus_params := _colossus_params(instances, hero_id)
+	var giant_uid := int(colossus_params.get("uid", -1))
+	if giant_uid != -1:
+		var giant_bonus: Dictionary = bonuses[giant_uid]
+		giant_bonus["hp_percent"] = float(giant_bonus.get("hp_percent", 0.0)) + float(colossus_params["hp_bonus"])
+		giant_bonus["attack_damage_percent"] = float(giant_bonus.get("attack_damage_percent", 0.0)) + float(colossus_params["attack_bonus"])
 	for instance in instances:
 		if not instance.is_on_board():
 			continue
@@ -116,9 +134,39 @@ func _add_team(instances: Array[UnitInstance], team: int) -> void:
 		# Gli uid dei due giocatori possono coincidere: li rendo univoci
 		# all'interno della battaglia senza toccare lo stato persistente.
 		unit.uid = instance.uid * 2 + team
+		if instance.uid == giant_uid:
+			_colossus_scale[unit.uid] = float(colossus_params["model_scale"])
 		units.append(unit)
 		_by_uid[unit.uid] = unit
 		_occupancy[arena_cell] = unit.uid
+
+
+## Eroe "colossus" (Teutobod): ingigantisce l'unità più costosa schierata da
+## chi lo ha scelto. Vuoto se `hero_id` non ha quel tipo di abilità. La scelta
+## è deterministica (costo massimo, poi uid più basso) perché la stessa
+## battaglia deve rigiocarsi identica a ogni replay.
+func _colossus_params(instances: Array[UnitInstance], hero_id: String) -> Dictionary:
+	if hero_id == "" or not GameData.has_hero(hero_id):
+		return {}
+	var hdef := GameData.hero(hero_id)
+	if hdef.ability_type != "colossus":
+		return {}
+
+	var chosen: UnitInstance = null
+	for instance in instances:
+		if not instance.is_on_board():
+			continue
+		if chosen == null or instance.def.cost > chosen.def.cost or (instance.def.cost == chosen.def.cost and instance.uid < chosen.uid):
+			chosen = instance
+	if chosen == null:
+		return {}
+
+	return {
+		"uid": chosen.uid,
+		"hp_bonus": float(hdef.ability_params.get("hp_bonus", 0.0)),
+		"attack_bonus": float(hdef.ability_params.get("attack_bonus", 0.0)),
+		"model_scale": float(hdef.ability_params.get("model_scale", 1.0)),
+	}
 
 
 # --------------------------------------------------------------------------
@@ -256,7 +304,7 @@ func _update_unit(unit: CombatUnit) -> void:
 	unit.attack_cooldown = maxf(0.0, unit.attack_cooldown - tick_delta)
 	unit.move_cooldown = maxf(0.0, unit.move_cooldown - tick_delta)
 
-	if unit.is_ability_ready():
+	if abilities_enabled and unit.is_ability_ready():
 		_cast_ability(unit)
 		if not unit.is_alive():
 			_kill(unit)

@@ -6,7 +6,7 @@
       "id": "legionarius",
       "name": "Legionario",
       "origin": "roman",
-      "classes": ["legionary"],
+      "classes": ["infantry"],
       "cost": 1,
       "stats": { "hp": 650, "attack_damage": 45, "attack_speed": 0.65, "range": 1, "armor": 35, "magic_resist": 30, "mana_max": 70, "mana_start": 10 },
       "ability": {
@@ -21,9 +21,9 @@
       "id": "velites",
       "name": "Velite",
       "origin": "roman",
-      "classes": ["legionary"],
+      "classes": ["infantry"],
       "cost": 1,
-      "stats": { "hp": 560, "attack_damage": 48, "attack_speed": 0.85, "range": 2, "armor": 18, "magic_resist": 18, "mana_max": 55, "mana_start": 5 },
+      "stats": { "hp": 590, "attack_damage": 51, "attack_speed": 0.85, "range": 2, "armor": 18, "magic_resist": 18, "mana_max": 55, "mana_start": 5 },
       "ability": {
         "name": "Volo di giavellotti",
         "description": "Scaglia una raffica di giavellotti sui due nemici più vicini.",
@@ -53,7 +53,7 @@
       "origin": "roman",
       "classes": ["siege"],
       "cost": 2,
-      "stats": { "hp": 650, "attack_damage": 78, "attack_speed": 0.74, "range": 5, "armor": 22, "magic_resist": 22, "mana_max": 60, "mana_start": 20 },
+      "stats": { "hp": 650, "attack_damage": 75, "attack_speed": 0.74, "range": 5, "armor": 22, "magic_resist": 22, "mana_max": 60, "mana_start": 20 },
       "ability": {
         "name": "Colpo perforante",
         "description": "Un dardo attraversa la fila e colpisce ogni nemico sulla traiettoria.",
@@ -81,9 +81,9 @@
       "id": "centurio",
       "name": "Pretoriano",
       "origin": "roman",
-      "classes": ["legionary"],
+      "classes": ["infantry"],
       "cost": 4,
-      "stats": { "hp": 770, "attack_damage": 57, "attack_speed": 0.65, "range": 1, "armor": 31, "magic_resist": 27, "mana_max": 90, "mana_start": 20 },
+      "stats": { "hp": 810, "attack_damage": 60, "attack_speed": 0.65, "range": 1, "armor": 31, "magic_resist": 27, "mana_max": 90, "mana_start": 20 },
       "ability": {
         "name": "Serrate i ranghi",
         "description": "Concede uno scudo a sé e ai due alleati più vicini, e aumenta la loro armatura.",
@@ -108,21 +108,6 @@
       "lore": "I catafratti erano cavalieri corazzati da capo a piedi, cavallo compreso, un modello di cavalleria pesante appreso da Roma dai propri avversari orientali — Parti e Sarmati — e adottato su larga scala nel tardo impero. L'armatura, a lamelle o a maglia, copriva anche il destriero (spesso indicato come cataphractarius o clibanarius nelle fonti), e la lancia lunga (contus) impugnata a due mani permetteva una carica d'urto devastante contro la fanteria nemica, pagata però con una mobilità molto inferiore a quella della cavalleria leggera."
     },
     {
-      "id": "vestalis",
-      "name": "Vestale",
-      "origin": "roman",
-      "classes": ["druid"],
-      "cost": 2,
-      "stats": { "hp": 650, "attack_damage": 45, "attack_speed": 0.65, "range": 3, "armor": 20, "magic_resist": 30, "mana_max": 55, "mana_start": 20 },
-      "ability": {
-        "name": "Fuoco sacro",
-        "description": "Cura l'alleato con meno salute e gli concede rigenerazione.",
-        "type": "heal_lowest_ally",
-        "params": { "amount": [260, 390, 680], "regen": [16, 26, 45], "duration": 5.0 }
-      },
-      "lore": "Le vestali erano le sacerdotesse del culto di Vesta, dea del focolare, scelte in età infantile tra le famiglie patrizie e vincolate per trent'anni a mantenere acceso il fuoco sacro nel tempio del Foro Romano. Godevano di uno status unico per una donna romana — proprietà personale, testimonianza in tribunale, un seggio d'onore ai giochi — e la loro incolumità era considerata legata a quella stessa di Roma: si credeva che finché il fuoco non si fosse spento, la città sarebbe rimasta al sicuro."
-    },
-    {
       "id": "clansman",
       "name": "Guerriero del clan",
       "origin": "gaul",
@@ -143,12 +128,12 @@
       "origin": "gaul",
       "classes": ["archer"],
       "cost": 2,
-      "stats": { "hp": 580, "attack_damage": 58, "attack_speed": 0.80, "range": 4, "armor": 18, "magic_resist": 20, "mana_max": 55, "mana_start": 10 },
+      "stats": { "hp": 580, "attack_damage": 61, "attack_speed": 0.80, "range": 4, "armor": 18, "magic_resist": 20, "mana_max": 55, "mana_start": 10 },
       "ability": {
         "name": "Freccia avvelenata",
         "description": "Infligge danno nel tempo e riduce le cure ricevute dal bersaglio.",
         "type": "damage_over_time",
-        "params": { "damage": [240, 360, 620], "duration": 4.0, "heal_reduction": 0.5, "target": "current" }
+        "params": { "damage": [260, 390, 670], "duration": 4.0, "heal_reduction": 0.5, "target": "current" }
       },
       "lore": "Le foreste della Gallia erano un terreno di caccia costante, e i cacciatori che vi si formavano portavano in guerra un'abilità con l'arco affinata inseguendo selvaggina di ogni tipo, dal cinghiale al cervo. A differenza della fanteria pesante del clan, operavano sciolti davanti allo schieramento o sui fianchi, tendendo imboscate e logorando il nemico da distanza prima che si arrivasse al corpo a corpo; alcune fonti romane ricordano anche l'uso di frecce intinte in sostanze velenose ricavate da piante ed erbe locali, per rendere ogni colpo più letale."
     },
@@ -188,12 +173,12 @@
       "origin": "gaul",
       "classes": ["berserker"],
       "cost": 4,
-      "stats": { "hp": 930, "attack_damage": 82, "attack_speed": 0.75, "range": 1, "armor": 34, "magic_resist": 29, "mana_max": 70, "mana_start": 10 },
+      "stats": { "hp": 880, "attack_damage": 66, "attack_speed": 0.75, "range": 1, "armor": 34, "magic_resist": 29, "mana_max": 70, "mana_start": 10 },
       "ability": {
         "name": "Duello",
         "description": "Colpisce il bersaglio con un fendente devastante, più forte quanto più il nemico è ferito.",
         "type": "damage_execute",
-        "params": { "damage": [290, 435, 810], "missing_hp_scaling": 0.42, "target": "current" }
+        "params": { "damage": [205, 305, 575], "missing_hp_scaling": 0.24, "target": "current" }
       },
       "lore": "Nella società gallica il prestigio si conquistava sul campo di battaglia, e i campioni erano guerrieri che si erano guadagnati fama personale al punto da poter sfidare i migliori avversari nemici in duelli individuali davanti agli schieramenti, una pratica descritta da Diodoro Siculo e Tito Livio come parte integrante della cultura marziale celtica. Portavano spesso torque d'oro al collo, simbolo di rango e di voto agli dei, e armature riccamente decorate, e più il nemico appariva ferito o in difficoltà, più il campione cercava lo scontro diretto per suggellare la propria reputazione con un colpo definitivo."
     },
@@ -201,14 +186,14 @@
       "id": "solduros",
       "name": "Solduros",
       "origin": "gaul",
-      "classes": ["legionary", "berserker"],
+      "classes": ["infantry", "berserker"],
       "cost": 5,
-      "stats": { "hp": 950, "attack_damage": 85, "attack_speed": 0.75, "range": 1, "armor": 42, "magic_resist": 38, "mana_max": 90, "mana_start": 20 },
+      "stats": { "hp": 880, "attack_damage": 73, "attack_speed": 0.70, "range": 1, "armor": 42, "magic_resist": 38, "mana_max": 90, "mana_start": 20 },
       "ability": {
         "name": "Giuramento dei Solduri",
         "description": "Ogni alleato caduto rinsalda il suo giuramento: infligge danno ad area e concede a tutta la squadra furia e sete di sangue per 10 secondi.",
         "type": "rally",
-        "params": { "damage": [220, 330, 690], "radius": 1, "attack_speed_bonus": [0.18, 0.28, 0.60], "omnivamp": 0.15, "duration": 10.0 }
+        "params": { "damage": [170, 255, 540], "radius": 1, "attack_speed_bonus": [0.14, 0.22, 0.48], "omnivamp": 0.08, "duration": 8.0 }
       },
       "lore": "I soldurii, descritti da Cesare a proposito dell'aquitano Adcantuannus, erano un seguito di guerrieri legati al proprio capo da un giuramento assoluto: condividevano con lui ogni bene in vita e, se il capo cadeva in battaglia o veniva ucciso, si toglievano la vita per non sopravvivergli, ritenendo disonorevole continuare a vivere dopo la sua morte. Questo legame di fedeltà totale, più forte di qualsiasi altro vincolo sociale gallico, li rendeva combattenti implacabili proprio nel momento in cui la battaglia volgeva al peggio, spinti a vendicare i compagni caduti prima di seguirli."
     },
@@ -219,12 +204,12 @@
       "origin": "gaul",
       "classes": ["archer"],
       "cost": 1,
-      "stats": { "hp": 540, "attack_damage": 46, "attack_speed": 0.75, "range": 3, "armor": 18, "magic_resist": 18, "mana_max": 55, "mana_start": 0 },
+      "stats": { "hp": 540, "attack_damage": 49, "attack_speed": 0.75, "range": 3, "armor": 18, "magic_resist": 18, "mana_max": 55, "mana_start": 0 },
       "ability": {
         "name": "Raffica di pietre",
         "description": "Colpisce i due nemici più vicini con una scarica di proiettili.",
         "type": "damage_nearest",
-        "params": { "damage": [160, 240, 420], "targets": 2 }
+        "params": { "damage": [175, 260, 455], "targets": 2 }
       },
       "lore": "La fromboliera era un'arma povera e diffusissima nella Gallia rurale, poco costosa da fabbricare e facile da procurare rispetto a un arco composito, e per questo era spesso l'arma dei ceti meno abbienti richiamati alle armi dal clan. Con un semplice cinturino di cuoio o fibra vegetale e pallottole di pietra o piombo fuso, un fromboliere esperto poteva raggiungere una gittata considerevole e una precisione sorprendente, ideale per bersagliare le prime file nemiche da distanza prima che le linee si scontrassero corpo a corpo."
     },
@@ -232,50 +217,50 @@
       "id": "teuton_spearman",
       "name": "Lanciere teutonico",
       "origin": "teuton",
-      "classes": ["legionary"],
+      "classes": ["infantry"],
       "cost": 1,
-      "stats": { "hp": 680, "attack_damage": 42, "attack_speed": 0.65, "range": 2, "armor": 30, "magic_resist": 30, "mana_max": 65, "mana_start": 5 },
+      "stats": { "hp": 680, "attack_damage": 37, "attack_speed": 0.65, "range": 2, "armor": 30, "magic_resist": 30, "mana_max": 65, "mana_start": 5 },
       "ability": {
         "name": "Muro di lance",
         "description": "Trafigge i due nemici più vicini e riduce la loro velocità d'attacco.",
         "type": "damage_nearest",
-        "params": { "damage": [190, 285, 480], "targets": 2, "attack_speed_slow": 0.3, "duration": 4.0 }
+        "params": { "damage": [165, 250, 425], "targets": 2, "attack_speed_slow": 0.3, "duration": 4.0 }
       },
       "lore": "Secondo la descrizione di Tacito nella Germania, la maggior parte dei guerrieri germanici non disponeva di spade o lance pesanti, ma della framea, un'asta relativamente corta con una punta di ferro stretta e acuminata, maneggiata sia da vicino sia lanciata a distanza. I combattenti si disponevano in cunei serrati, spalla a spalla, affidando la tenuta della linea più alla coesione del gruppo di parenti e compagni di villaggio che a un addestramento professionale come quello romano, e la perdita dello scudo in battaglia era considerata un disonore tale da precludere il ritorno in patria."
     },
     {
       "id": "teuton_skirmisher",
-      "name": "Frombolier teutonico",
+      "name": "Cacciatore Teutone",
       "origin": "teuton",
       "classes": ["archer"],
       "cost": 1,
-      "stats": { "hp": 520, "attack_damage": 48, "attack_speed": 0.75, "range": 4, "armor": 15, "magic_resist": 18, "mana_max": 50, "mana_start": 0 },
+      "stats": { "hp": 520, "attack_damage": 46, "attack_speed": 0.75, "range": 4, "armor": 15, "magic_resist": 18, "mana_max": 50, "mana_start": 0 },
       "ability": {
         "name": "Sasso in fronte",
         "description": "Colpisce il bersaglio con meno salute, con probabilità di stordirlo brevemente.",
         "type": "stun_target",
         "params": { "damage": [170, 255, 440], "duration": [0.8, 1.0, 1.8], "target": "lowest_hp" }
       },
-      "lore": "Cesare descrive nel De Bello Gallico un reparto di fanti scelti per la loro rapidità, capaci di tenere il passo dei cavalli aggrappandosi alle criniere durante la carica per intervenire rapidamente in appoggio alla cavalleria germanica. Erano fanteria leggera armata di giavellotti, priva di armatura pesante per non perdere in agilità, e il loro compito era logorare il nemico da distanza o proteggere i cavalieri caduti prima che i reparti pesanti raggiungessero la linea di scontro."
+      "lore": "Tacito, nella Germania, nota che l'arco era un'arma piuttosto trascurata dai popoli germanici centrali, più legati alla framea da mischia; erano le genti ai margini orientali — i Fenni, li descrive — a farne invece l'arma principale della propria sussistenza, cacciando con frecce dalla punta d'osso per la scarsità di ferro, un'abilità che ogni bambino imparava fin da piccolo. Nei clan teutonici questi cacciatori venivano richiamati in guerra per il loro occhio infallibile, incaricati di logorare da lontano le prime file avversarie prima che la fanteria pesante entrasse in contatto."
     },
     {
       "id": "shieldmaiden",
-      "name": "Scudiera",
+      "name": "Combattente con Mazza",
       "origin": "teuton",
-      "classes": ["legionary"],
+      "classes": ["berserker"],
       "cost": 2,
-      "stats": { "hp": 750, "attack_damage": 48, "attack_speed": 0.60, "range": 1, "armor": 40, "magic_resist": 35, "mana_max": 70, "mana_start": 15 },
+      "stats": { "hp": 800, "attack_damage": 55, "attack_speed": 0.60, "range": 1, "armor": 40, "magic_resist": 35, "mana_max": 70, "mana_start": 15 },
       "ability": {
         "name": "Parata",
         "description": "Per 4 secondi riduce i danni subiti e restituisce parte del danno bloccato.",
         "type": "shield_self",
-        "params": { "amount": [200, 300, 520], "duration": 4.0, "reflect": 0.35, "damage_reduction": 0.25 }
+        "params": { "amount": [230, 345, 600], "duration": 4.0, "reflect": 0.40, "damage_reduction": 0.25 }
       },
-      "lore": "Le fonti romane non descrivono reparti femminili regolari nelle armate germaniche, ma raccontano episodi in cui le donne si trovarono a combattere con le armi: Plutarco narra che dopo la disfatta dei Cimbri a Vercelli nel 101 a.C. le donne asserragliate dietro il carroccio di carri si difesero con la stessa ferocia dei guerrieri caduti, uccidendo chiunque tentasse di avvicinarsi e infine se stesse pur di non cadere prigioniere. Tacito aggiunge che le donne seguivano abitualmente gli accampamenti, esortavano i mariti al valore e ne curavano le ferite, un ruolo che confondeva per i romani il confine fra retrovia e prima linea."
+      "lore": "Il ferro scarseggiava nei villaggi germanici, e Tacito osserva che solo i più facoltosi disponevano di una vera framea o di una spada: i più poveri, spesso i giovani non ancora affermati nel clan, scendevano in campo con asce e clave di legno indurite al fuoco, compensando l'assenza di lame con la furia dell'urto e il disprezzo del rischio che, secondo la stessa fonte, era il modo più rapido per un giovane guerriero di conquistarsi un nome e un posto fra i veterani."
     },
     {
       "id": "cherusker_reiter",
-      "name": "Cavaliere Cherusco",
+      "name": "Esploratore Teutoni",
       "origin": "teuton",
       "classes": ["cavalry"],
       "cost": 2,
@@ -286,7 +271,7 @@
         "type": "stun_target",
         "params": { "damage": [150, 225, 400], "duration": [0.9, 1.2, 2.0], "target": "farthest" }
       },
-      "lore": "A differenza dei popoli mediterranei, i Germani non svilupparono una tradizione di cavalleria pesante: i loro cavalieri, reclutati tra i membri più facoltosi del clan, combattevano leggeri e mobili, spesso in appoggio coordinato alla fanteria, come descrisse Tacito a proposito dei Cherusci di Arminio. La stessa vittoria di Teutoburgo del 9 d.C. si affidò più all'imboscata nella foresta che a un urto di cavalleria in campo aperto."
+      "lore": "I cavalieri germanici non portavano armature e montavano cavalli piccoli e poco appariscenti, scelti per la resistenza più che per la stazza: Cesare e Tacito concordano nel descriverli come esploratori e incursori più che come urto di linea, mandati avanti a perlustrare il territorio, tendere imboscate rapide e tagliare le vie di rifornimento nemiche prima ancora che si arrivasse allo scontro campale. Il loro contributo a Teutoburgo nel 9 d.C. fu proprio questo: individuare in anticipo la colonna di Varo nella foresta, non affrontarla a viso aperto."
     },
     {
       "id": "seeress",
@@ -294,35 +279,35 @@
       "origin": "teuton",
       "classes": ["druid"],
       "cost": 3,
-      "stats": { "hp": 680, "attack_damage": 50, "attack_speed": 0.65, "range": 3, "armor": 22, "magic_resist": 40, "mana_max": 65, "mana_start": 20 },
+      "stats": { "hp": 680, "attack_damage": 53, "attack_speed": 0.65, "range": 3, "armor": 22, "magic_resist": 40, "mana_max": 65, "mana_start": 20 },
       "ability": {
         "name": "Presagio",
         "description": "Cura l'alleato più ferito e gli concede uno scudo che assorbe danno magico.",
         "type": "heal_lowest_ally",
-        "params": { "amount": [260, 390, 700], "shield": [150, 225, 400], "duration": 5.0 }
+        "params": { "amount": [280, 420, 750], "shield": [165, 250, 440], "duration": 5.0 }
       },
-      "lore": "Tacito racconta che i Germani attribuivano alle donne qualcosa di sacro e profetico, al punto da non disdegnarne i consigli né ignorarne le risposte agli oracoli: la più celebre fu Veleda, veggente dei Bructeri, che durante la rivolta batava del 69-70 d.C. visse isolata in una torre, comunicando con l'esterno solo tramite intermediari, e venne consultata come un'autorità quasi divina sull'esito della guerra contro Roma. Figure come lei univano il ruolo di guida spirituale a quello di guaritrice per la comunità, curando i feriti dei clan con rimedi tramandati oralmente."
+      "lore": "Tacito racconta che i Germani attribuivano alle donne qualcosa di sacro e profetico, al punto da non disdegnarne i consigli né ignorarne le risposte agli oracoli: la più celebre fu Veleda, veggente dei Bructeri, che durante la rivolta batava del 69-70 d.C. visse isolata in una torre, comunicando con l'esterno solo tramite intermediari, e venne consultata come un'autorità quasi divina sull'esito della guerra contro Roma. Figure come lei univano il ruolo di guida spirituale a quello di guaritrice per la comunità, curando i feriti dei clan con rimedi tramandati oralmente. Tacito racconta inoltre che simili figure seguivano i guerrieri fin quasi in prima linea, spesso sui carri ai margini del campo, leggendo gli auspici prima dello scontro e incitando al valore chi esitava: la vergogna di ritirarsi sotto i loro occhi tratteneva i guerrieri più della minaccia stessa del nemico."
     },
     {
       "id": "battering_ram",
-      "name": "Ariete da guerra",
+      "name": "Ariete tribale",
       "origin": "teuton",
       "classes": ["siege"],
       "cost": 4,
-      "stats": { "hp": 1100, "attack_damage": 77, "attack_speed": 0.52, "range": 1, "armor": 43, "magic_resist": 24, "mana_max": 85, "mana_start": 25 },
+      "stats": { "hp": 1100, "attack_damage": 74, "attack_speed": 0.52, "range": 1, "armor": 43, "magic_resist": 24, "mana_max": 85, "mana_start": 25 },
       "ability": {
         "name": "Sfondaporte",
         "description": "Sferra un colpo che infligge danno pari a una percentuale della salute massima del bersaglio.",
         "type": "damage_execute",
         "params": { "damage": [185, 280, 485], "max_hp_scaling": 0.11, "target": "current" }
       },
-      "lore": "I Germani non svilupparono una tradizione propria di poliorcetica, preferendo scontri in campo aperto ed evitando le fortificazioni fisse tipiche del mondo mediterraneo; l'uso di macchine d'assedio come l'ariete si diffuse fra loro solo attraverso il contatto prolungato con Roma. Tacito descrive come durante la rivolta batava del 69-70 d.C. le forze di Civile assediarono il campo legionario di Vetera copiando le tecniche romane, comprese torri d'assedio e arieti, spesso costruiti da disertori o prigionieri romani costretti a mettere la propria competenza al servizio dei ribelli."
+      "lore": "I Germani non svilupparono una tradizione propria di poliorcetica, preferendo scontri in campo aperto ed evitando le fortificazioni fisse tipiche del mondo mediterraneo; l'uso di macchine d'assedio come l'ariete si diffuse fra loro solo attraverso il contatto prolungato con Roma. Tacito descrive come durante la rivolta batava del 69-70 d.C. le forze di Civile assediarono il campo legionario di Vetera copiando le tecniche romane, comprese torri d'assedio e arieti, spesso costruiti da disertori o prigionieri romani costretti a mettere la propria competenza al servizio dei ribelli. Allo stesso modo, invece di alzare palizzate, i clan in marcia disponevano i propri carri da traino in cerchio, il Wagenburg, trasformando l'accampamento in una fortezza mobile capace di respingere un assalto a sorpresa senza bisogno di terrapieni."
     },
     {
       "id": "arminius",
-      "name": "Arminio",
+      "name": "Paladino Teutone",
       "origin": "teuton",
-      "classes": ["legionary", "berserker"],
+      "classes": ["cavalry"],
       "cost": 5,
       "stats": { "hp": 1000, "attack_damage": 86, "attack_speed": 0.70, "range": 1, "armor": 45, "magic_resist": 39, "mana_max": 95, "mana_start": 25 },
       "ability": {
@@ -331,7 +316,7 @@
         "type": "rally",
         "params": { "damage": [270, 405, 850], "radius": 1, "shield": [175, 260, 555], "duration": 8.0 }
       },
-      "lore": "Arminio, capo dei Cherusci, aveva prestato servizio come ufficiale ausiliario nell'esercito romano ottenendo la cittadinanza e il rango equestre, prima di tradire la fiducia di Publio Quintilio Varo e guidare la coalizione di tribù che nel 9 d.C. annientò tre legioni intere nella foresta di Teutoburgo, il più grave disastro militare subito da Roma sul suolo germanico. Tacito, pur scrivendo per un pubblico romano, non gli negò l'ammirazione, definendolo «senza dubbio il liberatore della Germania»; morì però ucciso dai propri parenti intorno al 21 d.C., temuto anche dai suoi per l'ambizione di un potere che nessun capo tribale germanico avrebbe dovuto detenere da solo."
+      "lore": "I capi di clan e i guerrieri più ricchi si distinguevano per un equipaggiamento che il resto della tribù non poteva permettersi: una lunga spada al posto della sola framea, uno scudo rinforzato di ferro sul bordo, e spesso una cotta di maglia — di manifattura romana più che germanica, bottino strappato ai legionari caduti o acquistato attraverso il commercio di confine, come suggeriscono i corredi funerari aristocratici rinvenuti lungo il Reno e l'Elba. Combattevano a cavallo in piccoli gruppi compatti, un cuneo di pochi uomini fidati capace, per la sola forza dell'urto iniziale, di aprire un varco nelle linee nemiche che la fanteria alle spalle avrebbe poi allargato."
     }
   ]
 }

@@ -99,6 +99,14 @@ static func units_of_cost(cost: int) -> Array[UnitDef]:
 	return result
 
 
+static func units_with_trait(trait_id: String) -> Array[UnitDef]:
+	var result: Array[UnitDef] = []
+	for def in all_units():
+		if def.has_trait(trait_id):
+			result.append(def)
+	return result
+
+
 static func has_unit(unit_id: String) -> bool:
 	ensure_loaded()
 	return _units_by_id.has(unit_id)

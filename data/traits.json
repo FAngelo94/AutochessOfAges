@@ -163,10 +163,10 @@
     }
   },
   "classes": {
-    "legionary": {
-      "name": "Legionario",
-      "symbol": "🧱",
-      "description": "Prima linea. Più legionari schierati, più a lungo regge il fronte.",
+    "infantry": {
+      "name": "Fante",
+      "symbol": "⚔️",
+      "description": "Prima linea. Più fanti schierati, più a lungo regge il fronte.",
       "tiers": [
         {
           "count": 2,
@@ -177,7 +177,7 @@
               "add": 0.12
             }
           ],
-          "text": "+18% salute ai Legionari"
+          "text": "+18% salute ai Fanti"
         },
         {
           "count": 4,
@@ -192,7 +192,7 @@
               "add": 20
             }
           ],
-          "text": "+40% salute e +20 armatura ai Legionari"
+          "text": "+40% salute e +20 armatura ai Fanti"
         }
       ]
     },
@@ -281,21 +281,6 @@
             }
           ],
           "text": "Tutti gli alleati recuperano 12 salute al secondo"
-        },
-        {
-          "count": 3,
-          "scope": "all",
-          "effects": [
-            {
-              "stat": "regen_per_second",
-              "add": 30
-            },
-            {
-              "stat": "heal_power",
-              "add": 0.25
-            }
-          ],
-          "text": "Tutti gli alleati recuperano 30 salute al secondo, +25% cure ricevute"
         }
       ]
     },

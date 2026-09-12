@@ -27,7 +27,13 @@ const HERO_LABEL := "EROE"
 ## trascinamento invece che una posa fissa.
 const HERO_VIEW_SIZE := 240
 const HERO_CAMERA_OFFSET := Vector3(0, 1.35, 2.35)
-const HERO_ZOOM := 1.7
+const HERO_ZOOM := 1.5
+
+## Vetrina 3D della scheda di dettaglio eroe: stessa impostazione di quella in
+## home, più piccola perché condivide la modale con nome, civiltà e testo.
+const HERO_DETAIL_VIEW_SIZE := 170
+const HERO_DETAIL_CAMERA_OFFSET := Vector3(0, 1.35, 2.35)
+const HERO_DETAIL_ZOOM := 1.5
 
 ## Gli autoload si prendono dall'albero e non per nome globale: gli script
 ## compilati da riga di comando (test headless) non li vedrebbero.
@@ -65,7 +71,11 @@ var _hero_drag_last_x := 0.0
 
 var _hero_detail_panel: Panel
 var _hero_detail_id: String = ""
-var _hero_detail_portrait: TextureRect
+var _hero_detail_viewport: SubViewport
+var _hero_detail_camera: Camera3D
+var _hero_detail_model_root: Node3D
+var _hero_detail_dragging := false
+var _hero_detail_drag_last_x := 0.0
 var _hero_detail_name: Label
 var _hero_detail_origin: Label
 var _hero_detail_lore: Label
@@ -100,7 +110,6 @@ func _ready() -> void:
 	var portraits := get_node("/root/Portraits")
 	portraits.preload_units(ids)
 	portraits.preload_heroes(GameData.hero_ids())
-	portraits.portrait_ready.connect(_on_portrait_ready)
 	_refresh_hero_model()
 
 
@@ -356,11 +365,6 @@ func _refresh_hero_model() -> void:
 	_hero_camera.look_at(centre, Vector3.UP)
 
 
-func _on_portrait_ready(id: String) -> void:
-	if id == _hero_detail_id and _hero_detail_portrait != null:
-		_hero_detail_portrait.texture = get_node("/root/Portraits").hero_texture_for(id)
-
-
 ## BATTAGLIA affiancato dai due pulsanti che aprono le modali piccole: eroe a
 ## sinistra, modalità a destra. Il pulsante centrale resta il bersaglio
 ## principale, i due laterali sono solo scorciatoie verso le scelte.
@@ -591,11 +595,17 @@ func _build_hero_detail_panel() -> void:
 	column.add_theme_constant_override("separation", 10)
 	margin.add_child(column)
 
-	_hero_detail_portrait = TextureRect.new()
-	_hero_detail_portrait.expand_mode = TextureRect.EXPAND_FIT_HEIGHT_PROPORTIONAL
-	_hero_detail_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_hero_detail_portrait.custom_minimum_size = Vector2(0, 150)
-	column.add_child(_hero_detail_portrait)
+	var detail_center := CenterContainer.new()
+	column.add_child(detail_center)
+
+	var detail_viewport_container := SubViewportContainer.new()
+	detail_viewport_container.custom_minimum_size = Vector2(HERO_DETAIL_VIEW_SIZE, HERO_DETAIL_VIEW_SIZE)
+	detail_viewport_container.stretch = true
+	detail_viewport_container.mouse_filter = Control.MOUSE_FILTER_STOP
+	detail_viewport_container.gui_input.connect(_on_hero_detail_viewport_input)
+	detail_center.add_child(detail_viewport_container)
+
+	_build_hero_detail_viewport(detail_viewport_container)
 
 	_hero_detail_name = Label.new()
 	_hero_detail_name.add_theme_font_size_override("font_size", 24)
@@ -657,6 +667,79 @@ func _build_hero_detail_panel() -> void:
 	buttons.add_child(_hero_detail_select)
 
 
+## Stessa impostazione di luci/camera della vetrina dell'eroe in home: qui
+## però non serve UPDATE_ALWAYS perché si aggiorna anche al solo trascinamento.
+func _build_hero_detail_viewport(container: SubViewportContainer) -> void:
+	_hero_detail_viewport = SubViewport.new()
+	_hero_detail_viewport.size = Vector2i(HERO_DETAIL_VIEW_SIZE, HERO_DETAIL_VIEW_SIZE)
+	_hero_detail_viewport.transparent_bg = true
+	_hero_detail_viewport.own_world_3d = true
+	_hero_detail_viewport.msaa_3d = Viewport.MSAA_4X
+	_hero_detail_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	container.add_child(_hero_detail_viewport)
+
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_CLEAR_COLOR
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.58, 0.62, 0.72)
+	environment.ambient_light_energy = 0.9
+
+	var world_environment := WorldEnvironment.new()
+	world_environment.environment = environment
+	_hero_detail_viewport.add_child(world_environment)
+
+	var key := DirectionalLight3D.new()
+	key.rotation_degrees = Vector3(-38, 34, 0)
+	key.light_energy = 1.25
+	key.light_color = Color(1.0, 0.96, 0.9)
+	_hero_detail_viewport.add_child(key)
+
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-16, -145, 0)
+	fill.light_energy = 0.5
+	fill.light_color = Color(0.68, 0.76, 1.0)
+	_hero_detail_viewport.add_child(fill)
+
+	_hero_detail_camera = Camera3D.new()
+	_hero_detail_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_hero_detail_camera.near = 0.05
+	_hero_detail_camera.far = 20.0
+	_hero_detail_viewport.add_child(_hero_detail_camera)
+
+	_hero_detail_model_root = Node3D.new()
+	_hero_detail_viewport.add_child(_hero_detail_model_root)
+
+
+func _on_hero_detail_viewport_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			_hero_detail_dragging = mb.pressed
+			_hero_detail_drag_last_x = mb.position.x
+	elif event is InputEventMouseMotion and _hero_detail_dragging:
+		var mm := event as InputEventMouseMotion
+		var delta_x := mm.position.x - _hero_detail_drag_last_x
+		_hero_detail_drag_last_x = mm.position.x
+		if _hero_detail_model_root != null:
+			_hero_detail_model_root.rotate_y(deg_to_rad(delta_x) * 0.6)
+
+
+func _show_hero_detail_model(hero_id: String) -> void:
+	if _hero_detail_viewport == null or not GameData.has_hero(hero_id):
+		return
+	for child in _hero_detail_model_root.get_children():
+		_hero_detail_model_root.remove_child(child)
+		child.queue_free()
+	_hero_detail_model_root.add_child(UnitModels.build_hero(hero_id))
+	_hero_detail_model_root.rotation.y = 0.0
+
+	var height := UnitModels.height_of_hero(hero_id)
+	var centre := Vector3(0, height * 0.58, 0)
+	_hero_detail_camera.size = height * HERO_DETAIL_ZOOM
+	_hero_detail_camera.position = centre + HERO_DETAIL_CAMERA_OFFSET
+	_hero_detail_camera.look_at(centre, Vector3.UP)
+
+
 func _open_hero_detail(hero_id: String) -> void:
 	var hdef := GameData.hero(hero_id)
 	_hero_detail_id = hero_id
@@ -664,7 +747,7 @@ func _open_hero_detail(hero_id: String) -> void:
 	_hero_detail_origin.text = String(GameData.trait_def(hdef.origin).get("name", hdef.origin))
 	_hero_detail_lore.text = hdef.lore
 	_hero_detail_ability.text = hdef.ability_text
-	_hero_detail_portrait.texture = get_node("/root/Portraits").hero_texture_for(hero_id)
+	_show_hero_detail_model(hero_id)
 	_hero_panel.visible = false
 	_hero_detail_panel.visible = true
 

@@ -26,6 +26,8 @@ var _detail_sheet: Panel
 var _detail_viewport: SubViewport
 var _detail_camera: Camera3D
 var _detail_model_root: Node3D
+var _detail_dragging := false
+var _detail_drag_last_x := 0.0
 var _filter_origin: String = ""
 var _filter_buttons: Dictionary = {}
 
@@ -33,7 +35,7 @@ var _filter_buttons: Dictionary = {}
 ## che qui il modello è il punto della pagina e non un'icona fra le tante.
 const DETAIL_VIEW_SIZE := 260
 const DETAIL_CAMERA_OFFSET := Vector3(1.15, 1.35, 2.05)
-const DETAIL_ZOOM := 1.6
+const DETAIL_ZOOM := 1.4
 
 
 func _ready() -> void:
@@ -158,6 +160,8 @@ func _build_detail_sheet() -> void:
 	var viewport_container := SubViewportContainer.new()
 	viewport_container.custom_minimum_size = Vector2(DETAIL_VIEW_SIZE, DETAIL_VIEW_SIZE)
 	viewport_container.stretch = true
+	viewport_container.mouse_filter = Control.MOUSE_FILTER_STOP
+	viewport_container.gui_input.connect(_on_detail_viewport_input)
 	viewport_center.add_child(viewport_container)
 
 	_build_detail_viewport(viewport_container)
@@ -187,6 +191,9 @@ func _build_detail_viewport(container: SubViewportContainer) -> void:
 	_detail_viewport.transparent_bg = true
 	_detail_viewport.own_world_3d = true
 	_detail_viewport.msaa_3d = Viewport.MSAA_4X
+	# Vivo come la vetrina dell'eroe in home: il modello ruota mentre lo si
+	# trascina, non è una posa fissa da fotografare una volta.
+	_detail_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	container.add_child(_detail_viewport)
 
 	var environment := Environment.new()
@@ -221,6 +228,22 @@ func _build_detail_viewport(container: SubViewportContainer) -> void:
 	_detail_viewport.add_child(_detail_model_root)
 
 
+## Trascinare col dito/mouse sopra il modello lo ruota sull'asse verticale,
+## come la vetrina dell'eroe in home.
+func _on_detail_viewport_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			_detail_dragging = mb.pressed
+			_detail_drag_last_x = mb.position.x
+	elif event is InputEventMouseMotion and _detail_dragging:
+		var mm := event as InputEventMouseMotion
+		var delta_x := mm.position.x - _detail_drag_last_x
+		_detail_drag_last_x = mm.position.x
+		if _detail_model_root != null:
+			_detail_model_root.rotate_y(deg_to_rad(delta_x) * 0.6)
+
+
 func _show_model(def: UnitDef) -> void:
 	if _detail_viewport == null:
 		return
@@ -228,6 +251,7 @@ func _show_model(def: UnitDef) -> void:
 		_detail_model_root.remove_child(child)
 		child.queue_free()
 	_detail_model_root.add_child(UnitModels.build(def.id, def.origin))
+	_detail_model_root.rotation.y = 0.0
 
 	var height := UnitModels.height_of(def.id)
 	var centre := Vector3(0, height * 0.58, 0)

@@ -475,6 +475,60 @@ func _test_heroes() -> void:
 	check(bot_heroes_a == bot_heroes_b,
 		"a parità di seed i bot ricevono sempre gli stessi eroi")
 
+	# Teutobod: l'unità più costosa schierata (qui Arminio, costo 5) diventa
+	# gigante. Il bonus deve leggersi dai parametri di heroes.json, non da un
+	# numero copiato qui, e la scelta deve essere deterministica.
+	var teutobod_params: Dictionary = GameData.hero("teutobod").ability_params
+	var colossus_pool := UnitPool.new()
+	var giant_player := Player.new(colossus_pool, SimRNG.new(11))
+	giant_player.hero_id = "teutobod"
+	_deploy(giant_player, ["teuton_spearman", "shieldmaiden", "arminius"], 0)
+	var plain_player := Player.new(colossus_pool, SimRNG.new(12))
+	_deploy(plain_player, ["teuton_spearman", "shieldmaiden", "arminius"], 0)
+
+	var colossus_sim := CombatSim.new(SimRNG.new(4242))
+	colossus_sim.setup(giant_player.board_units(), plain_player.board_units(),
+		giant_player.hero_id, plain_player.hero_id)
+
+	var arminius_def := GameData.unit("arminius")
+	# La squadra è tutta teutonica e conta tre Legionari distinti (spearman,
+	# scudiera, Arminio): il tratto Legionario è già attivo di suo, e il bonus
+	# di Teutobod si somma al suo hp_percent invece di sostituirlo — lo stesso
+	# meccanismo di TraitResolver, non un numero ricopiato qui.
+	var arminius_uid := 0
+	for instance in giant_player.board_units():
+		if instance.def.id == "arminius":
+			arminius_uid = instance.uid
+	var trait_hp_percent := float(TraitResolver.bonuses_by_uid(giant_player.board_units())
+		.get(arminius_uid, {}).get("hp_percent", 0.0))
+	var expected_hp := arminius_def.stat_at_star("hp", 1) * (1.0 + trait_hp_percent + float(teutobod_params["hp_bonus"]))
+	var giant_entry := {}
+	var plain_entry := {}
+	for entry in colossus_sim.result()["initial"]:
+		if String(entry["id"]) != "arminius":
+			continue
+		if int(entry["team"]) == 0:
+			giant_entry = entry
+		else:
+			plain_entry = entry
+	check(is_equal_approx(float(giant_entry.get("max_hp", 0.0)), expected_hp),
+		"Teutobod ingigantisce l'Arminio del proprio giocatore (+hp_bonus)",
+		"%s vs atteso %s" % [giant_entry.get("max_hp"), expected_hp])
+	check(float(giant_entry.get("model_scale", 0.0)) == float(teutobod_params["model_scale"]),
+		"il modello dell'Arminio ingigantito usa model_scale di Teutobod")
+	check(float(plain_entry.get("model_scale", -1.0)) == 1.0,
+		"l'Arminio dell'avversario senza Teutobod resta a scala normale")
+
+	var colossus_sim_repeat := CombatSim.new(SimRNG.new(4242))
+	colossus_sim_repeat.setup(giant_player.board_units(), plain_player.board_units(),
+		giant_player.hero_id, plain_player.hero_id)
+	var repeat_scale := 0.0
+	for entry in colossus_sim_repeat.result()["initial"]:
+		if String(entry["id"]) == "arminius" and int(entry["team"]) == 0:
+			repeat_scale = float(entry["model_scale"])
+	check(repeat_scale == float(giant_entry.get("model_scale", 0.0)),
+		"la scelta del gigante è deterministica a parità di schieramento")
+
 
 func _test_economy() -> void:
 	section("Economia")
@@ -699,8 +753,8 @@ func _simulate_stalemate() -> Dictionary:
 	# Due difensori diversi fra loro (così arrivano in fondo con salute diversa)
 	# affiancati ciascuno da una guaritrice: le cure superano il danno che
 	# riescono a infliggersi, e nemmeno il berserk basta a spezzare la parità.
-	_deploy(player_a, ["shieldmaiden", "vestalis"], 0)
-	_deploy(player_b, ["battering_ram", "vestalis"], 0)
+	_deploy(player_a, ["shieldmaiden", "seeress"], 0)
+	_deploy(player_b, ["battering_ram", "seeress"], 0)
 
 	var sim := CombatSim.new(SimRNG.new(4242))
 	sim.setup(player_a.board_units(), player_b.board_units())

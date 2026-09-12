@@ -338,7 +338,8 @@ func load_combat(combat: Dictionary, team: int = 0) -> void:
 			String(entry["origin"]),
 			int(entry["team"]),
 			cell,
-			int(entry["star"])
+			int(entry["star"]),
+			float(entry.get("model_scale", 1.0))
 		)
 
 	custom_minimum_size = _board_pixel_size()

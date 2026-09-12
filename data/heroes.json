@@ -18,6 +18,15 @@
       "ability_params": { "gold_per_merge": 1 },
       "ability_text": "Ogni volta che due unità si fondono in un potenziamento, guadagna 1 oro.",
       "lore": "Il capo che unì le tribù galliche sa che l'unione è la vera ricchezza."
+    },
+    {
+      "id": "teutobod",
+      "name": "Teutobod",
+      "origin": "teuton",
+      "ability_type": "colossus",
+      "ability_params": { "hp_bonus": 0.40, "attack_bonus": 0.15, "model_scale": 1.4 },
+      "ability_text": "L'unità più costosa che schieri diventa un gigante: +40% salute, +15% danno d'attacco e figura ingrandita.",
+      "lore": "Le cronache romane descrivono Teutobod come un uomo di statura colossale e forza prodigiosa, capace secondo il mito di saltare a piè pari sopra quattro o cinque cavalli in fila. Più che un re era un condottiero di guerra, eletto dai clan per il solo valore militare, e guidò l'intera migrazione dei Teutoni dallo Jutland fino alle terre di Gaio Mario. Dopo il disastro di Aquae Sextiae del 102 a.C. tentò la fuga ma fu consegnato ai Romani dai Sequani; sfilò in catene nel trionfo di Mario e fu giustiziato subito dopo, come voleva la tradizione per i nemici di Roma."
     }
   ]
 }

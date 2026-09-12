@@ -259,7 +259,7 @@ code. Style is low-poly/stylized; legibility comes from projected silhouette, no
 
 To add a dedicated figure for a unit, write a `_build_<id>` function and add it to the `match` in
 `UnitModels.build`; without that branch the unit falls back to an archetype figure (cavalry,
-siege, archer, druid, berserker, legionary), so a new unit never appears with no shape.
+siege, archer, druid, berserker, infantry), so a new unit never appears with no shape.
 
 Constraints learned by measuring, not assuming — apply to every new figure:
 - arcs must lie flat on the horizontal plane (vertical arcs vanish under the top-down camera)

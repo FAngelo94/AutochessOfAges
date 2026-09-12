@@ -15,7 +15,7 @@
     {
       "id": "negozio",
       "title": "Negozio e stelle",
-      "body": "Le unità si comprano dal negozio: il pool da cui vengono pescate è condiviso con tutti gli avversari, quindi ciò che comprano loro non lo trovate voi. Tre copie uguali diventano automaticamente un'unità a 2 stelle, più forte; tre da 2 stelle diventano una da 3."
+      "body": "Le unità si comprano dal negozio: il pool da cui vengono pescate è condiviso con tutti gli avversari, quindi ciò che comprano loro non lo trovate voi. {copies_to_upgrade} copie uguali diventano automaticamente un'unità a 2 stelle, più forte; {copies_to_upgrade} da 2 stelle diventano una da 3."
     },
     {
       "id": "schieramento",
@@ -58,8 +58,8 @@
       "body": "Avete selezionato un'unità: toccate una cella del campo per schierarla. La fila più vicina al bordo è quella che incassa i colpi per prima."
     },
     "star": {
-      "title": "Tre copie, una stella",
-      "body": "Tre copie della stessa unità si fondono da sole in una a 2 stelle, molto più forte della somma delle singole. Vale la pena tenerne in panchina invece di venderle subito."
+      "title": "Due copie, una stella",
+      "body": "{copies_to_upgrade} copie della stessa unità si fondono da sole in una a 2 stelle, molto più forte della somma delle singole. Vale la pena tenerne in panchina invece di venderle subito."
     },
     "synergy": {
       "title": "Sinergie attive",

@@ -20,6 +20,7 @@ static func values() -> Dictionary:
 		"interest_per": balance["economy"]["interest_per"],
 		"max_interest": balance["economy"]["max_interest"],
 		"reroll_cost": balance["economy"]["reroll_cost"],
+		"copies_to_upgrade": balance["match"]["copies_to_upgrade"],
 		"buy_xp_cost": balance["economy"]["buy_xp_cost"],
 		"round_seconds": balance["combat"]["max_duration_seconds"],
 		"preparation_seconds": balance["rounds"]["preparation_seconds"],
