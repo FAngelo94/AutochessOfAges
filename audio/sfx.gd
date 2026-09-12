@@ -24,6 +24,13 @@ var _next_player := 0
 var _volume_linear := 0.8
 ## clip -> tick (ms) dell'ultima riproduzione.
 var _last_played: Dictionary = {}
+## Numero progressivo di request_click(): identifica un preciso click ancora
+## in coda. play_denied() annulla il click corrente scrivendo il suo numero
+## in _denied_token — non un flag generico, altrimenti un rifiuto arrivato in
+## ritardo dal server (RemoteSession, asincrono) potrebbe restare "acceso" e
+## silenziare per sbaglio il prossimo click legittimo e slegato.
+var _click_token := 0
+var _denied_token := -1
 
 
 func _ready() -> void:
@@ -97,6 +104,33 @@ func play(clip: String, pitch_variation := 0.06) -> void:
 	player.stream = _clips[clip]
 	player.pitch_scale = 1.0 + randf_range(-pitch_variation, pitch_variation)
 	player.play()
+
+
+## Click generico di un pulsante (Style._wire_click). Non suona subito: aspetta
+## la fine del frame perché il gestore del pulsante, chiamato dallo stesso
+## segnale "pressed", ha ancora la possibilità di scoprire che l'azione è
+## negata e chiamare play_denied() prima che il click venga davvero emesso —
+## altrimenti click e "denied" suonerebbero insieme su ogni acquisto rifiutato.
+func request_click() -> void:
+	_click_token += 1
+	call_deferred(&"_flush_click", _click_token)
+
+
+func _flush_click(token: int) -> void:
+	if token == _denied_token:
+		return
+	play("click")
+
+
+## Un'azione è stata negata (oro insufficiente, panchina piena, comando
+## rifiutato...): suona il segnale di errore. Se il rifiuto arriva nello
+## stesso frame del click che lo ha causato (sessione locale, sincrona)
+## cancella anche quel click; se arriva più tardi (sessione remota, dopo un
+## giro di rete) il click di quel press è già suonato e questo non tocca
+## click successivi, slegati.
+func play_denied() -> void:
+	_denied_token = _click_token
+	play("denied")
 
 
 # --------------------------------------------------------------------------

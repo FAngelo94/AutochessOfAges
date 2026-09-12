@@ -58,7 +58,7 @@ static func _play_click() -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var sfx := tree.root.get_node_or_null("/root/Sfx") if tree != null else null
 	if sfx != null:
-		sfx.play("click")
+		sfx.request_click()
 
 
 static func box(fill: Color, border: Color, border_width: int = 1, radius: int = 4) -> StyleBoxFlat:

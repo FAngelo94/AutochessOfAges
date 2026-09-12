@@ -1948,7 +1948,7 @@ func _on_round_concluded(results: Array) -> void:
 func _on_command_rejected(reason: String) -> void:
 	var sfx := get_node_or_null("/root/Sfx")
 	if sfx != null:
-		sfx.play("denied")
+		sfx.play_denied()
 	match reason:
 		"reroll":
 			_log("[color=#e0a070]Oro insufficiente per aggiornare il negozio.[/color]")
@@ -2276,7 +2276,7 @@ func _on_shop_slot_pressed(slot: int) -> void:
 	if not p.can_buy(slot):
 		var sfx := get_node_or_null("/root/Sfx")
 		if sfx != null:
-			sfx.play("denied")
+			sfx.play_denied()
 		var def: UnitDef = p.shop[slot]
 		if p.gold < def.cost:
 			_log("[color=#e0a070]Servono %d oro per %s.[/color]" % [def.cost, def.display_name])
