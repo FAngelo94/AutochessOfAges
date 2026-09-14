@@ -1,0 +1,24 @@
+{
+  "_comment": "English text overlay for heroes.json.",
+
+  "heroes": [
+    {
+      "id": "cesare",
+      "name": "Caesar",
+      "ability_text": "After losing a round, gains 3-6 random gold.",
+      "lore": "Gaius Julius Caesar (100-44 BC) belonged to the gens Julia, which claimed a legendary descent from Venus through Aeneas: a divine origin he would use to his political advantage for the rest of his life. He made his early career as an orator and a man of debts before he was ever a soldier, and as a young man, captured by Cilician pirates, he jokingly promised them he would have them crucified once freed — which he did, as soon as the ransom was paid. As proconsul he conquered all of Gaul in under a decade (58-50 BC), recounting the campaign himself in his 'Commentarii de Bello Gallico', a masterpiece of propaganda written in the third person to read as an impartial account. When the Senate ordered him to disband his army, he led his legions across the river Rubicon — a sacred boundary beyond which no general could bring armed troops — uttering the words 'alea iacta est', the die is cast: an act that was in itself equivalent to a declaration of civil war on Rome. He won that war against Pompey and had himself named dictator for life, reforming the calendar (the one that still bears his name) and granting clemency even to defeated enemies, the famous 'clementia Caesaris' — which was not enough to save him: he was stabbed twenty-three times by the conspiring senators, Brutus among them, on the Ides of March, 44 BC, right at the foot of Pompey's statue."
+    },
+    {
+      "id": "vercingetorige",
+      "name": "Vercingetorix",
+      "ability_text": "Every time two units merge into an upgrade, gains 1 gold.",
+      "lore": "Vercingetorix (c. 72-46 BC) was the son of Celtillo, an Arverni noble whom the other tribes had put to death for trying to make himself king of all Gaul: an ambition his son actually achieved, uniting in 52 BC a mosaic of historically rival peoples into a single revolt against Rome, the only Gallic coalition ever to seriously threaten Caesar. He imposed on his men a ruthless scorched-earth strategy — destroying crops and villages rather than let supplies reach the legions — and at Gergovia inflicted on Caesar one of his rare open defeats in the field, forcing him to withdraw with heavy losses. The turning point came at Alesia, where Caesar hemmed in the Gallic army with a double ring of fortifications running over 15 kilometers — a line of circumvallation against the besieged town and one of contravallation against relief from outside — simultaneously beating back the besieged and a massive Gallic relief army. With supplies and hope exhausted, Vercingetorix surrendered in person: according to the traditional account (embellished over the centuries by French Romantic painting) he rode out to the Roman camp and laid down his weapons and armor at Caesar's feet in silence. He was held prisoner in Rome for six years, paraded in chains in Caesar's triumph in 46 BC and executed immediately afterward by strangulation, as was customary for defeated enemies; in the 19th century France would make him a national symbol of resistance, complete with a statue commissioned by Napoleon III on the very site of Alesia."
+    },
+    {
+      "id": "teutobod",
+      "name": "Teutobod",
+      "ability_text": "The most expensive unit you field becomes a giant: +40% health, +15% attack damage and an enlarged figure.",
+      "lore": "Roman chronicles describe Teutobod as a man of colossal stature and prodigious strength, said in legend to be able to leap clean over four or five horses standing in a row. More a war leader than a king, elected by the clans for military valor alone, he led the entire Teutonic migration from Jutland all the way to the lands of Gaius Marius. After the disaster of Aquae Sextiae in 102 BC he tried to flee but was handed over to the Romans by the Sequani; he was marched in chains in Marius's triumph and executed immediately afterward, as was the custom for Rome's enemies."
+    }
+  ]
+}

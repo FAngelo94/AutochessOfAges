@@ -148,7 +148,7 @@ func show_unit(def: UnitDef, star: int, badge_mode: int, fill: Color, border: Co
 
 	match badge_mode:
 		Badge.COST:
-			_badge.text = "%d oro" % def.cost
+			_badge.text = tr("UNIT_COST_GOLD") % def.cost
 			_badge.add_theme_color_override("font_color", Style.rarity_color(def.cost))
 		Badge.STARS:
 			_badge.text = "★".repeat(star)

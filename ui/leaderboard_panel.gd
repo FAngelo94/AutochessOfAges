@@ -52,7 +52,7 @@ func _build() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "CLASSIFICA"
+	title.text = tr("LEADERBOARD_TITLE")
 	title.add_theme_font_size_override("font_size", 34)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
@@ -74,7 +74,7 @@ func _build() -> void:
 	scroll.add_child(_list)
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 26)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -88,17 +88,17 @@ func _fetch() -> void:
 	var auth := get_node_or_null("/root/Auth")
 	if auth == null or not auth.has_method("request_leaderboard") or not auth.is_logged_in():
 		_clear()
-		_status.text = "Accedi con un account per vedere la classifica."
+		_status.text = tr("LEADERBOARD_LOGIN_REQUIRED")
 		return
 	if _requested:
 		return
 	_requested = true
-	_status.text = "Carico la classifica…"
+	_status.text = tr("LEADERBOARD_LOADING")
 	auth.request_leaderboard(REMOTE_LIMIT, func(ok: bool, data: Dictionary) -> void:
 		_requested = false
 		if not ok:
 			_clear()
-			_status.text = "Classifica non raggiungibile. Riprova più tardi."
+			_status.text = tr("LEADERBOARD_UNREACHABLE")
 			return
 		show_data(data))
 
@@ -111,7 +111,7 @@ func show_data(data: Dictionary) -> void:
 	var me: Dictionary = data.get("me", {}) if data.get("me") is Dictionary else {}
 
 	if top.is_empty():
-		_status.text = "Nessun giocatore in classifica: gioca una partita online per entrare."
+		_status.text = tr("LEADERBOARD_EMPTY")
 		return
 
 	var me_listed := false
@@ -133,9 +133,9 @@ func show_data(data: Dictionary) -> void:
 		_list.add_child(_player_row(me))
 
 	if me.is_empty():
-		_status.text = "Gioca una partita classificata per entrare in classifica."
+		_status.text = tr("LEADERBOARD_PLAY_TO_ENTER")
 	else:
-		_status.text = "La tua posizione: %d°" % int(me.get("position", 0))
+		_status.text = tr("LEADERBOARD_YOUR_POSITION") % _ordinal(int(me.get("position", 0)))
 
 
 func _clear() -> void:
@@ -182,7 +182,7 @@ func _player_row(entry: Dictionary) -> Control:
 	line.add_child(column)
 
 	var name_label := Label.new()
-	name_label.text = String(entry.get("username", "—")) + ("  (tu)" if is_me else "")
+	name_label.text = String(entry.get("username", "—")) + (tr("LEADERBOARD_YOU_SUFFIX") if is_me else "")
 	name_label.add_theme_font_size_override("font_size", 20)
 	if is_me:
 		name_label.add_theme_color_override("font_color", Style.GOLD)
@@ -196,8 +196,8 @@ func _player_row(entry: Dictionary) -> Control:
 	var rank_name := String(GameData.rank_for_mmr(mmr).get("name", "—"))
 	if rank_name != "—":
 		bits.append(rank_name)
-	bits.append("%d partite" % int(entry.get("matches_played", 0)))
-	bits.append("%d vittorie" % int(entry.get("wins", 0)))
+	bits.append(tr("LEADERBOARD_MATCHES_PLAYED") % int(entry.get("matches_played", 0)))
+	bits.append(tr("LEADERBOARD_WINS") % int(entry.get("wins", 0)))
 	detail.text = "  ·  ".join(bits)
 	detail.add_theme_font_size_override("font_size", 15)
 	detail.add_theme_color_override("font_color", Style.TEXT_DIM)
@@ -220,7 +220,13 @@ func _badge_text(position: int) -> String:
 		1: return "🥇"
 		2: return "🥈"
 		3: return "🥉"
-	return "%d°" % position if position > 0 else "—"
+	return _ordinal(position) if position > 0 else "—"
+
+
+## Indicatore ordinale di posizione ("3°" in italiano, "#3" in inglese): la
+## convenzione cambia per lingua, non è solo un simbolo appiccicato al numero.
+func _ordinal(position: int) -> String:
+	return tr("LEADERBOARD_ORDINAL") % position
 
 
 func _podium_color(position: int) -> Color:

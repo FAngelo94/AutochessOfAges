@@ -17,10 +17,6 @@ const LOBBY_SCENE := "res://ui/lobby.tscn"
 const MODE_CPU := "cpu"
 const MODE_PVP := "pvp"
 
-## Etichetta della modalità, centralizzata perché compare sia sopra al
-## pulsante di scelta sia come titolo della modale.
-const MODE_LABEL := "MODALITÀ"
-const HERO_LABEL := "EROE"
 
 ## Vetrina 3D dell'eroe in cima alla schermata: stesse proporzioni della
 ## scheda unità in collezione, ma qui il modello è vivo e ruotabile a
@@ -152,7 +148,7 @@ func _build() -> void:
 	# o chiudendo la scheda, e un pulsante che non fa nulla è peggio che assente.
 	if OS.get_name() not in ["Android", "Web", "iOS"]:
 		var quit := Button.new()
-		quit.text = "Esci"
+		quit.text = tr("MENU_QUIT")
 		quit.flat = true
 		quit.custom_minimum_size = Vector2(0, 56)
 		quit.add_theme_font_size_override("font_size", 20)
@@ -191,7 +187,7 @@ func _banner() -> Control:
 	wrap.add_child(Style.title_plate())
 
 	var subtitle := Label.new()
-	subtitle.text = "Legionari e Barbari"
+	subtitle.text = tr("MENU_SUBTITLE")
 	subtitle.add_theme_font_size_override("font_size", 21)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_color_override("font_color", Style.TEXT_DIM)
@@ -374,7 +370,7 @@ func _battle_row() -> Control:
 ## il resto, e stretto tra le due scorciatoie eroe/modalità.
 func _play_button() -> Button:
 	var play := Button.new()
-	play.text = "BATTAGLIA"
+	play.text = tr("MENU_PLAY")
 	play.custom_minimum_size = Vector2(0, Style.TOUCH_PRIMARY)
 	play.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	play.add_theme_font_size_override("font_size", 30)
@@ -445,20 +441,20 @@ func _build_mode_panel() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "SCEGLI " + MODE_LABEL
+	title.text = tr("MENU_CHOOSE_MODE")
 	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
 
-	column.add_child(_mode_option(MODE_CPU, "🖥️  Contro il computer",
-		"Affronta subito degli avversari controllati dal gioco."))
-	column.add_child(_mode_option(MODE_PVP, "👥  Contro giocatori",
-		"Partita online 8 giocatori. Richiede un account."))
+	column.add_child(_mode_option(MODE_CPU, "🖥️  " + tr("MENU_MODE_CPU"),
+		tr("MENU_MODE_CPU_HINT")))
+	column.add_child(_mode_option(MODE_PVP, "👥  " + tr("MENU_MODE_PVP"),
+		tr("MENU_MODE_PVP_HINT")))
 
 	column.add_child(_grow())
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 20)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -507,7 +503,7 @@ func _build_hero_panel() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "SCEGLI " + HERO_LABEL
+	title.text = tr("MENU_CHOOSE_HERO")
 	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
@@ -527,7 +523,7 @@ func _build_hero_panel() -> void:
 		list.add_child(_hero_option(hdef))
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 20)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -625,7 +621,7 @@ func _build_hero_detail_panel() -> void:
 	column.add_child(buttons)
 
 	var back := Button.new()
-	back.text = "Indietro"
+	back.text = tr("UI_BACK")
 	back.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	back.add_theme_font_size_override("font_size", 18)
@@ -636,7 +632,7 @@ func _build_hero_detail_panel() -> void:
 	buttons.add_child(back)
 
 	_hero_detail_select = Button.new()
-	_hero_detail_select.text = "Seleziona"
+	_hero_detail_select.text = tr("UI_SELECT")
 	_hero_detail_select.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	_hero_detail_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hero_detail_select.add_theme_font_size_override("font_size", 18)
@@ -744,7 +740,7 @@ func _nav_bar() -> Control:
 	column.add_child(row)
 
 	_guide_button = Button.new()
-	_guide_button.text = "📖 Guida"
+	_guide_button.text = "📖 " + tr("MENU_GUIDE")
 	_guide_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	_guide_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_guide_button.add_theme_font_size_override("font_size", 20)
@@ -752,7 +748,7 @@ func _nav_bar() -> Control:
 	row.add_child(_guide_button)
 	_update_guide_button()
 
-	for entry in [["🎴 Collezione", _on_collection_pressed], ["🛒 Negozio", _on_store_pressed]]:
+	for entry in [["🎴 " + tr("MENU_COLLECTION"), _on_collection_pressed], ["🛒 " + tr("MENU_STORE"), _on_store_pressed]]:
 		var button := Button.new()
 		button.text = String(entry[0])
 		button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
@@ -769,7 +765,7 @@ func _nav_bar() -> Control:
 	# Solo icona, come l'ingranaggio: Cronologia resta la voce larga della riga.
 	var leaderboard_button := Button.new()
 	leaderboard_button.text = "🏆"
-	leaderboard_button.tooltip_text = "Classifica"
+	leaderboard_button.tooltip_text = tr("MENU_LEADERBOARD")
 	leaderboard_button.custom_minimum_size = Vector2(Style.TOUCH_MIN, Style.TOUCH_MIN)
 	leaderboard_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	leaderboard_button.add_theme_font_size_override("font_size", 20)
@@ -778,7 +774,7 @@ func _nav_bar() -> Control:
 	second.add_child(leaderboard_button)
 
 	var history_button := Button.new()
-	history_button.text = "📜 Cronologia"
+	history_button.text = "📜 " + tr("MENU_HISTORY")
 	history_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	history_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	history_button.add_theme_font_size_override("font_size", 20)
@@ -876,20 +872,16 @@ func _start_pvp() -> void:
 		return
 	var auth := get_node_or_null("/root/Auth")
 	if auth == null:
-		_show_pvp_unavailable("La modalità contro giocatori arriva in un prossimo aggiornamento.")
+		_show_pvp_unavailable(tr("MENU_PVP_COMING_SOON"))
 		return
 	if auth.is_logged_in():
 		get_tree().change_scene_to_file(LOBBY_SCENE)
 		return
-	_show_pvp_unavailable(
-		"Per giocare contro altri giocatori serve un account.\n\n"
-		+ "Stai giocando come ospite: puoi accedere in qualsiasi momento da "
-		+ "Impostazioni → Accedi, con Google oppure con email e password.\n\n"
-		+ "Da ospite restano disponibili le partite contro il computer.")
+	_show_pvp_unavailable(tr("MENU_PVP_NEEDS_ACCOUNT"))
 
 
 func _show_pvp_unavailable(message: String) -> void:
-	ModalDialog.notice(self, "Contro giocatori", message)
+	ModalDialog.notice(self, tr("MENU_MODE_PVP"), message)
 
 
 func _on_collection_pressed() -> void:
@@ -917,10 +909,10 @@ func _on_mode_pressed(mode: String) -> void:
 func _update_mode_button() -> void:
 	if _match_mode == MODE_PVP:
 		_mode_button.text = "👥"
-		_mode_button.tooltip_text = "Modalità: contro giocatori"
+		_mode_button.tooltip_text = tr("MENU_MODE_TOOLTIP") % tr("MENU_MODE_PVP")
 	else:
 		_mode_button.text = "🖥️"
-		_mode_button.tooltip_text = "Modalità: contro il computer"
+		_mode_button.tooltip_text = tr("MENU_MODE_TOOLTIP") % tr("MENU_MODE_CPU")
 
 	for mode in _mode_option_buttons:
 		var button: Button = _mode_option_buttons[mode]
@@ -942,7 +934,7 @@ func _on_hero_pressed(hero_id: String) -> void:
 func _update_hero_button() -> void:
 	var hdef := GameData.hero(_selected_hero)
 	_hero_button.text = "🛡️"
-	_hero_button.tooltip_text = "Eroe: %s" % (hdef.display_name if hdef != null else _selected_hero)
+	_hero_button.tooltip_text = tr("MENU_HERO_TOOLTIP") % (hdef.display_name if hdef != null else _selected_hero)
 
 	for hero_id in _hero_option_buttons:
 		var button: Button = _hero_option_buttons[hero_id]

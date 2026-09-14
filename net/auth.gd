@@ -607,7 +607,7 @@ static func email_looks_valid(email: String) -> bool:
 ## "" se la password va bene, altrimenti il messaggio da mostrare.
 static func password_problem(password: String) -> String:
 	if password.length() < 8:
-		return "La password deve avere almeno 8 caratteri."
+		return String(TranslationServer.translate("LOGIN_PASSWORD_TOO_SHORT"))
 	return ""
 
 

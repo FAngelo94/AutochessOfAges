@@ -21,23 +21,18 @@ const SESSION_META := "pending_session"
 
 enum State { RESTORING, LOGIN, SIGNUP }
 
-const REASONS := {
-	"email_taken": "Questa email è già registrata. Prova ad accedere.",
-	"invalid_credentials": "Email o password non corretti.",
-	"invalid": "Controlla email e password.",
-	"rate_limited": "Troppi tentativi. Riprova tra qualche minuto.",
-	"db": "Servizio non disponibile, riprova più tardi.",
-	"google": "Accesso con Google non riuscito.",
-	"expired": "L'accesso con Google è scaduto. Riprova.",
-	"denied": "Accesso con Google annullato.",
+## Le chiavi restano ferme (arrivano dal server/da net/auth.gd), i testi si
+## risolvono a runtime così seguono il locale corrente.
+const REASON_KEYS := {
+	"email_taken": "LOGIN_REASON_EMAIL_TAKEN",
+	"invalid_credentials": "LOGIN_REASON_INVALID_CREDENTIALS",
+	"invalid": "LOGIN_REASON_INVALID",
+	"rate_limited": "LOGIN_REASON_RATE_LIMITED",
+	"db": "LOGIN_REASON_DB",
+	"google": "LOGIN_REASON_GOOGLE",
+	"expired": "LOGIN_REASON_EXPIRED",
+	"denied": "LOGIN_REASON_DENIED",
 }
-
-## Testo del pulsante Google mentre si aspetta il consenso nel browser. Il
-## consenso ora si chiude sul server e il client lo ritira quando torna in primo
-## piano (net/auth.gd): puo' passare qualche minuto, e chi ha solo chiuso la
-## scheda del browser deve poter tornare indietro senza aspettare la scadenza.
-const GOOGLE_WAIT_TEXT := "In attesa di Google — annulla"
-const GOOGLE_TEXT := "Continua con Google"
 
 ## Alzata da chi apre questa schermata di proposito pur essendo già ospite —
 ## le impostazioni, con "Accedi". Senza, _ready() rimbalzerebbe al menu per via
@@ -65,6 +60,9 @@ var _guest_button: Button
 
 
 func _ready() -> void:
+	# Prima di costruire qualunque testo: se il giocatore ha già scelto una
+	# lingua, va applicata subito, non solo dal pannello impostazioni.
+	get_node("/root/Profile").apply_locale()
 	_auth = get_node_or_null("/root/Auth")
 	var music := get_node_or_null("/root/Music")
 	if music != null:
@@ -136,6 +134,43 @@ func _build() -> void:
 	_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_column)
 
+	add_child(_build_language_switch())
+
+
+## Un chi arriva qui per la prima volta non ha ancora visto le Impostazioni,
+## quindi senza questo non avrebbe alcun modo di capire un'interfaccia in una
+## lingua che non conosce. Sta fuori dalla colonna e sopravvive a _set_state():
+## è una scelta di dispositivo, non legata allo stato LOGIN/SIGNUP/RESTORING.
+func _build_language_switch() -> Control:
+	var box := HBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	box.offset_left = -132
+	box.offset_top = 14
+	box.offset_right = -14
+	box.offset_bottom = 14
+	box.add_theme_constant_override("separation", 6)
+
+	var current := String(get_node("/root/Profile").locale)
+	box.add_child(_language_switch_button("IT", "it", current))
+	box.add_child(_language_switch_button("EN", "en", current))
+	return box
+
+
+func _language_switch_button(label: String, locale_id: String, current: String) -> Button:
+	var button := Button.new()
+	button.text = label
+	button.custom_minimum_size = Vector2(52, 44)
+	button.add_theme_font_size_override("font_size", 16)
+	if locale_id == current or (current == "" and locale_id == "it"):
+		Style.apply_plate(button, Style.GOLD, Style.GOLD_DEEP, 12, 4)
+		button.add_theme_color_override("font_color", Style.INK)
+	else:
+		Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 12, 4)
+	button.pressed.connect(func() -> void:
+		get_node("/root/Profile").set_locale(locale_id)
+		get_tree().reload_current_scene())
+	return button
+
 
 ## Ricostruisce solo il contenuto della colonna: titolo, campi e azioni
 ## cambiano da stato a stato, ma il fondale e la cornice restano.
@@ -175,7 +210,7 @@ func _title(text: String) -> void:
 
 func _build_restoring() -> void:
 	var label := Label.new()
-	label.text = "Accesso in corso…"
+	label.text = tr("LOGIN_RESTORING")
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Style.TEXT_DIM)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -183,23 +218,23 @@ func _build_restoring() -> void:
 
 
 func _build_login() -> void:
-	_title("ACCEDI")
+	_title(tr("LOGIN_TITLE"))
 
-	_email_edit = _line_edit("Email")
+	_email_edit = _line_edit(tr("LOGIN_EMAIL"))
 	_column.add_child(_email_edit)
-	_password_edit = _line_edit("Password")
+	_password_edit = _line_edit(tr("LOGIN_PASSWORD"))
 	_password_edit.text_submitted.connect(func(_t: String) -> void: _on_primary_pressed())
 	_column.add_child(_password_field(_password_edit))
 
-	_primary_text = "ACCEDI"
+	_primary_text = tr("LOGIN_TITLE")
 	_primary_button = _plate_button(_primary_text, Style.GOLD, Style.GOLD_DEEP, Style.TOUCH_PRIMARY)
 	_primary_button.pressed.connect(_on_primary_pressed)
 	_column.add_child(_primary_button)
 
-	_column.add_child(_link_button("Non hai un account? Registrati",
+	_column.add_child(_link_button(tr("LOGIN_GO_SIGNUP"),
 		func() -> void: _set_state(State.SIGNUP)))
 
-	_column.add_child(_separator("oppure"))
+	_column.add_child(_separator(tr("LOGIN_OR")))
 	_column.add_child(_provider_buttons())
 
 	_error_label = _build_error_label()
@@ -207,27 +242,27 @@ func _build_login() -> void:
 
 
 func _build_signup() -> void:
-	_title("CREA ACCOUNT")
+	_title(tr("LOGIN_SIGNUP_TITLE"))
 
-	_username_edit = _line_edit("Nome giocatore")
+	_username_edit = _line_edit(tr("LOGIN_USERNAME"))
 	_column.add_child(_username_edit)
-	_email_edit = _line_edit("Email")
+	_email_edit = _line_edit(tr("LOGIN_EMAIL"))
 	_column.add_child(_email_edit)
-	_password_edit = _line_edit("Password (almeno 8 caratteri)")
+	_password_edit = _line_edit(tr("LOGIN_PASSWORD_MIN8"))
 	_column.add_child(_password_field(_password_edit))
-	_confirm_edit = _line_edit("Conferma password")
+	_confirm_edit = _line_edit(tr("LOGIN_PASSWORD_CONFIRM"))
 	_confirm_edit.text_submitted.connect(func(_t: String) -> void: _on_primary_pressed())
 	_column.add_child(_password_field(_confirm_edit))
 
-	_primary_text = "CREA ACCOUNT"
+	_primary_text = tr("LOGIN_SIGNUP_TITLE")
 	_primary_button = _plate_button(_primary_text, Style.GOLD, Style.GOLD_DEEP, Style.TOUCH_PRIMARY)
 	_primary_button.pressed.connect(_on_primary_pressed)
 	_column.add_child(_primary_button)
 
-	_column.add_child(_link_button("Hai già un account? Accedi",
+	_column.add_child(_link_button(tr("LOGIN_GO_LOGIN"),
 		func() -> void: _set_state(State.LOGIN)))
 
-	_column.add_child(_separator("oppure"))
+	_column.add_child(_separator(tr("LOGIN_OR")))
 	_column.add_child(_provider_buttons())
 
 	_error_label = _build_error_label()
@@ -240,12 +275,12 @@ func _provider_buttons() -> Control:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 
-	_google_button = _plate_button(GOOGLE_TEXT, Style.BLUE, Style.BLUE_DEEP, Style.TOUCH_MIN)
+	_google_button = _plate_button(tr("LOGIN_GOOGLE"), Style.BLUE, Style.BLUE_DEEP, Style.TOUCH_MIN)
 	_google_button.pressed.connect(_on_google_pressed)
 	box.add_child(_google_button)
 
 	_guest_button = Button.new()
-	_guest_button.text = "Gioca come ospite"
+	_guest_button.text = tr("LOGIN_GUEST")
 	_guest_button.flat = true
 	_guest_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	_guest_button.add_theme_font_size_override("font_size", 18)
@@ -393,7 +428,7 @@ func _try_signup() -> void:
 
 func _validate_login(email: String, password: String) -> String:
 	if not _auth.email_looks_valid(email):
-		return "Controlla l'indirizzo email."
+		return tr("LOGIN_CHECK_EMAIL")
 	var pw_problem := String(_auth.password_problem(password))
 	if pw_problem != "":
 		return pw_problem
@@ -402,14 +437,14 @@ func _validate_login(email: String, password: String) -> String:
 
 func _validate_signup(username_text: String, email: String, password: String, confirm: String) -> String:
 	if username_text == "":
-		return "Scegli un nome giocatore."
+		return tr("LOGIN_CHOOSE_USERNAME")
 	if not _auth.email_looks_valid(email):
-		return "Controlla l'indirizzo email."
+		return tr("LOGIN_CHECK_EMAIL")
 	var pw_problem := String(_auth.password_problem(password))
 	if pw_problem != "":
 		return pw_problem
 	if password != confirm:
-		return "Le password non coincidono."
+		return tr("LOGIN_PASSWORDS_DONT_MATCH")
 	return ""
 
 
@@ -439,7 +474,8 @@ func _on_login_completed(success: bool, reason: String) -> void:
 		return
 	_set_google_waiting(false)
 	_set_busy(false)
-	_show_error(String(REASONS.get(reason, "Accesso non riuscito.")))
+	var reason_key: String = String(REASON_KEYS.get(reason, ""))
+	_show_error(tr(reason_key) if reason_key != "" else tr("LOGIN_FAILED"))
 
 
 func _on_restore_finished(success: bool) -> void:
@@ -455,7 +491,7 @@ func _set_google_waiting(waiting: bool) -> void:
 	if _google_button == null:
 		return
 	_google_button.disabled = _busy and not waiting
-	_google_button.text = GOOGLE_WAIT_TEXT if waiting else GOOGLE_TEXT
+	_google_button.text = tr("LOGIN_GOOGLE_WAITING") if waiting else tr("LOGIN_GOOGLE")
 
 
 func _set_busy(busy: bool) -> void:

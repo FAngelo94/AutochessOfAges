@@ -26,6 +26,10 @@ var sfx_volume: float = 0.8
 ## Volume della musica di sottofondo, lineare 0..1. Preferenza di dispositivo
 ## come sfx_volume: non va sul server.
 var music_volume: float = 0.2
+## Lingua scelta esplicitamente ("it"/"en"), vuota se mai scelta: in quel caso
+## si segue la lingua del sistema operativo. Preferenza di dispositivo come
+## combat_speed: non va sul server.
+var locale: String = ""
 ## Ultima modalità scelta nel menu ("cpu" / "pvp"). Vuota al primo avvio. La
 ## stringa non è validata qui: ui/menu.gd la confronta con le proprie costanti e
 ## ricade su "contro il computer" se non la riconosce, così app/ non deve
@@ -87,6 +91,7 @@ func load_profile() -> void:
 	combat_speed = float(config.get_value("preferences", "combat_speed", 1.0))
 	sfx_volume = float(config.get_value("preferences", "sfx_volume", 0.8))
 	music_volume = float(config.get_value("preferences", "music_volume", 0.2))
+	locale = String(config.get_value("preferences", "locale", ""))
 	match_mode = String(config.get_value("preferences", "match_mode", ""))
 	matches_played = int(config.get_value("stats", "matches_played", 0))
 	best_placement = int(config.get_value("stats", "best_placement", 0))
@@ -104,6 +109,7 @@ func save_profile() -> void:
 	config.set_value("preferences", "combat_speed", combat_speed)
 	config.set_value("preferences", "sfx_volume", sfx_volume)
 	config.set_value("preferences", "music_volume", music_volume)
+	config.set_value("preferences", "locale", locale)
 	config.set_value("preferences", "match_mode", match_mode)
 	config.set_value("preferences", "guest_mode", guest_mode)
 	config.set_value("stats", "matches_played", matches_played)
@@ -165,6 +171,25 @@ func set_music_volume(v: float) -> void:
 	music_volume = clampf(v, 0.0, 1.0)
 	save_profile()
 	changed.emit()
+
+
+## Cambia lingua: applica subito a TranslationServer (le stringhe UI) e ricarica
+## GameData (i campi di testo di data/*.json, che seguono lo stesso locale con
+## fallback all'italiano). Non riguarda la sim: core/ resta ignaro di locale.
+func set_locale(value: String) -> void:
+	locale = value
+	save_profile()
+	apply_locale()
+	changed.emit()
+
+
+## Applica il locale corrente a TranslationServer. Chiamata sia da set_locale()
+## sia all'avvio (login.gd), prima che qualunque testo venga costruito.
+func apply_locale() -> void:
+	if locale != "":
+		TranslationServer.set_locale(locale)
+	GameData.reload()
+	Catalog.reload()
 
 
 ## Registra il risultato di una partita conclusa. Il piazzamento migliore è il

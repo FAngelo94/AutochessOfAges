@@ -366,7 +366,7 @@ func _build_ui() -> void:
 	synergy_side.add_theme_constant_override("separation", 4)
 	board_row.add_child(synergy_side)
 
-	synergy_side.add_child(_section_title("SINERGIE"))
+	synergy_side.add_child(_section_title(tr("MATCH_SYNERGIES")))
 	synergy_side.add_child(_build_synergy_card())
 
 	body.add_child(_spacer(6))
@@ -386,12 +386,12 @@ func _build_ui() -> void:
 	bench_row_wrap.add_child(_bench_row)
 
 	_xp_button = _shop_icon_button(
-		"📈", "Esperienza", int(GameData.balance()["economy"]["buy_xp_cost"]))
+		"📈", tr("MATCH_XP"), int(GameData.balance()["economy"]["buy_xp_cost"]))
 	_xp_button.pressed.connect(_on_buy_xp_pressed)
 	bench_row_wrap.add_child(_xp_button)
 
 	body.add_child(_spacer(6))
-	body.add_child(_section_title("NEGOZIO"))
+	body.add_child(_section_title(tr("MATCH_SHOP")))
 
 	var shop_row_wrap := HBoxContainer.new()
 	shop_row_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -403,7 +403,7 @@ func _build_ui() -> void:
 	shop_row_wrap.add_child(_shop_row)
 
 	_reroll_button = _shop_icon_button(
-		"🔄", "Aggiorna", int(GameData.balance()["economy"]["reroll_cost"]))
+		"🔄", tr("MATCH_REROLL"), int(GameData.balance()["economy"]["reroll_cost"]))
 	_reroll_button.pressed.connect(_on_reroll_pressed)
 	shop_row_wrap.add_child(_reroll_button)
 
@@ -453,7 +453,7 @@ func _build_hud() -> Control:
 	# una fetta maggiore va a capo. La posizione è due caratteri, e ne chiede meno.
 	_level_label = _chip(chips, _glyph_label("⬆", Style.BLUE), 1.4)
 	_rank_label = _chip(chips, _glyph_label("🏆", Style.GOLD), 0.7,
-		"Posizione attuale. A parità di vita sta davanti chi l'ha persa più tardi.")
+		tr("MATCH_RANK_TOOLTIP"))
 
 	# RichTextLabel (non Label) solo per poter evidenziare in rosso/grassetto il
 	# conteggio "Unità X/Y" quando il campo non è pieno — vedi _refresh().
@@ -519,7 +519,7 @@ func _chip(row: HBoxContainer, glyph: Control, stretch: float = 1.0, tip: String
 ## parola "oro" — così non serve tenere premuto per scoprirlo.
 func _shop_icon_button(icon: String, action_label: String, cost: int) -> Button:
 	var button := Button.new()
-	button.tooltip_text = "%s · %d oro" % [action_label, cost]
+	button.tooltip_text = tr("MATCH_ACTION_COST") % [action_label, cost]
 	button.custom_minimum_size = ICON_BUTTON_SIZE
 	Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 14, 4)
 
@@ -559,7 +559,7 @@ func _build_action_bar() -> Control:
 
 	# Vendi porta una parola e un numero, gli altri due una sola icona: a fette
 	# uguali il primo verrebbe troncato e gli altri sprecherebbero spazio.
-	_sell_button = _bar_button(minor, "Vendi", Style.PLATE)
+	_sell_button = _bar_button(minor, tr("MATCH_SELL"), Style.PLATE)
 	_sell_button.size_flags_stretch_ratio = 2.0
 	_sell_button.disabled = true
 	_sell_button.pressed.connect(_on_sell_pressed)
@@ -570,11 +570,11 @@ func _build_action_bar() -> Control:
 	# il pulsante non apre un pannello, riporta alla home, e la freccia lo dice
 	# senza doverlo leggere nel tooltip.
 	var leave_button := _bar_button(minor, "⇤", Style.PLATE)
-	leave_button.tooltip_text = "Torna al menu principale"
+	leave_button.tooltip_text = tr("MATCH_BACK_TO_MENU")
 	leave_button.pressed.connect(_on_menu_button_pressed)
 
 	_fight_button = Button.new()
-	_fight_button.text = "COMBATTI"
+	_fight_button.text = tr("MATCH_FIGHT")
 	_fight_button.custom_minimum_size = Vector2(0, PRIMARY_BUTTON_HEIGHT)
 	_fight_button.add_theme_font_size_override("font_size", 38)
 	_fight_button.add_theme_color_override("font_color", Style.INK)
@@ -599,7 +599,7 @@ func _build_action_bar() -> Control:
 	_prep_bar.add_child(_prep_label)
 
 	_ready_button = Button.new()
-	_ready_button.text = "PRONTO"
+	_ready_button.text = tr("MATCH_READY")
 	_ready_button.custom_minimum_size = Vector2(0, PRIMARY_BUTTON_HEIGHT)
 	_ready_button.add_theme_font_size_override("font_size", 34)
 	_ready_button.add_theme_color_override("font_color", Style.INK)
@@ -656,7 +656,7 @@ func _build_info_sheet() -> void:
 	column.add_theme_constant_override("separation", 10)
 	margin.add_child(column)
 
-	column.add_child(_section_title("CRONACA"))
+	column.add_child(_section_title(tr("MATCH_CHRONICLE")))
 
 	_log_label = RichTextLabel.new()
 	_log_label.bbcode_enabled = true
@@ -666,7 +666,7 @@ func _build_info_sheet() -> void:
 	column.add_child(_log_label)
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 24)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 16, 5)
@@ -746,7 +746,7 @@ func _build_combat_overlay() -> void:
 	# vedi _request_overlay_close(). Al posto del pulsante, un avviso che dice
 	# cosa si sta aspettando, nella stessa riga così l'altezza non salta.
 	_combat_hint = Label.new()
-	_combat_hint.text = "Si torna alla preparazione…"
+	_combat_hint.text = tr("MATCH_RETURNING_TO_PREP")
 	_combat_hint.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	_combat_hint.add_theme_font_size_override("font_size", 18)
 	_combat_hint.add_theme_color_override("font_color", Style.TEXT_DIM)
@@ -793,7 +793,7 @@ func _build_combat_bottom_bar() -> Control:
 	_combat_bottom_bar.add_theme_constant_override("separation", 8)
 
 	var label := Label.new()
-	label.text = "Tu"
+	label.text = tr("MATCH_YOU")
 	label.add_theme_font_size_override("font_size", 15)
 	label.add_theme_color_override("font_color", Style.TEXT_DIM)
 	_combat_bottom_bar.add_child(label)
@@ -908,7 +908,7 @@ func _build_spectate_overlay() -> void:
 		speeds.add_child(button)
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 24)
 	Style.apply_plate(close, Style.PLATE, Style.PLATE_DARK, 16, 5)
@@ -938,7 +938,7 @@ func _on_spectate_ready(player_index: int, combat: Dictionary, team: int, oppone
 	var pl: Player = null
 	if player_index >= 0 and player_index < match_state.players.size():
 		pl = match_state.players[player_index]
-	_spectate_title.text = "Ultima battaglia — %s" % (pl.display_name if pl != null else "?")
+	_spectate_title.text = tr("MATCH_LAST_BATTLE") % (pl.display_name if pl != null else "?")
 	_spectate_view.set_hero_portraits(pl.hero_id if pl != null else "", opponent_hero_id)
 	_spectate_view.speed = float(_profile.combat_speed)
 	_spectate_view.load_combat(combat, team)
@@ -1059,12 +1059,12 @@ func _standing_chip(pl: Player, position: int, width: float, own: bool = false,
 	var chip := Button.new()
 	chip.custom_minimum_size = Vector2(width, Style.TOUCH_MIN * 0.55)
 	chip.disabled = not watchable
-	chip.tooltip_text = "Rivedi l'ultima battaglia di %s" % pl.display_name if watchable \
-		else "%s non ha una battaglia da rivedere" % pl.display_name
+	chip.tooltip_text = tr("MATCH_REVIEW_LAST_BATTLE") % pl.display_name if watchable \
+		else tr("MATCH_NO_BATTLE_TO_REVIEW") % pl.display_name
 	# La spada e il bordo acceso segnano l'avversario del round che sta per
 	# iniziare: la riga resta comunque toccabile (o spenta) come le altre.
 	if next_opponent:
-		chip.tooltip_text = "Prossimo avversario. " + chip.tooltip_text
+		chip.tooltip_text = tr("MATCH_NEXT_OPPONENT_PREFIX") + chip.tooltip_text
 	_style_ranking_row(chip, next_opponent)
 	if watchable:
 		chip.pressed.connect(_open_spectate.bind(pl))
@@ -1165,8 +1165,8 @@ func _standing_row(parent: Control, pl: Player, position: int, font_size: int) -
 	var row := Button.new()
 	row.custom_minimum_size = Vector2(0, Style.TOUCH_MIN * (0.4 if font_size <= 15 else 0.55))
 	row.disabled = not watchable
-	row.tooltip_text = "Rivedi l'ultima battaglia di %s" % pl.display_name if watchable \
-		else "%s non ha una battaglia da rivedere" % pl.display_name
+	row.tooltip_text = tr("MATCH_REVIEW_LAST_BATTLE") % pl.display_name if watchable \
+		else tr("MATCH_NO_BATTLE_TO_REVIEW") % pl.display_name
 	_style_ranking_row(row)
 	if watchable:
 		row.pressed.connect(_open_spectate.bind(pl))
@@ -1280,7 +1280,7 @@ func _build_spectator_screen() -> void:
 	scroll.add_child(_spectator_rows)
 
 	_spectator_restart = Button.new()
-	_spectator_restart.text = "NUOVA PARTITA"
+	_spectator_restart.text = tr("MATCH_NEW_GAME")
 	_spectator_restart.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	_spectator_restart.add_theme_font_size_override("font_size", 26)
 	_spectator_restart.add_theme_color_override("font_color", Style.INK)
@@ -1289,7 +1289,7 @@ func _build_spectator_screen() -> void:
 	box.add_child(_spectator_restart)
 
 	var leave := Button.new()
-	leave.text = "Torna al menu"
+	leave.text = tr("MATCH_BACK_TO_MENU_BUTTON")
 	leave.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	leave.add_theme_font_size_override("font_size", 24)
 	Style.apply_plate(leave, Style.PLATE, Style.PLATE_DARK, 16, 5)
@@ -1325,13 +1325,13 @@ func _update_spectator_mode() -> void:
 		return
 
 	if finished:
-		_spectator_title.text = "PARTITA CONCLUSA"
-		_spectator_subtitle.text = "Il tuo piazzamento: %d° su %d" % [
+		_spectator_title.text = tr("MATCH_FINISHED")
+		_spectator_subtitle.text = tr("MATCH_YOUR_PLACEMENT") % [
 			player().placement, match_state.players.size()]
 		_spectator_status.visible = false
 	else:
-		_spectator_title.text = "SEI STATO ELIMINATO"
-		_spectator_subtitle.text = "%d° posto · tocca un giocatore per rivedere la sua ultima battaglia" % \
+		_spectator_title.text = tr("MATCH_ELIMINATED")
+		_spectator_subtitle.text = tr("MATCH_ELIMINATED_SUBTITLE") % \
 			player().placement
 		_spectator_status.text = _remaining_players_status_text()
 		_spectator_status.visible = true
@@ -1557,7 +1557,7 @@ func _build_synergy_detail() -> void:
 	_synergy_detail_tiers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll_content.add_child(_synergy_detail_tiers)
 
-	scroll_content.add_child(_section_title("Unità"))
+	scroll_content.add_child(_section_title(tr("MATCH_UNITS")))
 
 	_synergy_detail_units = GridContainer.new()
 	_synergy_detail_units.columns = 6
@@ -1566,7 +1566,7 @@ func _build_synergy_detail() -> void:
 	scroll_content.add_child(_synergy_detail_units)
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 24)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 16, 5)
@@ -1613,7 +1613,7 @@ func _open_synergy_detail(trait_id: String, units: Array = []) -> void:
 		row.add_child(inner)
 
 		var heading := Label.new()
-		heading.text = "%d unità %s" % [required, "— raggiunta" if reached else ""]
+		heading.text = tr("MATCH_TIER_UNITS") % required + (tr("MATCH_TIER_REACHED") if reached else "")
 		heading.add_theme_font_size_override("font_size", 18)
 		heading.add_theme_color_override("font_color", Style.GOLD if reached else Style.TEXT_DIM)
 		inner.add_child(heading)
@@ -1685,7 +1685,7 @@ func _start_new_match() -> void:
 	_auto_close_left = -1.0
 	_final_standings = []
 	_match_recorded = false
-	_fight_button.text = "COMBATTI"
+	_fight_button.text = tr("MATCH_FIGHT")
 	selected = null
 
 	_session = _make_session()
@@ -1708,8 +1708,8 @@ func _start_new_match() -> void:
 	player().unit_upgraded.connect(_on_unit_upgraded)
 	_apply_session_mode_ui()
 
-	_log("[b]Nuova partita[/b] (seed %d)" % match_state.seed_value)
-	_log("Civiltà disponibili: %s" % ", ".join(_store.playable_origins()))
+	_log(("[b]%s[/b]" % tr("MATCH_LOG_NEW_GAME")) + " " + (tr("MATCH_LOG_SEED") % match_state.seed_value))
+	_log(tr("MATCH_LOG_AVAILABLE_CIVS") % ", ".join(_store.playable_origins()))
 	_restart_preparation_timer()
 	_refresh()
 	_tips.queue_tip("shop")
@@ -1745,7 +1745,7 @@ func _on_ready_pressed() -> void:
 	if _combat_overlay.visible:
 		return
 	_ready_button.disabled = true
-	_ready_button.text = "IN ATTESA…"
+	_ready_button.text = tr("MATCH_WAITING")
 	_session.request_ready()
 
 
@@ -1753,7 +1753,7 @@ func _on_ready_pressed() -> void:
 ## finite, quindi è il momento in cui gli otto rientrano insieme in preparazione.
 func _on_remote_round_started(_stage: int, _round_index: int) -> void:
 	_ready_button.disabled = false
-	_ready_button.text = "PRONTO"
+	_ready_button.text = tr("MATCH_READY")
 	_request_overlay_close(true)
 
 
@@ -1781,7 +1781,7 @@ func _process(delta: float) -> void:
 		return
 	if _session is RemoteSession and not _combat_overlay.visible:
 		var left: float = (_session as RemoteSession).prep_seconds_left
-		_prep_label.text = "Preparazione: %d s" % int(ceil(maxf(0.0, left)))
+		_prep_label.text = tr("MATCH_PREP_COUNTDOWN") % int(ceil(maxf(0.0, left)))
 
 
 ## La barra della battaglia avanza sull'orologio reale, non su quello della
@@ -1907,7 +1907,7 @@ func _build_reconnect_panel() -> void:
 	center.add_child(column)
 
 	var label := Label.new()
-	label.text = "Connessione persa — riconnessione…"
+	label.text = tr("MATCH_CONNECTION_LOST")
 	label.add_theme_font_size_override("font_size", 24)
 	label.add_theme_color_override("font_color", Style.GOLD)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1915,7 +1915,7 @@ func _build_reconnect_panel() -> void:
 	column.add_child(label)
 
 	var retry := Button.new()
-	retry.text = "Riconnetti"
+	retry.text = tr("MATCH_RECONNECT")
 	retry.custom_minimum_size = Vector2(260, Style.TOUCH_MIN)
 	retry.add_theme_font_size_override("font_size", 22)
 	Style.apply_plate(retry, Style.GOLD, Style.GOLD_DEEP, 18, 6)
@@ -1927,7 +1927,7 @@ func _build_reconnect_panel() -> void:
 	column.add_child(retry)
 
 	var to_menu := Button.new()
-	to_menu.text = "Torna al menu"
+	to_menu.text = tr("MATCH_BACK_TO_MENU_BUTTON")
 	to_menu.custom_minimum_size = Vector2(260, Style.TOUCH_MIN)
 	to_menu.add_theme_font_size_override("font_size", 22)
 	Style.apply_plate(to_menu, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -1958,7 +1958,7 @@ func _begin_battle() -> void:
 	_resolving = true
 	selected = null
 	_fight_button.disabled = true
-	_fight_button.text = "ALLA BATTAGLIA…"
+	_fight_button.text = tr("MATCH_TO_BATTLE")
 	local.request_ready_async()
 
 
@@ -1969,7 +1969,7 @@ func _begin_battle() -> void:
 func _on_round_concluded(results: Array) -> void:
 	_resolving = false
 	_fight_button.disabled = false
-	_fight_button.text = "COMBATTI"
+	_fight_button.text = tr("MATCH_FIGHT")
 	var own := _own_result(results)
 
 	# Niente replay se non c'è nulla da guardare: giocatore già eliminato,
@@ -1990,27 +1990,27 @@ func _on_command_rejected(reason: String) -> void:
 		sfx.play_denied()
 	match reason:
 		"reroll":
-			_log("[color=#e0a070]Oro insufficiente per aggiornare il negozio.[/color]")
+			_log("[color=#e0a070]%s[/color]" % tr("MATCH_ERR_GOLD_FOR_REROLL"))
 		"buy_xp":
-			_log("[color=#e0a070]Non puoi comprare esperienza adesso.[/color]")
+			_log("[color=#e0a070]%s[/color]" % tr("MATCH_ERR_CANT_BUY_XP"))
 		"board_full":
 			var p := player()
-			_log("[color=#e0a070]Puoi schierare al massimo %d unità (livello %d).[/color]" % [p.max_board_units(), p.level])
+			_log("[color=#e0a070]%s[/color]" % (tr("MATCH_ERR_BOARD_FULL") % [p.max_board_units(), p.level]))
 		# Motivi dal server autoritativo (modalità remota).
 		"phase":
-			_log("[color=#e0a070]Non puoi farlo adesso: la fase di preparazione è chiusa.[/color]")
+			_log("[color=#e0a070]%s[/color]" % tr("MATCH_ERR_PHASE_CLOSED"))
 		"rules":
-			_log("[color=#e0a070]Mossa non consentita.[/color]")
+			_log("[color=#e0a070]%s[/color]" % tr("MATCH_ERR_NOT_ALLOWED"))
 		"identity":
-			_log("[color=#e0a070]Comando rifiutato dal server.[/color]")
+			_log("[color=#e0a070]%s[/color]" % tr("MATCH_ERR_REJECTED_BY_SERVER"))
 		"eliminated":
-			_log("[color=#e0a070]Sei stato eliminato: non puoi più comprare né aggiornare.[/color]")
+			_log("[color=#e0a070]%s[/color]" % tr("MATCH_ERR_ELIMINATED"))
 		"not_joined", "no_match", "join_token", "join_seat":
-			_log("[color=#e0a070]Sessione non valida — prova a riconnetterti.[/color]")
+			_log("[color=#e0a070]%s[/color]" % tr("MATCH_ERR_INVALID_SESSION"))
 		"oversize":
-			_log("[color=#e0a070]Comando troppo grande, ignorato.[/color]")
+			_log("[color=#e0a070]%s[/color]" % tr("MATCH_ERR_COMMAND_TOO_BIG"))
 		_:
-			_log("[color=#e0a070]Comando rifiutato (%s).[/color]" % reason)
+			_log("[color=#e0a070]%s[/color]" % (tr("MATCH_ERR_REJECTED_REASON") % reason))
 
 
 ## Il risultato del round dal punto di vista del giocatore umano.
@@ -2023,8 +2023,8 @@ func _own_result(results: Array) -> Dictionary:
 
 func _show_combat(own: Dictionary) -> void:
 	var opponent: Player = own["opponent"]
-	_combat_title.text = "Round %s — contro %s" % [
-		_previous_round_label(), opponent.display_name if opponent != null else "nessuno",
+	_combat_title.text = tr("MATCH_ROUND_VS") % [
+		_previous_round_label(), opponent.display_name if opponent != null else tr("MATCH_NOBODY"),
 	]
 	_refresh_combat_info(own)
 	_combat_outcome.text = ""
@@ -2068,10 +2068,10 @@ func _on_playback_finished() -> void:
 		return
 
 	if bool(own["won"]):
-		_combat_outcome.text = "Vittoria — %d danni all'avversario" % int(own["damage_dealt"])
+		_combat_outcome.text = tr("MATCH_VICTORY") % int(own["damage_dealt"])
 		_combat_outcome.add_theme_color_override("font_color", Color(0.5, 0.85, 0.5))
 	else:
-		_combat_outcome.text = "Sconfitta — %d danni alla tua vita" % int(own["damage"])
+		_combat_outcome.text = tr("MATCH_DEFEAT") % int(own["damage"])
 		_combat_outcome.add_theme_color_override("font_color", Color(0.9, 0.45, 0.45))
 	_combat_hint.visible = true
 	_combat_controls.visible = false
@@ -2174,9 +2174,10 @@ func _show_match_over() -> void:
 	if _final_standings.is_empty():
 		_final_standings = _normalize_standings(match_state.standings())
 	if not _final_standings.is_empty():
-		_log("\n[b]Partita conclusa.[/b] Vince %s." % _final_standings[0].get("display_name", "?"))
-	_log("Il tuo piazzamento: %d° su %d." % [player().placement, match_state.players.size()])
-	_fight_button.text = "NUOVA PARTITA"
+		_log("\n[b]%s[/b] %s" % [tr("MATCH_LOG_OVER"),
+			tr("MATCH_LOG_WINNER") % _final_standings[0].get("display_name", "?")])
+	_log(tr("MATCH_LOG_YOUR_PLACEMENT") % [player().placement, match_state.players.size()])
+	_fight_button.text = tr("MATCH_NEW_GAME")
 	# record_match una volta sola: _conclude_round può ripassare di qui se
 	# arrivano altri snapshot dopo la fine.
 	if not _match_recorded:
@@ -2185,7 +2186,7 @@ func _show_match_over() -> void:
 		_record_local_history()
 	if session_mode == SessionMode.REMOTE:
 		_ready_button.visible = false
-		_prep_label.text = "Partita conclusa — usa ☰ per uscire"
+		_prep_label.text = tr("MATCH_OVER_USE_MENU_TO_EXIT")
 
 
 ## Cronologia e telemetria delle partite locali (app/match_log.gd). Solo in
@@ -2228,7 +2229,7 @@ func _final_units() -> Array:
 func _on_rank_updated(mmr: int, delta: int) -> void:
 	var rank := GameData.rank_for_mmr(mmr)
 	var sign := "+" if delta >= 0 else ""
-	_log("Grado: %s (%d mmr, %s%d)" % [rank.get("name", "—"), mmr, sign, delta])
+	_log(tr("MATCH_LOG_RANK") % [rank.get("name", "—"), mmr, sign, delta])
 
 
 ## Chiede conferma prima di lasciare il combattimento: uscire abbandona la
@@ -2241,18 +2242,18 @@ func _on_menu_button_pressed() -> void:
 	if not _final_standings.is_empty():
 		# La partita per il giocatore è già finita (è nella schermata della
 		# classifica): uscire non è una resa, non cambia nulla del risultato.
-		dialog = ModalDialog.confirm(self, "Uscire dalla partita?",
-			"Vuoi tornare al menu?",
-			"Esci")
+		dialog = ModalDialog.confirm(self, tr("MATCH_EXIT_MATCH_TITLE"),
+			tr("MATCH_EXIT_MATCH_BODY"),
+			tr("MATCH_EXIT"))
 	elif session_mode == SessionMode.REMOTE:
 		# Online non si può distruggere la scena e sparire: è una resa.
-		dialog = ModalDialog.confirm(self, "Abbandonare la partita?",
-			"La partita verrà contata come una sconfitta e il posto in classifica ne risentirà.",
-			"Abbandona")
+		dialog = ModalDialog.confirm(self, tr("MATCH_SURRENDER_TITLE"),
+			tr("MATCH_SURRENDER_BODY"),
+			tr("MATCH_SURRENDER"))
 	else:
-		dialog = ModalDialog.confirm(self, "Uscire dal combattimento?",
-			"La partita in corso andrà persa: non è possibile riprenderla da dove l'hai lasciata.",
-			"Esci")
+		dialog = ModalDialog.confirm(self, tr("MATCH_EXIT_COMBAT_TITLE"),
+			tr("MATCH_EXIT_COMBAT_BODY"),
+			tr("MATCH_EXIT"))
 	dialog.confirmed.connect(_on_exit_confirmed)
 
 
@@ -2273,25 +2274,27 @@ func _on_menu_pressed() -> void:
 ## riepilogo di chi è ancora in gioco.
 func _report(results: Array) -> void:
 	var human := player()
-	_log("\n[b]Round %s[/b]" % match_state.round_label())
+	_log("\n[b]%s[/b]" % (tr("MATCH_LOG_ROUND") % match_state.round_label()))
 
 	for result in results:
 		if result["player"] != human:
 			continue
 		var opponent: Player = result["opponent"]
-		var opponent_name: String = opponent.display_name if opponent != null else "nessuno"
+		var opponent_name: String = opponent.display_name if opponent != null else tr("MATCH_NOBODY")
 		if bool(result["won"]):
-			_log("  [color=#7fd67f]Vittoria[/color] contro %s (−%d vita avversario)" % [opponent_name, int(result["damage_dealt"])])
+			_log("  [color=#7fd67f]%s[/color] %s" % [tr("MATCH_LOG_VICTORY"),
+				tr("MATCH_LOG_VS_DAMAGE_DEALT") % [opponent_name, int(result["damage_dealt"])]])
 		else:
-			_log("  [color=#e07070]Sconfitta[/color] contro %s (−%d vita)" % [opponent_name, int(result["damage"])])
+			_log("  [color=#e07070]%s[/color] %s" % [tr("MATCH_LOG_DEFEAT"),
+				tr("MATCH_LOG_VS_DAMAGE_TAKEN") % [opponent_name, int(result["damage"])]])
 		var combat: Dictionary = result["combat"]
 		if not combat.is_empty():
-			_log("  durata %.1fs" % float(combat["duration"]))
+			_log("  " + tr("MATCH_LOG_DURATION") % float(combat["duration"]))
 
 	if human.eliminated:
-		_log("  [color=#e07070]Sei stato eliminato: %d° posto.[/color]" % human.placement)
+		_log("  [color=#e07070]%s[/color]" % (tr("MATCH_LOG_ELIMINATED") % human.placement))
 
-	_log("  in gioco: %d" % match_state.alive_players().size())
+	_log("  " + tr("MATCH_LOG_ALIVE_COUNT") % match_state.alive_players().size())
 
 
 func _on_reroll_pressed() -> void:
@@ -2315,7 +2318,7 @@ func _on_sell_pressed() -> void:
 	var name := selected.def.display_name
 	_session.request_sell(selected.uid)
 	selected = null
-	_log("Venduto %s per %d oro." % [name, value])
+	_log(tr("MATCH_LOG_SOLD") % [name, value])
 
 
 func _on_shop_slot_pressed(slot: int) -> void:
@@ -2330,13 +2333,13 @@ func _on_shop_slot_pressed(slot: int) -> void:
 			sfx.play_denied()
 		var def: UnitDef = p.shop[slot]
 		if p.gold < def.cost:
-			_log("[color=#e0a070]Servono %d oro per %s.[/color]" % [def.cost, def.display_name])
+			_log("[color=#e0a070]%s[/color]" % (tr("MATCH_ERR_NEED_GOLD_FOR") % [def.cost, def.display_name]))
 		else:
-			_log("[color=#e0a070]Panchina piena.[/color]")
+			_log("[color=#e0a070]%s[/color]" % tr("MATCH_ERR_BENCH_FULL"))
 		return
 	var bought_name: String = (p.shop[slot] as UnitDef).display_name
 	_session.request_buy(slot)
-	_log("Comprato %s." % bought_name)
+	_log(tr("MATCH_LOG_BOUGHT") % bought_name)
 	_tips.queue_tip("bench")
 
 
@@ -2399,7 +2402,7 @@ func _refresh() -> void:
 
 	var p := player()
 
-	_round_label.text = "Round %s" % match_state.round_label()
+	_round_label.text = tr("MATCH_ROUND") % match_state.round_label()
 
 	# I tre numeri caldi finiscono nelle chip, dove si leggono di sbieco senza
 	# rileggere l'etichetta; quelli che si consultano e basta restano in riga.
@@ -2412,17 +2415,17 @@ func _refresh() -> void:
 	# campo, e va notato mentre la panchina è ancora piena.
 	var deployed := p.board_count()
 	var cap := p.max_board_units()
-	var units_text := "Unità %d/%d" % [deployed, cap]
+	var units_text := tr("MATCH_UNITS_COUNT") % [deployed, cap]
 	if deployed < cap:
 		units_text = "[b][color=#e87272]%s[/color][/b]" % units_text
-	var streak_text := "Serie %+d" % p.streak
+	var streak_text := tr("MATCH_STREAK") % p.streak
 	var streak_gold := _streak_gold_bonus(p.streak)
 	if streak_gold > 0:
-		streak_text += " (+%d oro)" % streak_gold
+		streak_text += tr("MATCH_STREAK_GOLD_BONUS") % streak_gold
 	_stats_label.text = "%s    %s    %s" % [p.display_name, units_text, streak_text]
 
 	_sell_button.disabled = selected == null
-	_sell_button.text = "Vendi · %d" % selected.sell_value() if selected != null else "Vendi"
+	_sell_button.text = tr("MATCH_SELL_VALUE") % selected.sell_value() if selected != null else tr("MATCH_SELL")
 
 	_refresh_shop()
 	_refresh_board()

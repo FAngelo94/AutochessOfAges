@@ -1,0 +1,31 @@
+{
+  "_comment": "English text overlay for catalog.json. Entitlements are no longer sold in the store, but MockStore/tests still read their name/description.",
+  "entitlements": {
+    "season_pass": {
+      "name": "Season Pass",
+      "description": "Cosmetic rewards throughout the whole season."
+    },
+    "civ_gaul": {
+      "name": "Civilization: Gauls",
+      "description": "Unlocks the Gauls."
+    },
+    "civ_teuton": {
+      "name": "Civilization: Teutons",
+      "description": "Unlocks the Teutons."
+    },
+    "cosmetic_pack_legion": {
+      "name": "Skins: Golden Legion",
+      "description": "Alternate looks for Roman units."
+    }
+  },
+  "donations": {
+    "goals": [
+      "introduction of 1 new civilization",
+      "introduction of 2 new heroes",
+      "account customization with avatars",
+      "advanced avatar customization pack for supporters",
+      "enriching the store with new ambitious goals",
+      "overall improvement of the game"
+    ]
+  }
+}

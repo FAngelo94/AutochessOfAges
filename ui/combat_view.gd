@@ -31,7 +31,6 @@ const CAST_FLASH := 0.35
 ## Annuncio del berserk: compare quando la simulazione passa a velocità tripla e
 ## si dissolve nell'arco di BERSERK_BANNER_FADE secondi. La durata è quella
 ## chiesta a schermo, non ha rapporto con la finestra accelerata, che è più lunga.
-const BERSERK_BANNER := "Berserker Time"
 const BERSERK_BANNER_FADE := 3.0
 const BERSERK_COLOR := Color(0.98, 0.36, 0.28)
 
@@ -811,17 +810,18 @@ func _draw_berserk_banner() -> void:
 	# Una spinta di scala solo all'inizio: entra con un colpo e poi si posa.
 	var punch: float = 1.0 + 0.18 * maxf(0.0, 1.0 - age / 0.25)
 	var font_size := int(roundf(46.0 * punch))
-	var width := _font.get_string_size(BERSERK_BANNER, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var banner_text := tr("COMBAT_BERSERKER_TIME")
+	var width := _font.get_string_size(banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	var at := Vector2((size.x - width) * 0.5, size.y * 0.42)
 
 	# Contorno scuro: la scritta cade su un campo di battaglia colorato e senza
 	# stacco si perderebbe proprio nel momento in cui deve farsi leggere.
 	var shadow := Color(0.05, 0.02, 0.02, alpha * 0.8)
 	for offset in [Vector2(2, 2), Vector2(-2, 2), Vector2(2, -2), Vector2(-2, -2)]:
-		draw_string(_font, at + offset, BERSERK_BANNER, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, shadow)
+		draw_string(_font, at + offset, banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, shadow)
 	var color := BERSERK_COLOR
 	color.a = alpha
-	draw_string(_font, at, BERSERK_BANNER, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+	draw_string(_font, at, banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
 func _draw_clock() -> void:

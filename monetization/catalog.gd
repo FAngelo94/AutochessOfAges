@@ -24,7 +24,18 @@ static func ensure_loaded() -> void:
 		return
 	var parsed = JSON.parse_string(text)
 	if parsed is Dictionary:
-		_data = parsed
+		# I campi di testo (nomi/descrizioni entitlement, obiettivi delle
+		# donazioni) seguono lo stesso schema di traduzione di GameData: un
+		# catalog.<locale>.json affiancato, con fallback all'italiano.
+		_data = GameData.load_localized(PATH)
+
+
+## Ricarica da disco: usato da Profile.apply_locale() perché i testi seguono
+## il locale corrente, come GameData.reload().
+static func reload() -> void:
+	_loaded = false
+	_data.clear()
+	ensure_loaded()
 
 
 static func data() -> Dictionary:
