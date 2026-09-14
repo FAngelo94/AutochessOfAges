@@ -1,0 +1,81 @@
+{
+  "_comment": "English text overlay for tutorial.json. Placeholders like {reroll_cost} stay untranslated, they are substituted at runtime by TutorialText.expand().",
+
+  "guide": [
+    {
+      "id": "obiettivo",
+      "title": "Objective",
+      "body": "You start with {players} players. Every round your formation faces an opponent's, automatically. Whoever loses takes damage to their health: the last one who doesn't hit zero stays in the game."
+    },
+    {
+      "id": "economia",
+      "title": "Gold and interest",
+      "body": "You earn gold every round. Keeping some aside instead of spending it all pays off more: every {interest_per} gold saved earns 1 gold of interest, up to a maximum of {max_interest}."
+    },
+    {
+      "id": "negozio",
+      "title": "Shop and stars",
+      "body": "Units are bought from the shop: the pool they're drawn from is shared with every opponent, so what they buy you won't find. {copies_to_upgrade} identical copies automatically become a 2-star unit, stronger; {copies_to_upgrade} 2-star ones become a 3-star one."
+    },
+    {
+      "id": "schieramento",
+      "title": "Deployment",
+      "body": "Only units on the field fight: those on the bench just watch. The front row of the field is the one in contact with the enemy, so that's where you put units meant to soak up hits. You have {preparation_seconds} seconds to set everything up — the bar at the bottom counts them — then the round starts on its own."
+    },
+    {
+      "id": "classifica",
+      "title": "The leaderboard",
+      "body": "Below the field, the LEADERBOARD box lists all players ordered by health remaining, your own row in blue. The opponent for the round about to start is marked with a sword ⚔ and a lit border: tapping their row shows how they were deployed last round, so you can adapt your formation before facing them. The other rows show each player's last battle."
+    },
+    {
+      "id": "sinergie",
+      "title": "Synergies",
+      "body": "Units from the same civilization or the same role trigger team bonuses once certain thresholds are reached. You'll find them listed as chips below the field: full when active, empty when a unit or two is still missing."
+    },
+    {
+      "id": "combattimento",
+      "title": "The battle",
+      "body": "During combat you don't control anything: every decision is made beforehand, in preparation. The bar at the bottom of the screen measures the round, which lasts {round_seconds} seconds: in the last {berserk_seconds} Berserker Time kicks in and everything moves {berserk_scale} times faster. If nobody has won by the time it runs out, it's a draw, and neither side loses health."
+    },
+    {
+      "id": "livello",
+      "title": "Level and experience",
+      "body": "Leveling up increases how many units you can field and improves the odds of finding expensive units in the shop. Buying experience costs {buy_xp_cost} gold."
+    }
+  ],
+
+  "tips": {
+    "shop": {
+      "title": "The shop",
+      "body": "This is where you buy units. Tap one to send it to the bench: it costs gold, and if you don't like the shop you can refresh it for {reroll_cost} gold."
+    },
+    "bench": {
+      "title": "The bench",
+      "body": "Units you buy end up here. On their own they don't fight: tap them, then tap a field cell to deploy them."
+    },
+    "board": {
+      "title": "The front row",
+      "body": "You've selected a unit: tap a field cell to deploy it. The row closest to the edge is the one that takes the hits first."
+    },
+    "star": {
+      "title": "Two copies, one star",
+      "body": "{copies_to_upgrade} copies of the same unit merge on their own into a 2-star one, much stronger than the sum of the individual units. It's worth keeping them on the bench instead of selling them right away."
+    },
+    "synergy": {
+      "title": "Active synergies",
+      "body": "The chips below the field show which team bonuses are active. Tap one to see how many units the next threshold needs."
+    },
+    "combat": {
+      "title": "You fight alone",
+      "body": "You just watched the first battle: it all plays out automatically. Prepare better for the next round while the gold is still yours."
+    },
+    "ranking": {
+      "title": "Watching your opponents",
+      "body": "The LEADERBOARD box lists who's still in, ordered by health. The opponent you'll face at the start of the next round is the one with the sword ⚔ and the lit border. Tap a row to review the formation that player fought with last round: useful to see what's coming and adjust your formation."
+    },
+    "economy": {
+      "title": "Interest",
+      "body": "Every {interest_per} gold kept aside earns 1 gold of interest at the end of the round, up to {max_interest}. Spending everything every time costs more than it looks."
+    }
+  }
+}

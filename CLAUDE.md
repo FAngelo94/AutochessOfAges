@@ -114,7 +114,7 @@ signup + login: no email verification, no password recovery, zero SMTP. Session 
 `ui/login.tscn` is the actual main scene (`project.godot`): it gates the home behind a login —
 Google, email/password, or "gioca come ospite" (offline, no multiplayer/stats, remembered in
 `Profile.guest_mode`) — and falls straight through to `ui/menu.tscn` when the backend is
-unconfigured, already logged in, or already a guest. `PROTOCOL_VERSION` is 6.
+unconfigured, already logged in, or already a guest. `PROTOCOL_VERSION` is 7.
 
 The rule that holds everything else up: **`core/` does not know about `ui/`**. The simulation is
 deterministic and seeded, so the same match can be replayed identically — the prerequisite for
@@ -148,7 +148,7 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `net/match_session.gd` | `MatchSession` base class |
 | `net/local_session.gd` / `net/remote_session.gd` | `LocalSession` owns a real `MatchState` (offline); `RemoteSession` only fills one from server snapshots, never simulates |
 | `net/dev_net.gd` | local-dev multiplayer: runs client + master + worker on one machine, no Caddy/TLS, no real Google login |
-| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 6) |
+| `net/protocol.gd` | `class_name Protocol` — message-type consts, `encode`/`decode` (`PROTOCOL_VERSION` 7) |
 | `server/master_server.gd` | `SceneTree` script; auth (`AUTH_*`/`PROFILE_SET`), OAuth redirect, queue, 30s timer, worker routing |
 | `server/session_token.gd` / `session_verifier.gd` | HMAC session token minted by the master + the instance adapter injected into `Matchmaker` |
 | `server/match_token.gd` | HMAC-signs `SPAWN_MATCH` control messages between master and worker |
@@ -169,6 +169,7 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `art/unit_portraits.gd` | renders each model once, keeps the texture (autoload `Portraits`), preloads hero portraits too |
 | `ui/collection_panel.gd` | unit encyclopedia, generated from `data/` |
 | `ui/history_panel.gd` | match history — merges the server's online matches with the local ones |
+| `ui/leaderboard_panel.gd` | mmr leaderboard — top 100 + own row, online only (`LEADERBOARD_REQUEST`) |
 | `ui/store_panel.gd` | Crowdfunding Store — fixed donation tiers, progress bar to €1000, goal list |
 | `ui/guide_panel.gd` | "how to play" screen, generated from `data/tutorial.json` |
 | `ui/tip_bubble.gd` | one-shot in-match tips, queued in `data/tutorial.json`, tracked in `Profile.seen_tips` |
@@ -344,17 +345,30 @@ The player reads their history in `ui/history_panel.gd` (📜 in the menu), whic
 matches — fetched with `HISTORY_REQUEST` through the master, never HTTP straight to the DB — with
 the local ones. Guest or offline, it shows the local ones and no error.
 
+The leaderboard (`ui/leaderboard_panel.gd`, 🏆 left of Cronologia) takes the same road:
+`LEADERBOARD_REQUEST` → master → RPC `leaderboard` (`db/migrations/0006_leaderboard.sql`), which
+returns the top 100 by mmr among players with at least one ranked match, plus the caller's own row
+so a player outside the top still sees their position. It has no local fallback — mmr only exists
+server-side — so guest/offline it says to log in instead of showing an empty list.
+
 ### Balance
 
 All tunable constants live in `data/balance.json` — economy, interest, XP curve, shop odds per
 level, pool size, star scaling, damage to player health. No magic numbers in code.
 
-`shop_odds` is not the final word on what the shop offers: `UnitPool.band_weights()` multiplies
-each cost band by how many copies that band has left (`remaining / initial ^
+`shop_odds` is the weight of **one single unit** of each cost, not of the whole cost band:
+`UnitPool.band_weights()` multiplies it by how many units the band contains. The shop draws a
+band first and a unit inside it second, so band-level odds made each unit of a thin band (the
+expensive ones, 3 units) more likely than a unit of a crowded one (cost 1, 6 units) — at level 7 a
+given cost-5 unit showed up twice as often as a given cost-1 unit — and adding a unit to a band
+silently made its siblings rarer. A test asserts a single unit's chance never grows with cost.
+
+The band weight is then scaled by how many copies that band has left (`remaining / initial ^
 pool.scarcity_exponent`), so a band the eight players have drained becomes rarer and its weight
-spreads over the others. With a full pool the weights equal the table exactly — that invariant is
-what keeps the table readable — and `pool.scarcity_exponent: 0.0` restores the nominal
-distribution without touching code. A band at zero weighs zero whatever the exponent, which is
+spreads over the others. With a full pool the per-unit weights equal the table exactly — that
+invariant is what keeps the table readable — and `pool.scarcity_exponent: 0.0` restores the
+nominal distribution without touching code. `pool.copies_per_cost` shrinks with cost (29 → 13),
+so contention on expensive units kicks in sooner. A band at zero weighs zero whatever the exponent, which is
 what removed the old downward fallback: drawing cost 1 when cost 1 was exhausted had no cheaper
 band to fall back on and left the shop slot empty.
 

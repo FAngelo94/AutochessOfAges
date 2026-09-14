@@ -23,10 +23,20 @@ const DEFAULT_PORT := 9001
 ## finito è un no-op, quindi tenerlo qualche secondo in più costa nulla.
 const FINISH_GRACE_MS := 8000
 
+## Un peer muto oltre questa soglia viene disconnesso d'ufficio. Senza questo,
+## un client sospeso in background (l'OS droppa il socket senza un vero
+## close-frame) resterebbe "connesso" per sempre agli occhi del worker: il
+## posto non passerebbe mai al BotBrain di rimpiazzo (server/match_runner.gd
+## handle_disconnect) e una riconnessione da un nuovo peer_id lascerebbe
+## comunque un'entrata morta qui. Va di pari passo col PING lato client
+## (net/remote_session.gd WORKER_PING_INTERVAL/WORKER_TIMEOUT).
+const IDLE_TIMEOUT_MS := 20000
+
 var _peer := WebSocketMultiplayerPeer.new()
 var _runners: Dictionary = {}        # match_id -> MatchRunner
 var _finished_at: Dictionary = {}    # match_id -> Time.get_ticks_msec() di quando è finito
 var _peer_match: Dictionary = {}     # peer_id -> match_id
+var _peer_last_seen: Dictionary = {} # peer_id -> Time.get_ticks_msec() dell'ultimo pacchetto
 var _pump: Node
 
 
@@ -55,6 +65,8 @@ func _process(delta: float) -> bool:
 		var bytes := _peer.get_packet()
 		_route(from, bytes)
 
+	_sweep_idle_peers()
+
 	for match_id in _runners.keys():
 		var runner: MatchRunner = _runners[match_id]
 		runner.tick(delta)
@@ -69,6 +81,9 @@ func _process(delta: float) -> bool:
 
 
 func _route(peer_id: int, bytes: PackedByteArray) -> void:
+	# Qualunque pacchetto, anche malformato, prova che il peer e' vivo.
+	_peer_last_seen[peer_id] = Time.get_ticks_msec()
+
 	if bytes.size() > Protocol.MAX_PACKET_BYTES:
 		_peer.set_target_peer(peer_id)
 		_peer.put_packet(Protocol.encode(Protocol.make(Protocol.REJECTED, {"reason": "oversize"})))
@@ -79,6 +94,11 @@ func _route(peer_id: int, bytes: PackedByteArray) -> void:
 		return
 
 	var t := Protocol.message_type(msg)
+	if t == Protocol.PING:
+		_peer.set_target_peer(peer_id)
+		_peer.put_packet(Protocol.encode(Protocol.make(Protocol.PONG)))
+		return
+
 	if t == Protocol.SPAWN_MATCH:
 		_on_spawn(peer_id, msg)
 		return
@@ -118,12 +138,25 @@ func _on_spawn(peer_id: int, msg: Dictionary) -> void:
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
+	_peer_last_seen.erase(peer_id)
 	if _peer_match.has(peer_id):
 		var runner: MatchRunner = _runners.get(_peer_match[peer_id])
 		if runner != null:
 			runner.handle_disconnect(peer_id)
 			_flush(runner)
 		_peer_match.erase(peer_id)
+
+
+## Chiude d'ufficio i peer muti da troppo tempo: sono connessioni zombie
+## (l'OS del client ha droppato il socket senza un vero close-frame) che
+## altrimenti bloccherebbero per sempre il posto umano fuori dal BotBrain di
+## rimpiazzo. disconnect_peer() emette peer_disconnected al prossimo poll().
+func _sweep_idle_peers() -> void:
+	var now_ms := Time.get_ticks_msec()
+	for peer_id in _peer_match.keys():
+		var last: int = _peer_last_seen.get(peer_id, now_ms)
+		if now_ms - last > IDLE_TIMEOUT_MS:
+			_peer.disconnect_peer(peer_id)
 
 
 func _flush(runner: MatchRunner) -> void:

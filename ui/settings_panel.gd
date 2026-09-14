@@ -49,13 +49,14 @@ func _build() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "IMPOSTAZIONI"
+	title.text = tr("SETTINGS_TITLE")
 	title.add_theme_font_size_override("font_size", 34)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
 
 	column.add_child(_volume_card())
 	column.add_child(_music_card())
+	column.add_child(_language_card())
 
 	var auth := get_node_or_null("/root/Auth")
 	if auth != null and auth.is_logged_in():
@@ -75,7 +76,7 @@ func _build() -> void:
 	column.add_child(grow)
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 26)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -99,7 +100,7 @@ func _volume_card() -> Control:
 	inner.add_child(header)
 
 	var name_label := Label.new()
-	name_label.text = "Volume effetti"
+	name_label.text = tr("SETTINGS_SFX_VOLUME")
 	name_label.add_theme_font_size_override("font_size", 20)
 	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -148,7 +149,7 @@ func _music_card() -> Control:
 	inner.add_child(header)
 
 	var name_label := Label.new()
-	name_label.text = "Volume musica"
+	name_label.text = tr("SETTINGS_MUSIC_VOLUME")
 	name_label.add_theme_font_size_override("font_size", 20)
 	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -173,6 +174,53 @@ func _music_card() -> Control:
 	return card
 
 
+## Card "Lingua": due bottoni, quello della lingua attiva evidenziato in oro.
+## Il cambio è immediato (Profile.set_locale ricarica GameData/Catalog) ma i
+## testi già costruiti restano nella vecchia lingua finché lo schermo non si
+## ricostruisce: si ricarica la scena corrente subito dopo, così l'intera UI
+## si ridisegna nella lingua scelta senza richiedere un riavvio.
+func _language_card() -> Control:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 8)
+	card.add_child(inner)
+
+	var name_label := Label.new()
+	name_label.text = tr("SETTINGS_LANGUAGE")
+	name_label.add_theme_font_size_override("font_size", 20)
+	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
+	inner.add_child(name_label)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	inner.add_child(row)
+
+	var current := String(get_node("/root/Profile").locale)
+	row.add_child(_language_button("Italiano", "it", current))
+	row.add_child(_language_button("English", "en", current))
+
+	return card
+
+
+func _language_button(label: String, locale_id: String, current: String) -> Button:
+	var button := Button.new()
+	button.text = label
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	button.add_theme_font_size_override("font_size", 18)
+	if locale_id == current or (current == "" and locale_id == "it"):
+		Style.apply_plate(button, Style.GOLD, Style.GOLD_DEEP, 14, 4)
+		button.add_theme_color_override("font_color", Style.INK)
+	else:
+		Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 14, 4)
+	button.pressed.connect(func() -> void:
+		get_node("/root/Profile").set_locale(locale_id)
+		get_tree().reload_current_scene())
+	return button
+
+
 func _account_card(auth: Node) -> Control:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
@@ -182,19 +230,19 @@ func _account_card(auth: Node) -> Control:
 	card.add_child(inner)
 
 	var name_label := Label.new()
-	name_label.text = "Account"
+	name_label.text = tr("SETTINGS_ACCOUNT")
 	name_label.add_theme_font_size_override("font_size", 20)
 	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
 	inner.add_child(name_label)
 
 	var who := Label.new()
-	who.text = "Connesso come %s" % String(auth.username)
+	who.text = tr("SETTINGS_CONNECTED_AS") % String(auth.username)
 	who.add_theme_font_size_override("font_size", 16)
 	who.add_theme_color_override("font_color", Style.TEXT_DIM)
 	inner.add_child(who)
 
 	var logout := Button.new()
-	logout.text = "Esci dall'account"
+	logout.text = tr("SETTINGS_LOGOUT")
 	logout.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	logout.add_theme_font_size_override("font_size", 20)
 	Style.apply_plate(logout, Style.BLUE, Style.BLUE_DEEP, 14, 4)
@@ -204,7 +252,7 @@ func _account_card(auth: Node) -> Control:
 	inner.add_child(logout)
 
 	var delete := Button.new()
-	delete.text = "Elimina account"
+	delete.text = tr("SETTINGS_DELETE_ACCOUNT")
 	delete.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	delete.add_theme_font_size_override("font_size", 20)
 	# rosso: azione distruttiva, si distingue dal resto della UI blu/oro
@@ -227,19 +275,19 @@ func _guest_card(is_guest: bool) -> Control:
 	card.add_child(inner)
 
 	var name_label := Label.new()
-	name_label.text = "Account"
+	name_label.text = tr("SETTINGS_ACCOUNT")
 	name_label.add_theme_font_size_override("font_size", 20)
 	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
 	inner.add_child(name_label)
 
 	var who := Label.new()
-	who.text = "Stai giocando come ospite" if is_guest else "Nessun account collegato"
+	who.text = tr("SETTINGS_GUEST") if is_guest else tr("SETTINGS_NO_ACCOUNT")
 	who.add_theme_font_size_override("font_size", 16)
 	who.add_theme_color_override("font_color", Style.TEXT_DIM)
 	inner.add_child(who)
 
 	var login := Button.new()
-	login.text = "Accedi"
+	login.text = tr("UI_LOGIN")
 	login.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	login.add_theme_font_size_override("font_size", 20)
 	login.add_theme_color_override("font_color", Style.INK)
@@ -254,10 +302,10 @@ func _guest_card(is_guest: bool) -> Control:
 	return card
 
 
-## Pulsante nella colonna delle impostazioni che apre la schermata "Crediti".
+## Pulsante nella colonna delle impostazioni che apre la schermata "Riconoscimenti".
 func _credits_button() -> Control:
 	var button := Button.new()
-	button.text = "Crediti"
+	button.text = tr("SETTINGS_CREDITS_BUTTON")
 	button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	button.add_theme_font_size_override("font_size", 22)
 	Style.apply_plate(button, Style.BLUE, Style.BLUE_DEEP, 14, 4)
@@ -286,19 +334,39 @@ func _show_credits() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "CREDITI"
+	title.text = tr("SETTINGS_CREDITS_TITLE")
 	title.add_theme_font_size_override("font_size", 34)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
 
-	column.add_child(_person_card("Angelo Falci", "Sviluppatore e Game Designer"))
+	# Le sezioni superano l'altezza di uno schermo 16:9: scorrono, mentre titolo
+	# e Chiudi restano fissi.
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(scroll)
 
-	var grow := Control.new()
-	grow.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(grow)
+	var body := VBoxContainer.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 12)
+	scroll.add_child(body)
+
+	body.add_child(_section_title(tr("SETTINGS_CREDITS_DESIGNERS")))
+	body.add_child(_names_card(["Angelo Falci"]))
+	body.add_child(_section_title(tr("SETTINGS_CREDITS_DEVELOPERS")))
+	body.add_child(_names_card(["Angelo Falci", "Matteo Guardini"]))
+	body.add_child(_section_title(tr("SETTINGS_CREDITS_DESIGN")))
+	body.add_child(_names_card(["Leonardo Nuccilli", "Andrea Guardini"]))
+
+	body.add_child(_section_title(tr("SETTINGS_CREDITS_MUSIC")))
+	# Attribuzione richiesta dalla CC BY 4.0: titolo, autore, fonte, licenza e
+	# indicazione delle modifiche (le tracce sono tagliate per il loop).
+	body.add_child(_track_card("Juniper", ""))
+	body.add_child(_track_card("Lasting Hope", tr("SETTINGS_CREDITS_TRIMMED_45S")))
+	body.add_child(_track_card("The Ice Giants", tr("SETTINGS_CREDITS_TRIMMED_LOOP")))
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 26)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -308,7 +376,16 @@ func _show_credits() -> void:
 	add_child(overlay)
 
 
-func _person_card(name: String, role: String) -> Control:
+func _section_title(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", Style.GOLD)
+	return label
+
+
+## Una card con un nome per riga: le persone di una stessa sezione.
+func _names_card(names: Array) -> Control:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
 
@@ -316,17 +393,59 @@ func _person_card(name: String, role: String) -> Control:
 	inner.add_theme_constant_override("separation", 4)
 	card.add_child(inner)
 
+	for person in names:
+		var name_label := Label.new()
+		name_label.text = person
+		name_label.add_theme_font_size_override("font_size", 20)
+		name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
+		inner.add_child(name_label)
+
+	return card
+
+
+const LICENSE_URL := "http://creativecommons.org/licenses/by/4.0/"
+
+
+## Card di attribuzione di un brano di Kevin MacLeod, nel formato indicato da
+## incompetech.com. `note` descrive le modifiche fatte al file, vuota se nessuna.
+func _track_card(title: String, note: String) -> Control:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 2)
+	card.add_child(inner)
+
 	var name_label := Label.new()
-	name_label.text = name
-	name_label.add_theme_font_size_override("font_size", 20)
+	name_label.text = "\"%s\" Kevin MacLeod (incompetech.com)" % title
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_label.add_theme_font_size_override("font_size", 18)
 	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
 	inner.add_child(name_label)
 
-	var role_label := Label.new()
-	role_label.text = role
-	role_label.add_theme_font_size_override("font_size", 16)
-	role_label.add_theme_color_override("font_color", Style.TEXT_DIM)
-	inner.add_child(role_label)
+	var license := Label.new()
+	license.text = "Licensed under Creative Commons: By Attribution 4.0 License"
+	license.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	license.add_theme_font_size_override("font_size", 14)
+	license.add_theme_color_override("font_color", Style.TEXT_DIM)
+	inner.add_child(license)
+
+	var link := Button.new()
+	link.text = LICENSE_URL
+	link.flat = true
+	link.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	link.add_theme_font_size_override("font_size", 14)
+	link.add_theme_color_override("font_color", Style.BLUE)
+	link.pressed.connect(func() -> void: OS.shell_open(LICENSE_URL))
+	inner.add_child(link)
+
+	if note != "":
+		var note_label := Label.new()
+		note_label.text = note
+		note_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note_label.add_theme_font_size_override("font_size", 14)
+		note_label.add_theme_color_override("font_color", Style.TEXT_DIM)
+		inner.add_child(note_label)
 
 	return card
 
@@ -343,10 +462,9 @@ func _privacy_link(host: String) -> Control:
 
 
 func _confirm_delete_account(auth: Node) -> void:
-	var dialog := ModalDialog.confirm(self, "Elimina account",
-		"Questa azione è irreversibile: profilo, statistiche e civiltà sbloccate "
-		+ "verranno cancellati dal server.\n\nIl single-player resta disponibile come ospite.",
-		"Elimina")
+	var dialog := ModalDialog.confirm(self, tr("SETTINGS_DELETE_ACCOUNT"),
+		tr("SETTINGS_DELETE_ACCOUNT_BODY"),
+		tr("SETTINGS_DELETE_ACCOUNT_CONFIRM"))
 	dialog.confirmed.connect(func() -> void:
 		if not auth.account_deletion_completed.is_connected(_on_account_deletion_completed):
 			auth.account_deletion_completed.connect(_on_account_deletion_completed, CONNECT_ONE_SHOT)
@@ -359,12 +477,11 @@ func _confirm_delete_account(auth: Node) -> void:
 ## login, che è il punto in cui si sceglie di nuovo fra account e ospite.
 func _on_account_deletion_completed(success: bool) -> void:
 	if not success:
-		ModalDialog.notice(self, "Elimina account",
-			"Eliminazione non riuscita. Riprova più tardi.")
+		ModalDialog.notice(self, tr("SETTINGS_DELETE_ACCOUNT"),
+			tr("SETTINGS_DELETE_ACCOUNT_FAILED"))
 		return
-	var notice := ModalDialog.notice(self, "Account eliminato",
-		"Il tuo account è stato cancellato dal server.\n\nTorni alla schermata "
-		+ "iniziale, dove puoi crearne uno nuovo o giocare come ospite.")
+	var notice := ModalDialog.notice(self, tr("SETTINGS_ACCOUNT_DELETED_TITLE"),
+		tr("SETTINGS_ACCOUNT_DELETED_BODY"))
 	# Anche su annullamento (tasto indietro): da qui non si torna indietro.
 	notice.confirmed.connect(_go_to_login)
 	notice.cancelled.connect(_go_to_login)

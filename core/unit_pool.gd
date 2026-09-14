@@ -79,13 +79,20 @@ func draw_of_cost(cost: int, rng: SimRNG) -> UnitDef:
 
 
 ## Peso di ogni fascia di costo a un dato livello: la riga di `shop_odds`
-## corretta per le copie che alla fascia restano davvero.
+## moltiplicata per quante unità contiene la fascia, e corretta per le copie
+## che le restano davvero.
 ##
-##   peso = odds * (residuo / capacità iniziale) ^ esponente
+##   peso = odds * n_unità * (residuo / capacità iniziale) ^ esponente
 ##
-## A pool intatto il residuo vale 1 ovunque e i pesi coincidono con la tabella,
-## che resta la verità dichiarata a inizio partita; man mano che una fascia si
-## svuota il suo peso cala e si redistribuisce sulle altre. Una fascia a zero
+## `shop_odds` è il peso di UNA singola unità di quel costo, non della fascia:
+## senza il fattore n_unità una fascia con poche unità (i costi alti) dava a
+## ciascuna una probabilità più alta di una da 1, che la condivide con molte
+## altre — e aggiungere un'unità a una fascia rendeva più rare le sue compagne.
+## Siccome `draw_of_cost` sceglie poi dentro la fascia in proporzione alle
+## copie, a pool intatto ogni unità esce in proporzione a odds del suo costo.
+##
+## Man mano che una fascia si svuota il suo peso cala e si redistribuisce sulle
+## altre. Una fascia a zero
 ## pesa zero QUALUNQUE sia l'esponente — `pow(0, 0)` vale 1, quindi il caso va
 ## intercettato prima — ed è ciò che rende inutile un fallback verso i costi
 ## più bassi.
@@ -103,7 +110,8 @@ func band_weights(level: int, exponent: float = -1.0) -> Array:
 		if capacity <= 0 or remaining <= 0:
 			weights.append(0.0)
 			continue
-		weights.append(float(odds[index]) * pow(float(remaining) / float(capacity), power))
+		var unit_count := GameData.units_of_cost(cost).size()
+		weights.append(float(odds[index]) * unit_count * pow(float(remaining) / float(capacity), power))
 	return weights
 
 

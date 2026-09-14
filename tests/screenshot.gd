@@ -65,6 +65,9 @@ func _process(_delta: float) -> bool:
 			root.remove_child(_menu)
 			_menu.queue_free()
 			_main = (load("res://ui/main.tscn") as PackedScene).instantiate()
+			# Scatti a frame fissi: la battaglia deve essere già in scena al frame
+			# dopo COMBATTI, non quando finisce il thread di risoluzione.
+			_main.resolve_in_background = false
 			root.add_child(_main)
 		12:
 			_waiting_portraits = true
@@ -114,6 +117,13 @@ func _process(_delta: float) -> bool:
 			_menu._history_panel.open()
 		59:
 			_save("cronologia.png")
+			_menu._history_panel.visible = false
+			# Nessun server qui: si mostra una risposta finta con la stessa
+			# funzione che usa la callback di rete.
+			_menu._leaderboard_panel.visible = true
+			_menu._leaderboard_panel.show_data(_fake_leaderboard())
+		60:
+			_save("classifica.png")
 			var profile := root.get_node("/root/Profile")
 			profile.seen_tips = _saved_tips
 			profile.save_profile()
@@ -125,6 +135,16 @@ func _process(_delta: float) -> bool:
 
 
 ## Cronologia di comodo per lo scatto: tre partite finte, poi si rimette il
+func _fake_leaderboard() -> Dictionary:
+	var top: Array = []
+	var names := ["Vercingetorige", "Arminio", "Scipione", "Boudicca", "Spartaco", "Brenno", "Ambiorige"]
+	for i in names.size():
+		top.append({"position": i + 1, "username": names[i], "mmr": 1650 - i * 70,
+			"matches_played": 40 - i * 3, "wins": 12 - i, "is_me": false})
+	return {"top": top, "me": {"position": 23, "username": "Legionario", "mmr": 1040,
+		"matches_played": 9, "wins": 1, "is_me": true}}
+
+
 ## file com'era — user://history.json e' quello di chi sviluppa.
 func _seed_history() -> void:
 	var rows := [

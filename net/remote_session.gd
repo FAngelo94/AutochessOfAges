@@ -35,6 +35,25 @@ const BACKEND_CONFIG := "res://data/backend.json"
 const MAX_QUEUE_SLOTS := 8
 const MAX_RECONNECT := 5
 
+## Battito applicativo verso il worker (Protocol.PING/PONG). Senza questo, un
+## socket che l'OS ha droppato in silenzio durante una sospensione in
+## background continua a rispondere STATE_OPEN per sempre: ne' il client ne'
+## il worker vedono mai un vero close-frame, quindi non scatterebbe nessuna
+## riconnessione automatica — esattamente il "bloccato in preparazione" di
+## partenza. Ogni pacchetto in arrivo (PONG compreso) conta come prova di vita.
+const WORKER_PING_INTERVAL := 5.0
+const WORKER_TIMEOUT := 15.0
+## Al ritorno in primo piano si accorcia la grazia residua invece di aspettare
+## fino a WORKER_TIMEOUT: se il socket era gia' morto lo si scopre in pochi
+## secondi anziche' aspettare quanto resta del timeout pieno.
+const RESUME_GRACE := 4.0
+
+## Partita attiva ancora in corso quando il gioco viene chiuso (non solo messo
+## in background): senza questo, riaprire il gioco riparte sempre dal menu e
+## la partita resta agganciata solo lato server finche' non scade. Stesso
+## schema di net/auth.gd (PENDING_PATH) per il consenso Google in sospeso.
+const PENDING_MATCH_PATH := "user://match_pending.dat"
+
 ## Numero massimo di giocatori del match (per MatchState vuoto iniziale).
 const MATCH_SLOTS := 8
 
@@ -57,6 +76,9 @@ var _lost: bool = false
 var _assignment: Dictionary = {}          # {match_id, match_token, worker_path}
 var _reconnect_attempts: int = 0
 var _pending_token: String = ""
+
+var _last_worker_recv: float = 0.0
+var _last_ping_sent: float = 0.0
 
 ## Ultimo combattimento e lato ricevuti (COMBAT) — riuniti in round_concluded.
 var _own_combat: Dictionary = {}
@@ -83,6 +105,12 @@ class _Poller extends Node:
 	func _process(delta: float) -> void:
 		if session != null:
 			session._poll(delta)
+	func _notification(what: int) -> void:
+		# I NOTIFICATION_* sono costanti di Node: RemoteSession e' RefCounted e
+		# non le vede, il controllo va fatto qui.
+		if session != null and (what == NOTIFICATION_APPLICATION_RESUMED
+				or what == NOTIFICATION_WM_WINDOW_FOCUS_IN):
+			session._on_app_resumed()
 
 
 func _init() -> void:
@@ -248,7 +276,37 @@ func leave() -> void:
 		_master.close()
 		_master = null
 	_in_match = false
+	_forget_pending_match()
 	_stop_poller()
+
+
+## Vero se il gioco e' stato chiuso a meta' di una partita online ancora
+## presumibilmente in corso (net/auth.gd usa lo stesso schema per il consenso
+## Google in sospeso). ui/login.gd lo controlla prima di mostrare il login.
+static func has_pending_match() -> bool:
+	return not _load_pending_match().is_empty()
+
+
+## Ricostruisce l'aggancio al worker da user://match_pending.dat invece che
+## dalla coda: la partita esiste gia' sul server, si rientra direttamente.
+## true se la connessione e' stata avviata (non garantisce che il JOIN sara'
+## accettato — un match_token scaduto o un match gia' concluso arrivano come
+## COMMAND_REJECTED/mancata risposta, gestiti come una riconnessione fallita).
+func resume_from_pending() -> bool:
+	var data := _load_pending_match()
+	if data.is_empty():
+		return false
+	_host = String(data.get("host", ""))
+	_assignment = {
+		"match_id": data.get("match_id", ""),
+		"match_token": data.get("match_token", ""),
+		"worker_path": data.get("worker_path", "/ws/w1"),
+		"host": _host,
+		"seed": data.get("seed", 0),
+	}
+	_assigned = true
+	_in_match = true
+	return _open_worker() == OK
 
 
 ## Tentativo manuale di riconnessione (pulsante "Riconnetti").
@@ -299,11 +357,24 @@ func _poll(delta: float) -> void:
 				}))
 				_join_sent = true
 				_reconnect_attempts = 0
+				_last_worker_recv = _now()
+				_last_ping_sent = _now()
 			# Stessa guardia: un handler (es. MATCH_FINISHED -> leave()) puo'
 			# azzerare _worker durante il ciclo.
 			while _worker != null and _worker.get_available_packet_count() > 0:
+				_last_worker_recv = _now()
 				_handle_worker(Protocol.decode(_worker.get_packet()))
-		elif ws == WebSocketPeer.STATE_CLOSED:
+			if _worker != null and _now() - _last_ping_sent >= WORKER_PING_INTERVAL:
+				_last_ping_sent = _now()
+				_send(_worker, Protocol.make(Protocol.PING))
+			if _worker != null and _now() - _last_worker_recv > WORKER_TIMEOUT:
+				# Zombie: il socket dice ancora "aperto" ma non risponde da
+				# troppo tempo — succede quando l'OS sospende l'app in
+				# background senza mai chiudere davvero il socket. Forza la
+				# chiusura per rientrare nel ramo di riconnessione sotto.
+				_worker.close()
+				ws = WebSocketPeer.STATE_CLOSED
+		if ws == WebSocketPeer.STATE_CLOSED:
 			_worker = null
 			if _in_match and not _finished and not _lost:
 				_reconnect_attempts += 1
@@ -340,6 +411,7 @@ func _handle_master(msg: Dictionary) -> void:
 				"seed": msg.get("seed", 0),
 			}
 			_assigned = true
+			_save_pending_match()
 			if _master != null:
 				_master.close()
 				_master = null
@@ -399,10 +471,23 @@ func _handle_worker(msg: Dictionary) -> void:
 			_last_public_results = msg.get("results", [])
 			round_concluded.emit(_synth_results(_last_public_results))
 		Protocol.COMMAND_REJECTED:
-			command_rejected.emit(String(msg.get("reason", "")))
+			var reason := String(msg.get("reason", ""))
+			if reason == "join_token" or reason == "join_seat":
+				# Il nostro stesso JOIN e' stato rifiutato (token scaduto/match
+				# sparito lato server): non ha senso ritentare, e la partita
+				# ripresa dal disco non esiste piu'.
+				_forget_pending_match()
+				_lost = true
+				if _worker != null:
+					_worker.close()
+					_worker = null
+				connection_lost.emit("partita non più raggiungibile")
+				return
+			command_rejected.emit(reason)
 		Protocol.MATCH_FINISHED:
 			_finished = true
 			_state.phase = MatchState.Phase.FINISHED
+			_forget_pending_match()
 			match_finished.emit(msg.get("standings", []))
 		Protocol.RANK_UPDATE:
 			_apply_rank_update(msg)
@@ -479,6 +564,60 @@ func _decode_combat(msg: Dictionary) -> Dictionary:
 # --------------------------------------------------------------------------
 # Utilita'
 # --------------------------------------------------------------------------
+
+## Ritorno in primo piano (_Poller._notification): il socket puo' essere morto
+## senza che l'OS l'abbia mai chiuso per davvero. Si accorcia la grazia residua
+## invece di aspettare fino a WORKER_TIMEOUT — se e' ancora vivo il prossimo
+## PING/risposta arriva comunque entro RESUME_GRACE e la si allunga di nuovo.
+func _on_app_resumed() -> void:
+	if _worker == null:
+		return
+	_last_ping_sent = 0.0
+	_last_worker_recv = minf(_last_worker_recv, _now() - (WORKER_TIMEOUT - RESUME_GRACE))
+
+
+func _now() -> float:
+	return Time.get_ticks_msec() / 1000.0
+
+
+## Salva l'aggancio alla partita attiva: se il gioco viene chiuso (non solo
+## sospeso in background) e' l'unica cosa che permette di rientrare invece di
+## ripartire dal menu. Cancellata a fine partita o su leave() esplicito.
+func _save_pending_match() -> void:
+	var f := FileAccess.open(PENDING_MATCH_PATH, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(JSON.stringify({
+		"match_id": _assignment.get("match_id", ""),
+		"match_token": _assignment.get("match_token", ""),
+		"worker_path": _assignment.get("worker_path", "/ws/w1"),
+		"host": _assignment.get("host", _host),
+		"seed": _assignment.get("seed", 0),
+	}))
+	f.close()
+
+
+static func _load_pending_match() -> Dictionary:
+	if not FileAccess.file_exists(PENDING_MATCH_PATH):
+		return {}
+	var f := FileAccess.open(PENDING_MATCH_PATH, FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed: Variant = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return {}
+	var d: Dictionary = parsed
+	if String(d.get("match_id", "")) == "" or String(d.get("match_token", "")) == "":
+		return {}
+	return d
+
+
+func _forget_pending_match() -> void:
+	var dir := DirAccess.open("user://")
+	if dir != null and dir.file_exists(PENDING_MATCH_PATH.get_file()):
+		dir.remove(PENDING_MATCH_PATH.get_file())
+
 
 func _resolve_host() -> String:
 	if not FileAccess.file_exists(BACKEND_CONFIG):

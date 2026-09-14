@@ -11,6 +11,10 @@ var _brains: Array[BotBrain] = []
 ## Sola lettura sullo stato: non tocca l'RNG, la partita e' identica con o
 ## senza. La sfrutta ui/main.gd a fine partita per scrivere user://telemetry.jsonl.
 var _telemetry := UnitTelemetry.new()
+## Vero da request_ready_async() finché i segnali del round non sono partiti.
+var is_resolving := false
+var _worker_task := -1
+var _disposed := false
 
 
 func begin(match_seed: int = 0, hero_id: String = "") -> void:
@@ -42,40 +46,54 @@ func local_index() -> int:
 
 
 func next_opponent_index() -> int:
+	if is_resolving:
+		return -1
 	if _state == null or _state.phase != MatchState.Phase.PREPARATION:
 		return -1
 	return int(_state.upcoming_opponent(_state.human_player().index).get("index", -1))
 
 
 func request_buy(slot: int) -> void:
+	if is_resolving:
+		return
 	_human().buy(slot)
 	state_changed.emit()
 
 
 func request_sell(uid: int) -> void:
+	if is_resolving:
+		return
 	_human().sell_by_uid(uid)
 	state_changed.emit()
 
 
 func request_reroll() -> void:
+	if is_resolving:
+		return
 	if not _human().reroll():
 		command_rejected.emit("reroll")
 	state_changed.emit()
 
 
 func request_buy_xp() -> void:
+	if is_resolving:
+		return
 	if not _human().buy_xp():
 		command_rejected.emit("buy_xp")
 	state_changed.emit()
 
 
 func request_move_to_board(uid: int, cell: Vector2i) -> void:
+	if is_resolving:
+		return
 	if not _human().move_to_board_by_uid(uid, cell):
 		command_rejected.emit("board_full")
 	state_changed.emit()
 
 
 func request_move_to_bench(uid: int, slot: int) -> void:
+	if is_resolving:
+		return
 	_human().move_to_bench_by_uid(uid, slot)
 	state_changed.emit()
 
@@ -84,10 +102,63 @@ func request_move_to_bench(uid: int, slot: int) -> void:
 ## se la partita continua — si apre subito il successivo. La UI ascolta
 ## round_concluded per l'eventuale replay e state_changed per il refresh.
 func request_ready() -> void:
+	if is_resolving:
+		return
+	_play_and_resolve()
+	_emit_round_outcome(_state.last_results())
+
+
+## Come request_ready(), ma bot e risoluzione girano su un thread del
+## WorkerThreadPool: una risoluzione può costare centinaia di millisecondi, e
+## sul thread principale congelava lo schermo proprio allo scadere del tempo. I
+## segnali partono comunque dal thread principale, al frame dopo la fine.
+##
+## Mentre `is_resolving` lo stato della partita è in mano al thread: nessuno deve
+## leggerlo né scriverlo. I comandi qui sotto vengono ignorati, e ui/main.gd
+## sospende refresh e input. Il risultato è identico alla versione sincrona:
+## stesso codice, stesso ordine, nessuna fonte di casualità in più.
+func request_ready_async() -> void:
+	if is_resolving:
+		return
+	is_resolving = true
+	_worker_task = WorkerThreadPool.add_task(_play_and_resolve, false, "resolve_round")
+	_poll_worker()
+
+
+## Attende la fine del task senza bloccare: un controllo per frame.
+func _poll_worker() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	while _worker_task != -1 and not WorkerThreadPool.is_task_completed(_worker_task):
+		await tree.process_frame
+	# -1 = dispose() ha già atteso e chiuso il task: la sessione è abbandonata.
+	if _worker_task == -1:
+		return
+	WorkerThreadPool.wait_for_task_completion(_worker_task)
+	_worker_task = -1
+	is_resolving = false
+	if _disposed:
+		return
+	_emit_round_outcome(_state.last_results())
+
+
+## Chi abbandona la sessione con una risoluzione in corso (Menu durante la
+## transizione) aspetta il thread: lasciarlo girare su uno stato che nessuno
+## possiede più, a scena distrutta, è la classe di crash più difficile da vedere.
+func dispose() -> void:
+	_disposed = true
+	if _worker_task != -1:
+		WorkerThreadPool.wait_for_task_completion(_worker_task)
+		_worker_task = -1
+		is_resolving = false
+
+
+func _play_and_resolve() -> void:
 	for brain in _brains:
 		brain.play_preparation(_state.stage)
+	_state.resolve_round()
 
-	var results := _state.resolve_round()
+
+func _emit_round_outcome(results: Array) -> void:
 	round_concluded.emit(results)
 
 	if _state.phase == MatchState.Phase.FINISHED:
@@ -106,10 +177,14 @@ func telemetry() -> UnitTelemetry:
 
 
 func can_spectate(player_index: int) -> bool:
+	if is_resolving:
+		return false
 	return not _spectate_row_for(player_index).is_empty()
 
 
 func request_spectate(player_index: int) -> void:
+	if is_resolving:
+		return
 	var found := _spectate_row_for(player_index)
 	if found.is_empty():
 		return

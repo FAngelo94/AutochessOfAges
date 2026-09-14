@@ -31,7 +31,6 @@ const CAST_FLASH := 0.35
 ## Annuncio del berserk: compare quando la simulazione passa a velocità tripla e
 ## si dissolve nell'arco di BERSERK_BANNER_FADE secondi. La durata è quella
 ## chiesta a schermo, non ha rapporto con la finestra accelerata, che è più lunga.
-const BERSERK_BANNER := "Berserker Time"
 const BERSERK_BANNER_FADE := 3.0
 const BERSERK_COLOR := Color(0.98, 0.36, 0.28)
 
@@ -41,6 +40,7 @@ const OWN_COLOR := Color(0.4, 0.8, 0.45)
 const ENEMY_COLOR := Color(0.92, 0.42, 0.38)
 
 const BAR_SIZE := Vector2(58.0, 8.0)
+const MANA_BAR_HEIGHT := 4.0
 
 ## Fascio di fine round tra i ritratti eroe. Volutamente diverso dalle linee di
 ## colpo tra unità (_draw_flash: un filo dritto che sbiadisce): qui è un dardo
@@ -107,6 +107,12 @@ var _berserk_time: float = -1.0
 ## Orologio dedicato all'animazione di fine round: separato da _time, che
 ## smette di avanzare quando la riproduzione finisce.
 var _result_time: float = 0.0
+## Istante dell'ultima morte applicata. La battaglia finisce quasi sempre nello
+## stesso istante in cui muore l'ultima unità di una squadra, quindi senza
+## questo _finish() scattava a `_duration` prima che la sua dissolvenza
+## (DEATH_FADE) avesse il tempo di giocare: l'unità restava impagliata a piena
+## vita sull'ultimo fotogramma invece di sprofondare.
+var _last_death_time: float = -1.0
 
 var _font: Font
 var _board: BattleBoard3D
@@ -305,6 +311,7 @@ func load_combat(combat: Dictionary, team: int = 0) -> void:
 	_hero_beam = {}
 	_hero_floater = {}
 	_berserk_time = -1.0
+	_last_death_time = -1.0
 
 	_board.configure(_columns, _rows, _flip, viewer_team)
 	_board.clear_units()
@@ -325,6 +332,9 @@ func load_combat(combat: Dictionary, team: int = 0) -> void:
 			"max_hp": float(entry["max_hp"]),
 			"hp": float(entry["max_hp"]),
 			"shield": float(entry.get("shield", 0.0)),
+			"mana": float(entry.get("mana", 0.0)),
+			"mana_max": float(entry.get("mana_max", 0.0)),
+			"has_ability": bool(entry.get("has_ability", false)),
 			"alive": true,
 			"death_time": -1.0,
 			"hit_time": -1.0,
@@ -395,8 +405,10 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 	# La riproduzione finisce quando gli eventi sono esauriti e le animazioni
-	# in corso hanno avuto il tempo di concludersi.
-	if _event_index >= _events.size() and _time >= _duration:
+	# in corso hanno avuto il tempo di concludersi — dissolvenza dell'ultima
+	# unità morta compresa, che altrimenti scompare di scatto invece di
+	# sprofondare quando la morte coincide con la fine del round.
+	if _event_index >= _events.size() and _time >= _duration and _time >= _last_death_time + DEATH_FADE:
 		_finish()
 
 
@@ -443,6 +455,7 @@ func _apply_event(event: Dictionary, live: bool) -> void:
 			if attacker.is_empty() or target.is_empty():
 				return
 			attacker["hit_time"] = _time
+			attacker["mana"] = float(event.get("mana", attacker["mana"]))
 			# Girare l'attaccante verso il bersaglio rende leggibile chi sta
 			# colpendo chi anche quando la linea del colpo è già svanita.
 			_board.face_unit(int(event["uid"]), int(event["target"]))
@@ -464,6 +477,7 @@ func _apply_event(event: Dictionary, live: bool) -> void:
 				return
 			unit["hp"] = float(event["hp"])
 			unit["shield"] = float(event.get("shield", 0.0))
+			unit["mana"] = float(event.get("mana", unit["mana"]))
 			unit["hit_time"] = _time
 			var amount := int(roundf(float(event["amount"])))
 			if amount > 0:
@@ -486,12 +500,19 @@ func _apply_event(event: Dictionary, live: bool) -> void:
 			if unit.is_empty():
 				return
 			unit["hp"] = float(event["hp"])
+			unit["mana"] = float(event.get("mana", unit["mana"]))
+
+		"shield":
+			var unit: Dictionary = _units.get(int(event["uid"]), {})
+			if not unit.is_empty():
+				unit["shield"] = float(event["shield"])
 
 		"cast":
 			var unit: Dictionary = _units.get(int(event["uid"]), {})
 			if unit.is_empty():
 				return
 			unit["cast_time"] = _time
+			unit["mana"] = float(event.get("mana", 0.0))
 			_add_floater(int(event["uid"]), String(event.get("name", "")), Color(0.7, 0.8, 1.0), 0.30)
 			if live:
 				_play_sfx("cast")
@@ -516,6 +537,7 @@ func _apply_event(event: Dictionary, live: bool) -> void:
 			unit["alive"] = false
 			unit["hp"] = 0.0
 			unit["death_time"] = _time
+			_last_death_time = _time
 			if live:
 				_play_sfx("death_own" if int(unit["team"]) == viewer_team else "death_enemy")
 
@@ -624,11 +646,25 @@ func _draw_unit_hud(uid: int, unit: Dictionary) -> void:
 	var health_color := Color(0.45, 0.85, 0.45, alpha) if int(unit["team"]) == viewer_team else Color(0.9, 0.45, 0.42, alpha)
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * ratio, bar.size.y)), health_color, true)
 
-	# Lo scudo si sovrappone alla barra in chiaro, come nella vista precedente.
+	# Lo scudo copre la salute a tutta altezza, a partire dalla sua estremità
+	# verso sinistra: si legge come "questa parte di vita è protetta" e si
+	# accorcia man mano che assorbe colpi. Se supera la salute residua sborda
+	# nella parte vuota invece di sparire.
 	var shield_ratio: float = clampf(float(unit["shield"]) / maxf(1.0, float(unit["max_hp"])), 0.0, 1.0)
 	if shield_ratio > 0.0:
-		draw_rect(Rect2(bar.position, Vector2(bar.size.x * shield_ratio, 2.0)),
-			Color(0.9, 0.9, 0.95, alpha), true)
+		var shield_width := bar.size.x * shield_ratio
+		var shield_end := maxf(bar.size.x * ratio, shield_width)
+		draw_rect(Rect2(bar.position + Vector2(shield_end - shield_width, 0.0), Vector2(shield_width, bar.size.y)),
+			Color(0.95, 0.95, 1.0, 0.9 * alpha), true)
+
+	# Mana sotto la salute: dice quanto manca all'abilità. Solo per chi ne ha
+	# una, altrimenti una barra che si riempie senza mai scattare confonde.
+	if bool(unit["has_ability"]) and float(unit["mana_max"]) > 0.0:
+		var mana_bar := Rect2(bar.position + Vector2(0.0, bar.size.y + 2.0), Vector2(bar.size.x, MANA_BAR_HEIGHT))
+		draw_rect(mana_bar.grow(1.0), Color(0, 0, 0, 0.6 * alpha), true)
+		var mana_ratio: float = clampf(float(unit["mana"]) / float(unit["mana_max"]), 0.0, 1.0)
+		draw_rect(Rect2(mana_bar.position, Vector2(mana_bar.size.x * mana_ratio, mana_bar.size.y)),
+			Color(0.3, 0.55, 1.0, alpha), true)
 
 	if _time < float(unit["stun_until"]) and bool(unit["alive"]):
 		draw_string(_font, bar.position + Vector2(bar.size.x + 4.0, BAR_SIZE.y), "!",
@@ -774,17 +810,18 @@ func _draw_berserk_banner() -> void:
 	# Una spinta di scala solo all'inizio: entra con un colpo e poi si posa.
 	var punch: float = 1.0 + 0.18 * maxf(0.0, 1.0 - age / 0.25)
 	var font_size := int(roundf(46.0 * punch))
-	var width := _font.get_string_size(BERSERK_BANNER, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var banner_text := tr("COMBAT_BERSERKER_TIME")
+	var width := _font.get_string_size(banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	var at := Vector2((size.x - width) * 0.5, size.y * 0.42)
 
 	# Contorno scuro: la scritta cade su un campo di battaglia colorato e senza
 	# stacco si perderebbe proprio nel momento in cui deve farsi leggere.
 	var shadow := Color(0.05, 0.02, 0.02, alpha * 0.8)
 	for offset in [Vector2(2, 2), Vector2(-2, 2), Vector2(2, -2), Vector2(-2, -2)]:
-		draw_string(_font, at + offset, BERSERK_BANNER, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, shadow)
+		draw_string(_font, at + offset, banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, shadow)
 	var color := BERSERK_COLOR
 	color.a = alpha
-	draw_string(_font, at, BERSERK_BANNER, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+	draw_string(_font, at, banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
 func _draw_clock() -> void:

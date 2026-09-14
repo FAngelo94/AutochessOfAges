@@ -39,6 +39,9 @@ func _initialize() -> void:
 	_test_monetization()
 	_test_serialization_roundtrip()
 	_test_view_filtering()
+	# Ultimo e atteso: ha bisogno che i frame girino, cosa che in _initialize
+	# succede solo dopo il primo await.
+	await _test_async_resolve_matches_sync()
 
 	print("\n%d superati, %d falliti" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -1140,6 +1143,46 @@ func _test_ghost_uses_eliminated_formation() -> void:
 	check(normal_count == 2, "e due scontri normali")
 
 
+## La risoluzione su thread (request_ready_async, usata da ui/main.gd per non
+## congelare lo schermo) deve dare la stessa identica partita di quella
+## sincrona: se divergesse, lo stesso seed non riprodurrebbe più la stessa
+## partita a seconda di chi l'ha giocata.
+func _test_async_resolve_matches_sync() -> void:
+	section("Risoluzione del round su thread — stessa partita della sincrona")
+
+	var sync_session := LocalSession.new()
+	sync_session.begin(9090)
+	var async_session := LocalSession.new()
+	async_session.begin(9090)
+
+	var concluded := [0]
+	async_session.round_concluded.connect(func(_results: Array) -> void: concluded[0] += 1)
+
+	var rounds := 6
+	for i in rounds:
+		sync_session.request_ready()
+		async_session.request_ready_async()
+		# Durante la risoluzione i comandi vanno ignorati: se questo acquisto
+		# passasse, lo stato divergerebbe da quello sincrono e il check sotto
+		# fallirebbe. Nella sessione sincrona non lo si fa di proposito.
+		async_session.request_buy_xp()
+		var waited := 0
+		while async_session.is_resolving and waited < 600:
+			await process_frame
+			waited += 1
+
+	check(concluded[0] == rounds, "ogni round asincrono emette round_concluded", str(concluded[0]))
+	check(var_to_bytes(sync_session.state().to_dict(0)) == var_to_bytes(async_session.state().to_dict(0)),
+		"stato identico dopo %d round" % rounds)
+	var same_logs := true
+	var sync_rows := sync_session.state().last_results()
+	var async_rows := async_session.state().last_results()
+	for i in sync_rows.size():
+		if var_to_bytes(sync_rows[i]["combat"].get("events", [])) != var_to_bytes(async_rows[i]["combat"].get("events", [])):
+			same_logs = false
+	check(same_logs and sync_rows.size() == async_rows.size(), "stessi log di battaglia nell'ultimo round")
+
+
 ## Lo scontro contro il fantasma di un eliminato è rivedibile dalla schermata
 ## classifica sia cliccando il vivo che ha combattuto sia cliccando l'eliminato
 ## di cui è stato usato lo schieramento — stesso replay, lato opposto.
@@ -1544,10 +1587,11 @@ func _test_battle_view_orientation() -> void:
 # --------------------------------------------------------------------------
 
 ## Le probabilità del negozio sono pesate sulle copie che restano alla fascia
-## (`UnitPool.band_weights`). Due invarianti da non perdere: a pool intatto la
-## tabella di `shop_odds` è ancora la verità — chi bilancia deve poterla leggere
-## per quello che dice — e una fascia esaurita non può più produrre una casella
-## vuota, come faceva il vecchio fallback quando toccava al costo 1.
+## (`UnitPool.band_weights`). Tre invarianti da non perdere: a pool intatto la
+## tabella di `shop_odds` è ancora la verità, letta come peso della SINGOLA
+## unità — chi bilancia deve poterla leggere per quello che dice —; una fascia
+## con poche unità non rende ciascuna più frequente; e una fascia esaurita non
+## può più produrre una casella vuota, come faceva il vecchio fallback.
 func _test_shop_scarcity() -> void:
 	section("Probabilità del negozio e residuo del pool")
 
@@ -1559,10 +1603,32 @@ func _test_shop_scarcity() -> void:
 		var odds := GameData.shop_odds(level)
 		var weights := pool.band_weights(level, 1.0)
 		for index in odds.size():
-			if absf(float(weights[index]) - float(odds[index])) > 0.001:
+			var per_unit := float(weights[index]) / maxi(GameData.units_of_cost(index + 1).size(), 1)
+			if absf(per_unit - float(odds[index])) > 0.001:
 				mismatch = "livello %d fascia %d: %f vs %f" % [
-					level, index + 1, float(weights[index]), float(odds[index])]
-	check(mismatch == "", "a pool intatto i pesi coincidono con shop_odds", mismatch)
+					level, index + 1, per_unit, float(odds[index])]
+	check(mismatch == "", "a pool intatto il peso per unità coincide con shop_odds", mismatch)
+
+	# Il difetto che ha portato al peso per unità: con la tabella a quote di
+	# fascia, al livello massimo un'unità da 5 (fascia di 3) usciva il doppio di
+	# una da 1 (fascia di 6). Ora la probabilità della singola unità non cresce
+	# mai col costo, a nessun livello.
+	var inverted := ""
+	for level in range(1, max_level + 1):
+		var weights := pool.band_weights(level, 1.0)
+		var total := 0.0
+		for w in weights:
+			total += float(w)
+		var previous := INF
+		for index in weights.size():
+			var n := GameData.units_of_cost(index + 1).size()
+			if n == 0:
+				continue
+			var unit_chance := float(weights[index]) / total / n
+			if unit_chance > previous + 0.0001:
+				inverted = "livello %d costo %d" % [level, index + 1]
+			previous = unit_chance
+	check(inverted == "", "una singola unità costosa non esce più spesso di una economica", inverted)
 
 	# Prosciuga il costo 1: è la fascia senza fallback possibile.
 	for def in GameData.units_of_cost(1):
@@ -1578,12 +1644,13 @@ func _test_shop_scarcity() -> void:
 	check(rest > 0.0, "le altre fasce reggono da sole l'estrazione", str(rest))
 
 	# L'esponente zero è la via di fuga verso il comportamento nominale: le
-	# fasce ancora fornite tornano ai valori scritti in tabella.
+	# fasce ancora fornite tornano ai valori di tabella (× unità della fascia).
 	var nominal := pool.band_weights(5, 0.0)
 	var odds_5 := GameData.shop_odds(5)
 	var nominal_ok := true
 	for index in range(1, nominal.size()):
-		if absf(float(nominal[index]) - float(odds_5[index])) > 0.001:
+		var nominal_expected := float(odds_5[index]) * GameData.units_of_cost(index + 1).size()
+		if absf(float(nominal[index]) - nominal_expected) > 0.001:
 			nominal_ok = false
 	check(nominal_ok, "con esponente 0 le fasce fornite tornano ai valori di tabella")
 	check(float(nominal[0]) == 0.0, "con esponente 0 una fascia vuota pesa comunque zero",

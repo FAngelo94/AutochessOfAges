@@ -115,6 +115,23 @@ func _run() -> void:
 		put_back.store_string(JSON.stringify(saved_history))
 		put_back.close()
 
+	# Classifica: esiste solo online. Da ospite si apre e lo dice, senza lista.
+	var leaderboard: LeaderboardPanel = _menu._leaderboard_panel
+	leaderboard.open()
+	check(leaderboard.visible, "la classifica si apre")
+	check(leaderboard._list.get_child_count() == 0, "da ospite la classifica è vuota",
+		str(leaderboard._list.get_child_count()))
+	check(leaderboard._status.text.contains("Accedi"), "da ospite chiede di accedere",
+		leaderboard._status.text)
+	# La propria riga fuori dai primi cento compare staccata in fondo.
+	leaderboard.show_data({
+		"top": [{"position": 1, "username": "a", "mmr": 1300, "matches_played": 5, "wins": 2}],
+		"me": {"position": 140, "username": "b", "mmr": 990, "matches_played": 3, "is_me": true}})
+	check(leaderboard._list.get_child_count() == 3, "fuori dai primi c'è la propria riga in fondo",
+		str(leaderboard._list.get_child_count()))
+	check(leaderboard._status.text.contains("140"), "dice la propria posizione", leaderboard._status.text)
+	leaderboard.visible = false
+
 	# Guida: si apre, elenca tutti i capitoli e marca la voce come vista.
 	check(not _profile.has_seen_tip("guide_opened"), "la guida non è ancora stata vista")
 	_menu._on_guide_pressed()

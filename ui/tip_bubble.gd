@@ -91,7 +91,7 @@ func _build() -> void:
 	column.add_child(_body)
 
 	var dismiss_button := Button.new()
-	dismiss_button.text = "Ho capito"
+	dismiss_button.text = tr("UI_GOT_IT")
 	dismiss_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	dismiss_button.add_theme_font_size_override("font_size", 18)
 	Style.apply_plate(dismiss_button, Style.BLUE, Style.BLUE_DEEP, 14, 4)

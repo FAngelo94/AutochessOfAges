@@ -1,0 +1,195 @@
+{
+  "_comment": "English text overlay for units.json. Only text fields are translated (name, ability.name, ability.description, lore); numbers, ids, classes and params stay in the base file, which remains the single source of truth for balance.",
+
+  "units": [
+    {
+      "id": "legionarius",
+      "name": "Legionary",
+      "ability": {
+        "name": "Testudo",
+        "description": "Braces behind the shield: gains a shield and reflects part of incoming damage for 4 seconds."
+      },
+      "lore": "The legionary was the heavy infantryman of the Roman army after Marius's reform (late 2nd century BC), a professional soldier signed up for long service instead of the citizen-farmer levied for a single campaign. He fought in tight ranks, protected by the scutum (the curved rectangular shield), the lorica (segmented or mail armor) and the galea (helmet); his opening weapon was the pilum, a heavy javelin thrown to break up enemy lines before contact, followed by the gladius, the short sword ideal for thrusting at close range. The testudo formation, shields locked together overhead, made the unit almost invulnerable to missiles during sieges."
+    },
+    {
+      "id": "velites",
+      "name": "Velites",
+      "ability": {
+        "name": "Javelin Volley",
+        "description": "Hurls a flurry of javelins at the two nearest enemies."
+      },
+      "lore": "The velites were the light infantry of the republican legion, recruited among the poorest citizens (the capite censi, who could not afford a legionary's heavy gear). They carried only a parma, a small round shield, and no armor, often recognizable by a wolf pelt worn over the helmet as a distinguishing mark. Their weapon was the hasta velitaris, a bundle of light javelins thrown at the enemy before the clash, after which they retreated quickly through gaps deliberately left open in the ranks of the heavier maniples behind them."
+    },
+    {
+      "id": "sagittarius",
+      "name": "Sagittarius",
+      "ability": {
+        "name": "Incendiary Volley",
+        "description": "Fires a flaming arrow at the farthest target, dealing magic area damage."
+      },
+      "lore": "Rome never cultivated a strong tradition of archery among its own citizens, favoring heavy close-combat infantry instead: sagittarii were therefore mostly auxiliary troops recruited in the East, especially Crete and Syria, regions with a long tradition of composite bow archery. They dressed light to keep their draw unhindered, and operated in support of the legionary line, shooting from range before impact and continuing to harass the flanks during the battle."
+    },
+    {
+      "id": "ballistarius",
+      "name": "Ballistarius",
+      "ability": {
+        "name": "Piercing Bolt",
+        "description": "A bolt travels through the line, striking every enemy in its path."
+      },
+      "lore": "Ballistarii were the gunners in charge of the ballista, a torsion-powered siege engine that hurled heavy bolts with lethal precision over long distances, descended from Greek engines perfected by Roman engineers. Used both in sieges and in open battle, from the late empire onward it was organized into standing units of specialists, the ballistarii proper, integrated into the legions as a permanent artillery corps."
+    },
+    {
+      "id": "equites",
+      "name": "Equites",
+      "ability": {
+        "name": "Breakthrough",
+        "description": "Charges the farthest enemy, dealing damage and stunning it."
+      },
+      "lore": "The equites were originally citizens wealthy enough to keep a horse of their own, the equestrian order of the early republic, and served as line cavalry. As Rome expanded, their military role passed increasingly to allies and auxiliaries, but the name remained tied to the Roman horseman equipped with the hasta (a light spear) and the parma equestris, a round shield smaller than the infantry's, used for scouting, running down a routed enemy, and screening the flanks of the battle line."
+    },
+    {
+      "id": "centurio",
+      "name": "Praetorian",
+      "ability": {
+        "name": "Close Ranks",
+        "description": "Grants a shield to itself and the two nearest allies, and raises their armor."
+      },
+      "lore": "The Praetorians formed the imperial guard, established by Augustus to protect the emperor and to gather the old praetorian cohorts that had escorted generals on campaign into a single elite corps. They were better paid and better equipped than line legionaries, served shorter terms, and were often issued richer, more ornate gear, garrisoned in Rome at the Castra Praetoria. Beyond their military role of escort and protection, they became over time a decisive political actor, able to make and unmake emperors."
+    },
+    {
+      "id": "cataphractus",
+      "name": "Cataphract",
+      "ability": {
+        "name": "Armored Wedge",
+        "description": "Charges in tight formation: deals area damage ahead and increases the attack speed of nearby allies."
+      },
+      "lore": "Cataphracts were cavalrymen armored from head to toe, horse included, a heavy cavalry model Rome learned from its eastern adversaries — Parthians and Sarmatians — and adopted at scale in the late empire. The armor, of lamellar or mail construction, covered the mount as well (often called cataphractarius or clibanarius in the sources), and the long two-handed lance (contus) allowed a devastating shock charge against enemy infantry, paid for with far less mobility than light cavalry."
+    },
+    {
+      "id": "clansman",
+      "name": "Clan Warrior",
+      "ability": {
+        "name": "War Cry",
+        "description": "Increases its own attack speed for 5 seconds."
+      },
+      "lore": "The clan warrior was the backbone of Gallic infantry, a free man who answered his tribe's call to arms bringing his own weapons and gear. He often fought bare-chested or lightly protected, trusting physical strength and the fury of the charge more than heavy armor: Roman authors, from Polybius to Caesar, describe with unease the ferocity of the initial Gallic assault, capable of overwhelming unprepared enemy lines, though hard to sustain if that first shock failed to settle the fight."
+    },
+    {
+      "id": "gaul_hunter",
+      "name": "Gallic Hunter",
+      "ability": {
+        "name": "Poisoned Arrow",
+        "description": "Deals damage over time and reduces healing received by the target."
+      },
+      "lore": "The forests of Gaul were a constant hunting ground, and the hunters trained there brought to war a skill with the bow honed chasing game of every kind, from boar to deer. Unlike the clan's heavy infantry, they operated loose ahead of the battle line or on the flanks, setting ambushes and wearing the enemy down from range before the lines closed; some Roman sources also record arrows dipped in poisons drawn from local plants and herbs, to make every hit more lethal."
+    },
+    {
+      "id": "gaul_druid",
+      "name": "Druid",
+      "ability": {
+        "name": "Sacred Grove Sap",
+        "description": "Heals the ally with the lowest health and grants them regeneration."
+      },
+      "lore": "Druids were the priestly and intellectual class of Gallic society, keepers of religious, astronomical and legal lore passed down orally through a training that, according to Caesar, could last up to twenty years. They officiated rites in sacred groves, especially those tied to mistletoe gathered from oak trees, mediated disputes between tribes, and could halt a battle by moral authority alone; in war they accompanied the clans more as healers and spiritual figures than as fighters, invoking the gods' protection for wounded allies."
+    },
+    {
+      "id": "chariot",
+      "name": "Scythed Chariot",
+      "ability": {
+        "name": "Spinning Scythes",
+        "description": "Sweeps through all adjacent enemies, dealing damage and knocking them back."
+      },
+      "lore": "The war chariot was already declining as a continental weapon of war by the time of the Roman conquest, replaced almost everywhere by cavalry, but it remained in use among some tribes, such as the Britons described by Caesar, who put it to sophisticated tactical use: the warrior was carried rapidly to the front, dismounted to fight on foot, and, if needed, the chariot returned to pick him up for the withdrawal. The curved blades mounted on the wheel hubs, more legendary in late sources than common in the archaeological record, remain the most iconic image of this vehicle, able to sow panic charging through enemy ranks."
+    },
+    {
+      "id": "gaul_champion",
+      "name": "Gallic Champion",
+      "ability": {
+        "name": "Duel",
+        "description": "Strikes the target with a devastating blow, stronger the more wounded the enemy is."
+      },
+      "lore": "In Gallic society, prestige was earned on the battlefield, and champions were warriors who had won enough personal fame to challenge the enemy's best in single combat in front of the assembled armies, a practice described by Diodorus Siculus and Livy as an integral part of Celtic martial culture. They often wore gold torcs around their necks, a mark of rank and a vow to the gods, and richly decorated armor, and the more wounded or hard-pressed the enemy appeared, the more the champion sought direct confrontation to seal his reputation with a decisive blow."
+    },
+    {
+      "id": "solduros",
+      "name": "Solduros",
+      "ability": {
+        "name": "Oath of the Solduri",
+        "description": "Every fallen ally renews his oath: deals area damage and grants the whole team fury and bloodlust for 10 seconds."
+      },
+      "lore": "The soldurii, described by Caesar in connection with the Aquitanian Adcantuannus, were a war band bound to their chief by an absolute oath: they shared everything with him in life and, if the chief fell in battle or was killed, took their own lives rather than survive him, considering it dishonorable to go on living after his death. This bond of total loyalty, stronger than any other tie in Gallic society, made them relentless fighters precisely when the battle turned against them, driven to avenge their fallen companions before joining them."
+    },
+    {
+      "id": "gaul_slinger",
+      "name": "Gallic Slinger",
+      "ability": {
+        "name": "Volley of Stones",
+        "description": "Strikes the two nearest enemies with a barrage of projectiles."
+      },
+      "lore": "The sling was a cheap, widespread weapon in rural Gaul, far less costly to make and easier to come by than a composite bow, and so it was often the weapon of the poorer men called to arms by the clan. With nothing more than a simple leather or plant-fiber strap and stone or cast-lead shot, a skilled slinger could reach a considerable range and surprising accuracy, ideal for harassing the enemy's front ranks from a distance before the lines met in melee."
+    },
+    {
+      "id": "teuton_spearman",
+      "name": "Teutonic Spearman",
+      "ability": {
+        "name": "Wall of Spears",
+        "description": "Impales the two nearest enemies and reduces their attack speed."
+      },
+      "lore": "According to Tacitus's Germania, most Germanic warriors carried neither swords nor heavy spears, but the framea, a relatively short shaft with a narrow, sharp iron point, wielded both up close and thrown at range. Fighters formed up in tight wedges, shoulder to shoulder, trusting the line's cohesion to the bond of kin and fellow villagers more than to professional training of the Roman kind, and losing one's shield in battle was considered a disgrace severe enough to bar a warrior from returning home."
+    },
+    {
+      "id": "teuton_skirmisher",
+      "name": "Teutonic Hunter",
+      "ability": {
+        "name": "Stone to the Brow",
+        "description": "Strikes the target with the lowest health, with a chance to briefly stun it."
+      },
+      "lore": "Tacitus, in the Germania, notes that the bow was a rather neglected weapon among the central Germanic peoples, more attached to the framea for close combat; it was the tribes on the eastern fringes — the Fenni, he calls them — who instead made it the mainstay of their livelihood, hunting with bone-tipped arrows for lack of iron, a skill every child learned from an early age. In the Teutonic clans these hunters were called up for war for their unerring eye, tasked with wearing down the enemy's front ranks from afar before the heavy infantry made contact."
+    },
+    {
+      "id": "shieldmaiden",
+      "name": "Mace Fighter",
+      "ability": {
+        "name": "Parry",
+        "description": "For 4 seconds reduces damage taken and returns part of the blocked damage."
+      },
+      "lore": "Iron was scarce in Germanic villages, and Tacitus observes that only the wealthiest owned a true framea or a sword: the poorer men, often young warriors not yet established within the clan, went to battle with axes and fire-hardened wooden clubs, making up for the lack of blades with the fury of the charge and a disregard for danger that, per the same source, was the fastest way for a young warrior to earn himself a name and a place among the veterans."
+    },
+    {
+      "id": "cherusker_reiter",
+      "name": "Teutonic Scout",
+      "ability": {
+        "name": "Woodland Charge",
+        "description": "Charges the farthest enemy, dealing damage and briefly stunning it."
+      },
+      "lore": "Germanic horsemen wore no armor and rode small, unremarkable horses, chosen for endurance rather than size: Caesar and Tacitus agree in describing them as scouts and raiders rather than a shock line, sent ahead to survey the ground, set quick ambushes, and cut enemy supply lines well before a pitched battle. Their contribution at Teutoburg in AD 9 was exactly that: spotting Varus's column in the forest in advance, not confronting it head-on."
+    },
+    {
+      "id": "seeress",
+      "name": "Seeress",
+      "ability": {
+        "name": "Omen",
+        "description": "Heals the most wounded ally and grants them a shield that absorbs magic damage."
+      },
+      "lore": "Tacitus recounts that the Germans attributed something sacred and prophetic to women, to the point of neither spurning their advice nor ignoring their answers as oracles: the most famous was Veleda, seeress of the Bructeri, who during the Batavian revolt of AD 69-70 lived isolated in a tower, communicating with the outside only through intermediaries, and was consulted as an almost divine authority on the outcome of the war against Rome. Figures like her combined the role of spiritual guide with that of healer for the community, treating the clans' wounded with remedies passed down orally. Tacitus also recounts that such figures followed the warriors nearly to the front line, often riding wagons at the edge of the field, reading the omens before battle and urging on those who hesitated: the shame of retreating under their gaze held warriors back more than the enemy's threat itself."
+    },
+    {
+      "id": "battering_ram",
+      "name": "Tribal Battering Ram",
+      "ability": {
+        "name": "Door Breaker",
+        "description": "Delivers a blow dealing damage equal to a percentage of the target's maximum health."
+      },
+      "lore": "The Germans never developed a siege tradition of their own, preferring open-field battle and avoiding the fixed fortifications typical of the Mediterranean world; the use of siege engines like the battering ram spread among them only through prolonged contact with Rome. Tacitus describes how during the Batavian revolt of AD 69-70 Civilis's forces besieged the legionary camp at Vetera copying Roman techniques, including siege towers and rams, often built by deserters or Roman prisoners forced to put their skills at the rebels' service. Likewise, instead of raising palisades, clans on the march arranged their draft wagons in a circle, the Wagenburg, turning the camp into a mobile fortress able to repel a surprise assault without earthworks."
+    },
+    {
+      "id": "arminius",
+      "name": "Teutonic Champion",
+      "ability": {
+        "name": "Teutoburg Ambush",
+        "description": "The forest closes in on the enemy: area damage and a shield for nearby allies."
+      },
+      "lore": "Clan chiefs and the wealthiest warriors stood out with gear the rest of the tribe could not afford: a long sword instead of the plain framea, a shield reinforced with an iron rim, and often a mail shirt — of Roman manufacture more often than Germanic, plunder stripped from fallen legionaries or acquired through border trade, as suggested by the aristocratic grave goods found along the Rhine and the Elbe. They fought on horseback in small, tight groups, a wedge of a few trusted men able, through the sheer force of the initial shock, to open a breach in enemy lines that the infantry behind would then widen."
+    }
+  ]
+}

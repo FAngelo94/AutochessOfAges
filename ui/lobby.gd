@@ -65,14 +65,14 @@ func _build() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "SALA D'ATTESA"
+	title.text = tr("LOBBY_TITLE")
 	title.add_theme_font_size_override("font_size", 40)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
 
 	_status_label = Label.new()
-	_status_label.text = "Connessione al server…"
+	_status_label.text = tr("LOBBY_CONNECTING")
 	_status_label.add_theme_font_size_override("font_size", 20)
 	_status_label.add_theme_color_override("font_color", Style.TEXT_DIM)
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -88,20 +88,20 @@ func _build() -> void:
 	plate.add_child(plate_col)
 
 	_count_label = Label.new()
-	_count_label.text = "Giocatori in coda: 0/%d" % RemoteSession.MAX_QUEUE_SLOTS
+	_count_label.text = tr("LOBBY_QUEUE_COUNT") % [0, RemoteSession.MAX_QUEUE_SLOTS]
 	_count_label.add_theme_font_size_override("font_size", 24)
 	_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	plate_col.add_child(_count_label)
 
 	_timer_label = Label.new()
-	_timer_label.text = "In attesa di altri giocatori…"
+	_timer_label.text = tr("LOBBY_WAITING")
 	_timer_label.add_theme_font_size_override("font_size", 20)
 	_timer_label.add_theme_color_override("font_color", Style.TEXT_DIM)
 	_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	plate_col.add_child(_timer_label)
 
 	_cancel_button = Button.new()
-	_cancel_button.text = "Annulla"
+	_cancel_button.text = tr("UI_CANCEL")
 	_cancel_button.custom_minimum_size = Vector2(0, Style.TOUCH_PRIMARY)
 	_cancel_button.add_theme_font_size_override("font_size", 26)
 	Style.apply_plate(_cancel_button, Style.BLUE, Style.BLUE_DEEP, 20, 8)
@@ -115,21 +115,21 @@ func _build() -> void:
 
 func _on_welcome(username: String) -> void:
 	if username != "":
-		_status_label.text = "In coda come %s" % username
+		_status_label.text = tr("LOBBY_QUEUED_AS") % username
 	else:
-		_status_label.text = "In coda"
+		_status_label.text = tr("LOBBY_QUEUED")
 
 
 func _on_queue_updated(players: int, seconds_left: int) -> void:
-	_count_label.text = "Giocatori in coda: %d/%d" % [players, RemoteSession.MAX_QUEUE_SLOTS]
+	_count_label.text = tr("LOBBY_QUEUE_COUNT") % [players, RemoteSession.MAX_QUEUE_SLOTS]
 	if seconds_left > 0:
-		_timer_label.text = "La partita inizia tra %d s" % seconds_left
+		_timer_label.text = tr("LOBBY_STARTS_IN") % seconds_left
 	else:
-		_timer_label.text = "Avvio della partita…"
+		_timer_label.text = tr("LOBBY_STARTING")
 
 
 func _on_match_assigned() -> void:
-	_status_label.text = "Partita trovata!"
+	_status_label.text = tr("LOBBY_MATCH_FOUND")
 	_cancel_button.disabled = true
 	# La sessione e' gia' agganciata al worker: la si consegna a ui/main.gd.
 	get_tree().root.set_meta(SESSION_META, _session)
@@ -137,17 +137,17 @@ func _on_match_assigned() -> void:
 
 
 func _on_rejected(reason: String) -> void:
-	_fail("Accesso rifiutato dal server (%s)." % _reason_text(reason))
+	_fail(tr("LOBBY_REJECTED") % _reason_text(reason))
 
 
 func _on_not_configured() -> void:
-	_fail("La modalità online non è ancora configurata su questo dispositivo.")
+	_fail(tr("LOBBY_NOT_CONFIGURED"))
 
 
 func _on_connection_lost(reason: String) -> void:
 	if reason == "not configured":
 		return  # gia' gestito da not_configured
-	_fail("Impossibile raggiungere il server. Riprova più tardi.")
+	_fail(tr("LOBBY_UNREACHABLE"))
 
 
 ## Fine corsa: qualcosa è andato storto e la sala d'attesa non è più un'attesa.
@@ -159,16 +159,16 @@ func _fail(message: String) -> void:
 	_count_label.text = ""
 	_timer_label.text = ""
 	_cancel_button.visible = false
-	var dialog := ModalDialog.notice(self, "Partita non avviata", message)
+	var dialog := ModalDialog.notice(self, tr("LOBBY_MATCH_NOT_STARTED"), message)
 	dialog.confirmed.connect(_return_to_menu)
 	dialog.cancelled.connect(_return_to_menu)
 
 
 func _reason_text(reason: String) -> String:
 	match reason:
-		"version": return "aggiorna il gioco"
-		"auth": return "sessione non valida"
-		"banned": return "account sospeso"
+		"version": return tr("LOBBY_REASON_VERSION")
+		"auth": return tr("LOBBY_REASON_AUTH")
+		"banned": return tr("LOBBY_REASON_BANNED")
 		_: return reason
 
 

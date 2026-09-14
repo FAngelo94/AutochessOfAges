@@ -61,6 +61,8 @@ const HISTORY_DEFAULT := 20
 const HISTORY_MAX := 50
 
 ## Stesse regole per le proprie donazioni: il client chiede, il server decide.
+const LEADERBOARD_DEFAULT := 100
+const LEADERBOARD_MAX := 100
 const DONATIONS_DEFAULT := 20
 const DONATIONS_MAX := 50
 
@@ -147,7 +149,8 @@ func _process(delta: float) -> bool:
 		if pt == Protocol.AUTH_GOOGLE_BEGIN or pt == Protocol.AUTH_GOOGLE_POLL 				or pt == Protocol.AUTH_REFRESH \
 				or pt == Protocol.AUTH_EMAIL_LOGIN or pt == Protocol.AUTH_EMAIL_SIGNUP \
 				or pt == Protocol.PROFILE_SET or pt == Protocol.DELETE_ACCOUNT \
-				or pt == Protocol.HISTORY_REQUEST or pt == Protocol.DONATIONS_REQUEST:
+				or pt == Protocol.HISTORY_REQUEST or pt == Protocol.DONATIONS_REQUEST \
+				or pt == Protocol.LEADERBOARD_REQUEST:
 			_handle_auth(from, pt, pre)
 			continue
 		var mm: Matchmaker = _peer_mm.get(from, _mm)
@@ -326,6 +329,22 @@ func _handle_auth(peer_id: int, msg_type: String, msg: Dictionary) -> void:
 						_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "db"}))
 						return
 					_reply(peer_id, Protocol.make(Protocol.HISTORY_DATA, {"matches": matches})))
+		Protocol.LEADERBOARD_REQUEST:
+			var lb_claims: Dictionary = _verifier.verify(String(msg.get("session_token", "")))
+			if lb_claims.is_empty():
+				_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "auth"}))
+				return
+			var lb_limit := clampi(int(msg.get("limit", LEADERBOARD_DEFAULT)), 1, LEADERBOARD_MAX)
+			DbClient.fetch_leaderboard(_pump, String(lb_claims.get("sub", "")), lb_limit,
+				func(ok: bool, data: Dictionary) -> void:
+					if not ok:
+						_reply(peer_id, Protocol.make(Protocol.AUTH_FAIL, {"reason": "db"}))
+						return
+					var me: Variant = data.get("me")
+					_reply(peer_id, Protocol.make(Protocol.LEADERBOARD_DATA, {
+						"top": data.get("top", []) if data.get("top") is Array else [],
+						"me": me if me is Dictionary else {},
+					})))
 		Protocol.DONATIONS_REQUEST:
 			var don_claims: Dictionary = _verifier.verify(String(msg.get("session_token", "")))
 			if don_claims.is_empty():
