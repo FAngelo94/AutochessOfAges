@@ -39,6 +39,9 @@ func _initialize() -> void:
 	_test_monetization()
 	_test_serialization_roundtrip()
 	_test_view_filtering()
+	# Ultimo e atteso: ha bisogno che i frame girino, cosa che in _initialize
+	# succede solo dopo il primo await.
+	await _test_async_resolve_matches_sync()
 
 	print("\n%d superati, %d falliti" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -1138,6 +1141,46 @@ func _test_ghost_uses_eliminated_formation() -> void:
 
 	check(ghost_count == 1, "esattamente un fantasma")
 	check(normal_count == 2, "e due scontri normali")
+
+
+## La risoluzione su thread (request_ready_async, usata da ui/main.gd per non
+## congelare lo schermo) deve dare la stessa identica partita di quella
+## sincrona: se divergesse, lo stesso seed non riprodurrebbe più la stessa
+## partita a seconda di chi l'ha giocata.
+func _test_async_resolve_matches_sync() -> void:
+	section("Risoluzione del round su thread — stessa partita della sincrona")
+
+	var sync_session := LocalSession.new()
+	sync_session.begin(9090)
+	var async_session := LocalSession.new()
+	async_session.begin(9090)
+
+	var concluded := [0]
+	async_session.round_concluded.connect(func(_results: Array) -> void: concluded[0] += 1)
+
+	var rounds := 6
+	for i in rounds:
+		sync_session.request_ready()
+		async_session.request_ready_async()
+		# Durante la risoluzione i comandi vanno ignorati: se questo acquisto
+		# passasse, lo stato divergerebbe da quello sincrono e il check sotto
+		# fallirebbe. Nella sessione sincrona non lo si fa di proposito.
+		async_session.request_buy_xp()
+		var waited := 0
+		while async_session.is_resolving and waited < 600:
+			await process_frame
+			waited += 1
+
+	check(concluded[0] == rounds, "ogni round asincrono emette round_concluded", str(concluded[0]))
+	check(var_to_bytes(sync_session.state().to_dict(0)) == var_to_bytes(async_session.state().to_dict(0)),
+		"stato identico dopo %d round" % rounds)
+	var same_logs := true
+	var sync_rows := sync_session.state().last_results()
+	var async_rows := async_session.state().last_results()
+	for i in sync_rows.size():
+		if var_to_bytes(sync_rows[i]["combat"].get("events", [])) != var_to_bytes(async_rows[i]["combat"].get("events", [])):
+			same_logs = false
+	check(same_logs and sync_rows.size() == async_rows.size(), "stessi log di battaglia nell'ultimo round")
 
 
 ## Lo scontro contro il fantasma di un eliminato è rivedibile dalla schermata

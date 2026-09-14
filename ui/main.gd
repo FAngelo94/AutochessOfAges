@@ -228,6 +228,15 @@ var result_pause := 1.6
 ## annulla riassegnando, e non lascia una callback in volo dopo un cambio partita.
 var _auto_close_left: float = -1.0
 
+## In locale bot e risoluzione del round girano su un thread
+## (LocalSession.request_ready_async): sul thread principale bloccavano lo
+## schermo allo scadere della preparazione. I test sincroni lo spengono.
+var resolve_in_background := true
+## Vero dallo scadere della preparazione (o COMBATTI) finché la sessione non
+## consegna il round. Nel frattempo lo stato della partita è del thread: niente
+## refresh, niente input, niente letture.
+var _resolving := false
+
 ## Classifica finale normalizzata (LocalSession manda Array[Player],
 ## RemoteSession Array[Dictionary]). Vuota finché la partita non è decisa.
 var _final_standings: Array = []
@@ -240,6 +249,8 @@ var _level_up_pending: Dictionary = {}
 
 
 func _exit_tree() -> void:
+	if _session is LocalSession:
+		(_session as LocalSession).dispose()
 	# Tornando al menu la musica generale riprende; la imposta anche menu.gd,
 	# qui si evita solo il buco durante il cambio scena.
 	var music := get_node_or_null("/root/Music")
@@ -1574,6 +1585,8 @@ func _close_synergy_detail() -> void:
 ## chip passano la squadra della barra su cui si è cliccato, così le soglie
 ## mostrate sono quelle davvero raggiunte da quel giocatore.
 func _open_synergy_detail(trait_id: String, units: Array = []) -> void:
+	if _resolving:
+		return
 	var def := GameData.trait_def(trait_id)
 	var source: Array = units if not units.is_empty() else player().board_units()
 	var count := int(TraitResolver.count_traits(source).get(trait_id, 0))
@@ -1754,6 +1767,8 @@ func _process(delta: float) -> void:
 
 	_tick_combat_bar(delta)
 	_tick_preparation(delta)
+	if _resolving:
+		return
 	_update_match_music()
 
 	# Countdown fluido della riga di stato per chi guarda da eliminato: senza
@@ -1787,6 +1802,10 @@ func _tick_combat_bar(delta: float) -> void:
 func _tick_preparation(delta: float) -> void:
 	if _prep_phase_bar == null:
 		return
+	# Risoluzione in corso: la barra resta piena sullo schermo e non si legge lo
+	# stato, che in questo momento sta cambiando su un altro thread.
+	if _resolving:
+		return
 
 	var running := not _combat_overlay.visible \
 		and match_state.phase == MatchState.Phase.PREPARATION \
@@ -1814,7 +1833,7 @@ func _tick_preparation(delta: float) -> void:
 		# porta dritti alla battaglia, che riarmerà il conto alla rovescia da
 		# _close_combat_overlay(). Senza questo si rientrerebbe qui il frame dopo.
 		_prep_left = -1.0
-		_session.request_ready()
+		_begin_battle()
 
 
 ## Sceglie la traccia in base allo stato della partita: battaglia mentre l'overlay
@@ -1923,7 +1942,24 @@ func _on_fight_pressed() -> void:
 		_start_new_match()
 		return
 
-	_session.request_ready()
+	_begin_battle()
+
+
+## Fine preparazione in locale: il pulsante cambia subito, così il giocatore vede
+## che il gioco ha registrato lo scadere, e il lavoro pesante parte su un thread.
+## Sarà _on_round_concluded, al frame in cui il round è pronto, a sbloccare.
+func _begin_battle() -> void:
+	if _resolving:
+		return
+	var local := _session as LocalSession
+	if local == null or not resolve_in_background:
+		_session.request_ready()
+		return
+	_resolving = true
+	selected = null
+	_fight_button.disabled = true
+	_fight_button.text = "ALLA BATTAGLIA…"
+	local.request_ready_async()
 
 
 ## La sessione ha risolto il round. Il giocatore vede il replay se c'è qualcosa
@@ -1931,6 +1967,9 @@ func _on_fight_pressed() -> void:
 ## fatto avanzare lo stato (e, se la partita continua, aperto il round dopo):
 ## qui si decide solo cosa mostrare.
 func _on_round_concluded(results: Array) -> void:
+	_resolving = false
+	_fight_button.disabled = false
+	_fight_button.text = "COMBATTI"
 	var own := _own_result(results)
 
 	# Niente replay se non c'è nulla da guardare: giocatore già eliminato,
@@ -2104,8 +2143,12 @@ func _conclude_round(results: Array) -> void:
 ## dirlo sarà _conclude_round(), a battaglia finita.
 func _on_match_finished(standings: Array) -> void:
 	_final_standings = _normalize_standings(standings)
+	# Se l'overlay è visibile, il replay dell'ultima battaglia è ancora in
+	# corso (in locale questo segnale arriva PRIMA che finisca): non si tocca
+	# l'overlay qui, o si tronca la battaglia decisiva a metà. È
+	# _on_playback_finished(), a replay concluso, a vedere _final_standings
+	# non vuoto e a chiudere l'overlay lei stessa.
 	if _combat_overlay.visible:
-		_request_overlay_close(false)
 		return
 	_show_match_over()
 
@@ -2252,14 +2295,20 @@ func _report(results: Array) -> void:
 
 
 func _on_reroll_pressed() -> void:
+	if _resolving:
+		return
 	_session.request_reroll()
 
 
 func _on_buy_xp_pressed() -> void:
+	if _resolving:
+		return
 	_session.request_buy_xp()
 
 
 func _on_sell_pressed() -> void:
+	if _resolving:
+		return
 	if selected == null:
 		return
 	var value := selected.sell_value()
@@ -2270,6 +2319,8 @@ func _on_sell_pressed() -> void:
 
 
 func _on_shop_slot_pressed(slot: int) -> void:
+	if _resolving:
+		return
 	var p := player()
 	if p.shop[slot] == null:
 		return
@@ -2292,6 +2343,8 @@ func _on_shop_slot_pressed(slot: int) -> void:
 ## Un clic su una cella: se c'è un'unità selezionata la sposta, altrimenti
 ## seleziona quella presente.
 func _on_cell_pressed(cell: Vector2i) -> void:
+	if _resolving:
+		return
 	var p := player()
 	if selected != null:
 		_session.request_move_to_board(selected.uid, cell)
@@ -2302,6 +2355,8 @@ func _on_cell_pressed(cell: Vector2i) -> void:
 
 
 func _on_bench_slot_pressed(slot: int) -> void:
+	if _resolving:
+		return
 	var p := player()
 	var occupant: UnitInstance = null
 	for unit in p.bench_units():
@@ -2336,6 +2391,8 @@ func _streak_gold_bonus(streak: int) -> int:
 
 
 func _refresh() -> void:
+	if _resolving:
+		return
 	# Uno snapshot dal server significa che la connessione regge: via il pannello.
 	if _reconnect_panel != null and _reconnect_panel.visible:
 		_reconnect_panel.visible = false
@@ -2391,6 +2448,8 @@ func _refresh() -> void:
 ## Cosa parte da questa casella. null = niente da trascinare (negozio, casella
 ## vuota, fuori dalla preparazione, giocatore eliminato).
 func slot_drag_data(slot: UnitSlot) -> Variant:
+	if _resolving:
+		return null
 	if _combat_overlay.visible or match_state.phase != MatchState.Phase.PREPARATION:
 		return null
 	if _is_out_of_match() or slot.zone == UnitSlot.Zone.SHOP:

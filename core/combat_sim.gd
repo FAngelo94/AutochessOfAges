@@ -52,6 +52,16 @@ var _berserk_announced := false
 ## (Teutobod). Letto solo per marcare `_initial`, la vista lo usa per ingrandire
 ## il modello 3D in battaglia.
 var _colossus_scale := {}
+## Cresce a ogni cambio di `_occupancy` (spostamento o morte). Percorsi e scelta
+## del bersaglio dipendono solo da chi occupa quali celle, quindi finché questo
+## numero non cambia si possono riusare invece di rifarli a ogni tick: era il
+## grosso del costo di una battaglia, fino a secondi interi per round.
+var _occupancy_version := 0
+## uid -> {"version", "flood"}: l'ultima ricerca in ampiezza di ogni unità.
+var _flood_cache := {}
+## uid -> {"version", "range", "target_uid", "best_uid"}: l'ultimo esito di
+## _acquire_target, valido se nessuno di quegli ingressi è cambiato.
+var _target_cache := {}
 
 
 func _init(rng: SimRNG) -> void:
@@ -89,6 +99,9 @@ func setup(team_a: Array[UnitInstance], team_b: Array[UnitInstance], hero_a: Str
 	_berserk_announced = false
 	_deaths_by_team = {0: 0, 1: 0}
 	_colossus_scale.clear()
+	_occupancy_version += 1
+	_flood_cache.clear()
+	_target_cache.clear()
 
 	_add_team(team_a, 0, hero_a)
 	_add_team(team_b, 1, hero_b)
@@ -310,8 +323,8 @@ func _update_unit(unit: CombatUnit) -> void:
 			_kill(unit)
 			return
 
-	var flood := _path_flood(unit.cell)
-	var target := _acquire_target(unit, flood)
+	var flood := _cached_flood(unit)
+	var target := _cached_target(unit, flood)
 	if target == null:
 		unit.state = CombatUnit.State.IDLE
 		return
@@ -400,6 +413,42 @@ func _path_flood(start: Vector2i) -> Dictionary:
 			order.append(neighbour)
 			queue.append(neighbour)
 	return {"dist": dist, "came_from": came_from, "order": order}
+
+
+## `_path_flood` dalla cella dell'unità, rifatto solo se l'occupazione è
+## cambiata dall'ultima volta. La cella stessa dell'unità può cambiare solo con
+## uno spostamento, che fa crescere la versione: non serve metterla nella chiave.
+func _cached_flood(unit: CombatUnit) -> Dictionary:
+	var entry: Dictionary = _flood_cache.get(unit.uid, {})
+	if entry.get("version", -1) == _occupancy_version:
+		return entry["flood"]
+	var flood := _path_flood(unit.cell)
+	_flood_cache[unit.uid] = {"version": _occupancy_version, "flood": flood}
+	return flood
+
+
+## `_acquire_target` con memoria. Il suo esito dipende da: celle occupate e
+## unità vive (entrambe nella versione — ogni morte passa da _kill, che la fa
+## crescere), gittata dell'unità e bersaglio corrente. Non consuma SimRNG. Se
+## nessuno di questi ingressi è cambiato l'esito è per forza lo stesso.
+func _cached_target(unit: CombatUnit, flood: Dictionary) -> CombatUnit:
+	var attack_range := unit.effective_range(time)
+	var entry: Dictionary = _target_cache.get(unit.uid, {})
+	if entry.get("version", -1) == _occupancy_version \
+			and entry["range"] == attack_range \
+			and entry["target_uid"] == unit.target_uid:
+		var best_uid: int = entry["best_uid"]
+		unit.target_uid = best_uid
+		return _by_uid.get(best_uid) if best_uid != -1 else null
+	var previous_target := unit.target_uid
+	var target := _acquire_target(unit, flood)
+	_target_cache[unit.uid] = {
+		"version": _occupancy_version,
+		"range": attack_range,
+		"target_uid": previous_target,
+		"best_uid": unit.target_uid,
+	}
+	return target
 
 
 ## Numero di passi che l'unita' deve fare per portare `enemy` a tiro, dato un
@@ -494,6 +543,7 @@ func _move_unit(unit: CombatUnit, to_cell: Vector2i) -> bool:
 	if _occupancy.has(to_cell):
 		return false
 	_occupancy.erase(unit.cell)
+	_occupancy_version += 1
 	var from := unit.cell
 	unit.cell = to_cell
 	_occupancy[to_cell] = unit.uid
@@ -584,6 +634,7 @@ func _kill(unit: CombatUnit) -> void:
 	if _occupancy.get(unit.cell) != unit.uid:
 		return  # già rimosso
 	_occupancy.erase(unit.cell)
+	_occupancy_version += 1
 	unit.state = CombatUnit.State.DEAD
 	_deaths_by_team[unit.team] = int(_deaths_by_team[unit.team]) + 1
 	_log("death", {"uid": unit.uid})

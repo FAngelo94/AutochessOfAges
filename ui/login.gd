@@ -14,6 +14,10 @@ extends Control
 ## (ui/castle_backdrop.gd), stessi margini — è la stessa stanza.
 
 const MENU_SCENE := "res://ui/menu.tscn"
+const GAME_SCENE := "res://ui/main.tscn"
+## Stesso meta con cui ui/lobby.gd consegna una RemoteSession gia' agganciata:
+## ui/main.gd._make_session() lo consuma cosi', a prescindere da chi l'ha messo.
+const SESSION_META := "pending_session"
 
 enum State { RESTORING, LOGIN, SIGNUP }
 
@@ -65,6 +69,11 @@ func _ready() -> void:
 	var music := get_node_or_null("/root/Music")
 	if music != null:
 		music.play_general()
+	# Il gioco e' stato chiuso a meta' di una partita online: si rientra
+	# direttamente, prima di qualunque schermata di login (net/remote_session.gd
+	# ha gia' tutto il necessario per riagganciarsi al worker da solo).
+	if _try_resume_pending_match():
+		return
 	# Backend segnaposto (test headless, sviluppo locale), sessione già valida o
 	# scelta "ospite" già fatta: non c'è niente da chiedere.
 	var forced := force_prompt
@@ -83,6 +92,23 @@ func _ready() -> void:
 ## sta ancora aggiungendo figli e cambiare scena solleva "Parent node is busy".
 func _go_to_menu() -> void:
 	get_tree().change_scene_to_file.call_deferred(MENU_SCENE)
+
+
+## true se c'era una partita in sospeso e il tentativo di rientro e' partito
+## (call_deferred, stesso motivo di _go_to_menu()). Un match_token scaduto o
+## un match gia' concluso non falliscono qui: arrivano come COMMAND_REJECTED
+## o connessione impossibile una volta dentro ui/main.gd, gestiti come una
+## riconnessione fallita qualunque (schermata di connessione persa).
+func _try_resume_pending_match() -> bool:
+	if not RemoteSession.has_pending_match():
+		return false
+	var session := RemoteSession.new()
+	session.drive(self)
+	if not session.resume_from_pending():
+		return false
+	get_tree().root.set_meta(SESSION_META, session)
+	get_tree().change_scene_to_file.call_deferred(GAME_SCENE)
+	return true
 
 
 # --------------------------------------------------------------------------

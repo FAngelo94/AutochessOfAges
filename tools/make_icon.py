@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Genera l'icona dell'app: aquila legionaria dentro una corona d'alloro.
+"""OBSOLETO: icon.svg ora è il logo disegnato a mano ("Logo autochess.svg") e
+android/icons/ è derivato da quello. Eseguire questo script SOVRASCRIVE il logo.
+
+Genera l'icona dell'app: aquila legionaria dentro una corona d'alloro.
 
 Il disegno è calcolato, non disegnato a mano: le remiganti puntano su un arco,
 le foglie stanno su un ramo, le squame del petto seguono il profilo del corpo.

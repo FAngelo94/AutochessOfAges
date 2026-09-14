@@ -73,6 +73,14 @@ const CMD_MOVE_BENCH := "CMD_MOVE_BENCH"# {uid, slot}
 const READY := "READY"                  # {}
 const SPECTATE_REQUEST := "SPECTATE_REQUEST" # {player_index}
 const SURRENDER := "SURRENDER"          # {}
+## Battito applicativo del worker: nessuno dei due lati riceve un vero close-frame
+## quando l'OS sospende l'app in background e droppa il socket in silenzio — senza
+## questo scambio periodico, sia il client che il worker crederebbero la
+## connessione ancora viva all'infinito. Vedi net/remote_session.gd, server/game_worker.gd.
+const PING := "PING"                    # {}
+
+# --- Worker -> Client (anche in risposta a PING) ----------------------------
+const PONG := "PONG"                    # {}
 
 # --- Worker -> Client -------------------------------------------------------
 const MATCH_STATE := "MATCH_STATE"          # {state: MatchState.to_dict(for_index), for_index, next_opponent_index?}

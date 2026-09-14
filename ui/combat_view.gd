@@ -107,6 +107,12 @@ var _berserk_time: float = -1.0
 ## Orologio dedicato all'animazione di fine round: separato da _time, che
 ## smette di avanzare quando la riproduzione finisce.
 var _result_time: float = 0.0
+## Istante dell'ultima morte applicata. La battaglia finisce quasi sempre nello
+## stesso istante in cui muore l'ultima unità di una squadra, quindi senza
+## questo _finish() scattava a `_duration` prima che la sua dissolvenza
+## (DEATH_FADE) avesse il tempo di giocare: l'unità restava impagliata a piena
+## vita sull'ultimo fotogramma invece di sprofondare.
+var _last_death_time: float = -1.0
 
 var _font: Font
 var _board: BattleBoard3D
@@ -305,6 +311,7 @@ func load_combat(combat: Dictionary, team: int = 0) -> void:
 	_hero_beam = {}
 	_hero_floater = {}
 	_berserk_time = -1.0
+	_last_death_time = -1.0
 
 	_board.configure(_columns, _rows, _flip, viewer_team)
 	_board.clear_units()
@@ -395,8 +402,10 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 	# La riproduzione finisce quando gli eventi sono esauriti e le animazioni
-	# in corso hanno avuto il tempo di concludersi.
-	if _event_index >= _events.size() and _time >= _duration:
+	# in corso hanno avuto il tempo di concludersi — dissolvenza dell'ultima
+	# unità morta compresa, che altrimenti scompare di scatto invece di
+	# sprofondare quando la morte coincide con la fine del round.
+	if _event_index >= _events.size() and _time >= _duration and _time >= _last_death_time + DEATH_FADE:
 		_finish()
 
 
@@ -516,6 +525,7 @@ func _apply_event(event: Dictionary, live: bool) -> void:
 			unit["alive"] = false
 			unit["hp"] = 0.0
 			unit["death_time"] = _time
+			_last_death_time = _time
 			if live:
 				_play_sfx("death_own" if int(unit["team"]) == viewer_team else "death_enemy")
 

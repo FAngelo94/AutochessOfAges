@@ -65,6 +65,9 @@ func _process(_delta: float) -> bool:
 			root.remove_child(_menu)
 			_menu.queue_free()
 			_main = (load("res://ui/main.tscn") as PackedScene).instantiate()
+			# Scatti a frame fissi: la battaglia deve essere già in scena al frame
+			# dopo COMBATTI, non quando finisce il thread di risoluzione.
+			_main.resolve_in_background = false
 			root.add_child(_main)
 		12:
 			_waiting_portraits = true
