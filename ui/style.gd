@@ -142,6 +142,36 @@ static func plate(fill: Color, edge: Color, radius: int = 18, lip: int = 6) -> S
 	return style
 
 
+## Il nome del gioco su una targa d'oro invece che come testo nudo: senza asset
+## è il modo più economico per dare allo schermo un centro di gravità. Condiviso
+## da login e menu, così la prima schermata e la home hanno lo stesso logo.
+static func title_plate() -> PanelContainer:
+	var plate_panel := PanelContainer.new()
+	plate_panel.add_theme_stylebox_override("panel", plate(STONE.darkened(0.45), GOLD_DEEP, 20, 8))
+
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", -6)
+	plate_panel.add_child(stack)
+
+	var line_one := Label.new()
+	line_one.text = "AUTOCHESS"
+	line_one.add_theme_font_size_override("font_size", 54)
+	line_one.add_theme_color_override("font_color", GOLD)
+	line_one.add_theme_color_override("font_shadow_color", INK)
+	line_one.add_theme_constant_override("shadow_offset_y", 4)
+	line_one.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stack.add_child(line_one)
+
+	var line_two := Label.new()
+	line_two.text = "OF AGES"
+	line_two.add_theme_font_size_override("font_size", 34)
+	line_two.add_theme_color_override("font_color", GOLD.darkened(0.15))
+	line_two.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stack.add_child(line_two)
+
+	return plate_panel
+
+
 ## Come apply_button ma per le piastre: da premuto la faccia scende sul labbro
 ## inferiore, che è il feedback che su touch sostituisce l'hover inesistente.
 static func apply_plate(button: Button, fill: Color, edge: Color, radius: int = 18, lip: int = 6) -> void:

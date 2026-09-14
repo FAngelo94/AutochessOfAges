@@ -42,6 +42,7 @@ var _profile: Node
 var _store_panel: StorePanel
 var _collection_panel: CollectionPanel
 var _history_panel: HistoryPanel
+var _leaderboard_panel: LeaderboardPanel
 var _guide_panel: GuidePanel
 var _guide_button: Button
 var _settings_panel: SettingsPanel
@@ -168,6 +169,9 @@ func _build() -> void:
 	_history_panel = HistoryPanel.new()
 	add_child(_history_panel)
 
+	_leaderboard_panel = LeaderboardPanel.new()
+	add_child(_leaderboard_panel)
+
 	_guide_panel = GuidePanel.new()
 	add_child(_guide_panel)
 
@@ -181,35 +185,10 @@ func _build() -> void:
 	_update_hero_button()
 
 
-## Il titolo su una targa d'oro invece che come testo nudo: senza asset è il
-## modo più economico per dare allo schermo un centro di gravità.
 func _banner() -> Control:
 	var wrap := VBoxContainer.new()
 	wrap.add_theme_constant_override("separation", 12)
-
-	var plate := PanelContainer.new()
-	plate.add_theme_stylebox_override("panel", Style.plate(Style.STONE.darkened(0.45), Style.GOLD_DEEP, 20, 8))
-	wrap.add_child(plate)
-
-	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", -6)
-	plate.add_child(stack)
-
-	var line_one := Label.new()
-	line_one.text = "AUTOCHESS"
-	line_one.add_theme_font_size_override("font_size", 54)
-	line_one.add_theme_color_override("font_color", Style.GOLD)
-	line_one.add_theme_color_override("font_shadow_color", Style.INK)
-	line_one.add_theme_constant_override("shadow_offset_y", 4)
-	line_one.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stack.add_child(line_one)
-
-	var line_two := Label.new()
-	line_two.text = "OF AGES"
-	line_two.add_theme_font_size_override("font_size", 34)
-	line_two.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
-	line_two.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stack.add_child(line_two)
+	wrap.add_child(Style.title_plate())
 
 	var subtitle := Label.new()
 	subtitle.text = "Legionari e Barbari"
@@ -786,6 +765,17 @@ func _nav_bar() -> Control:
 	var second := HBoxContainer.new()
 	second.add_theme_constant_override("separation", 10)
 	column.add_child(second)
+
+	# Solo icona, come l'ingranaggio: Cronologia resta la voce larga della riga.
+	var leaderboard_button := Button.new()
+	leaderboard_button.text = "🏆"
+	leaderboard_button.tooltip_text = "Classifica"
+	leaderboard_button.custom_minimum_size = Vector2(Style.TOUCH_MIN, Style.TOUCH_MIN)
+	leaderboard_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	leaderboard_button.add_theme_font_size_override("font_size", 20)
+	Style.apply_plate(leaderboard_button, Style.PLATE, Style.PLATE_DARK, 18, 6)
+	leaderboard_button.pressed.connect(func() -> void: _leaderboard_panel.open())
+	second.add_child(leaderboard_button)
 
 	var history_button := Button.new()
 	history_button.text = "📜 Cronologia"

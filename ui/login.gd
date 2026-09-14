@@ -153,6 +153,8 @@ func _set_state(state: int) -> void:
 	_confirm_edit = null
 	_username_edit = null
 
+	_column.add_child(Style.title_plate())
+
 	match state:
 		State.RESTORING:
 			_build_restoring()
@@ -172,7 +174,6 @@ func _title(text: String) -> void:
 
 
 func _build_restoring() -> void:
-	_title("AUTOCHESS OF AGES")
 	var label := Label.new()
 	label.text = "Accesso in corso…"
 	label.add_theme_font_size_override("font_size", 20)

@@ -126,6 +126,8 @@ func setup(team_a: Array[UnitInstance], team_b: Array[UnitInstance], hero_a: Str
 			"max_hp": unit.base_stat("max_hp"),
 			"shield": unit.shield,
 			"mana_max": unit.base_stat("mana_max"),
+			"mana": unit.mana,
+			"has_ability": unit.def.ability_type() != "",
 			"range": unit.effective_range(0.0),
 			"model_scale": _colossus_scale.get(unit.uid, 1.0),
 		})
@@ -370,7 +372,7 @@ func _flush_periodic(unit: CombatUnit) -> void:
 	unit.periodic_timer = 0.0
 	if is_zero_approx(unit.periodic_delta):
 		return
-	_log("periodic", {"uid": unit.uid, "delta": unit.periodic_delta, "hp": unit.hp})
+	_log("periodic", {"uid": unit.uid, "delta": unit.periodic_delta, "hp": unit.hp, "mana": unit.mana})
 	unit.periodic_delta = 0.0
 
 
@@ -599,6 +601,7 @@ func _perform_attack(attacker: CombatUnit, target: CombatUnit) -> void:
 		"target": target.uid,
 		"damage": dealt,
 		"crit": is_crit,
+		"mana": attacker.mana,
 	})
 
 	if not target.is_alive():
@@ -623,6 +626,7 @@ func _deal_damage(source: CombatUnit, target: CombatUnit, amount: float, damage_
 		"kind": damage_type,
 		"hp": target.hp,
 		"shield": target.shield,
+		"mana": target.mana,
 	})
 
 	if not target.is_alive():
@@ -656,12 +660,12 @@ func _cast_ability(caster: CombatUnit) -> void:
 	var duration := float(def.ability_param("duration", star, 0.0))
 	var until := time + duration
 
-	_log("cast", {"uid": caster.uid, "ability": ability_type, "name": def.ability.get("name", "")})
 	caster.consume_mana()
+	_log("cast", {"uid": caster.uid, "ability": ability_type, "name": def.ability.get("name", ""), "mana": caster.mana})
 
 	match ability_type:
 		"shield_self":
-			caster.add_shield(float(def.ability_param("amount", star)))
+			_grant_shield(caster, float(def.ability_param("amount", star)))
 			var reduction := float(def.ability_param("damage_reduction", star, 0.0))
 			if reduction > 0.0:
 				caster.add_mod("damage_reduction", reduction, until)
@@ -737,7 +741,7 @@ func _cast_ability(caster: CombatUnit) -> void:
 			var healed := ally.heal(float(def.ability_param("amount", star)), time)
 			var shield_amount := float(def.ability_param("shield", star, 0.0))
 			if shield_amount > 0.0:
-				ally.add_shield(shield_amount)
+				_grant_shield(ally, shield_amount)
 			var regen := float(def.ability_param("regen", star, 0.0))
 			if regen > 0.0:
 				ally.add_mod("regen_per_second", regen, until)
@@ -752,11 +756,11 @@ func _cast_ability(caster: CombatUnit) -> void:
 		"shield_allies":
 			var amount := float(def.ability_param("amount", star))
 			var armor_bonus := float(def.ability_param("armor", star, 0.0))
-			caster.add_shield(amount)
+			_grant_shield(caster, amount)
 			if armor_bonus > 0.0:
 				caster.add_mod("armor", armor_bonus, until)
 			for ally in _nearest_allies(caster, int(def.ability_param("allies", star, 2))):
-				ally.add_shield(amount)
+				_grant_shield(ally, amount)
 				if armor_bonus > 0.0:
 					ally.add_mod("armor", armor_bonus, until)
 
@@ -773,10 +777,19 @@ func _cast_ability(caster: CombatUnit) -> void:
 				if omnivamp > 0.0:
 					ally.add_mod("omnivamp", omnivamp, until)
 				if shield_amount > 0.0 and _distance(ally.cell, caster.cell) <= 2:
-					ally.add_shield(shield_amount)
+					_grant_shield(ally, shield_amount)
 
 		_:
 			push_warning("CombatSim: tipo di abilità non gestito '%s' (%s)" % [ability_type, def.id])
+
+
+## Lo scudo va nel log nel momento in cui compare: senza, la vista lo
+## scoprirebbe solo al colpo successivo, a scudo già in parte consumato.
+func _grant_shield(unit: CombatUnit, amount: float) -> void:
+	if not unit.is_alive():
+		return
+	unit.add_shield(amount)
+	_log("shield", {"uid": unit.uid, "shield": unit.shield})
 
 
 func _damage_area(caster: CombatUnit, centre: Vector2i, radius: int, damage: float) -> void:

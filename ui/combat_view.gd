@@ -41,6 +41,7 @@ const OWN_COLOR := Color(0.4, 0.8, 0.45)
 const ENEMY_COLOR := Color(0.92, 0.42, 0.38)
 
 const BAR_SIZE := Vector2(58.0, 8.0)
+const MANA_BAR_HEIGHT := 4.0
 
 ## Fascio di fine round tra i ritratti eroe. Volutamente diverso dalle linee di
 ## colpo tra unità (_draw_flash: un filo dritto che sbiadisce): qui è un dardo
@@ -332,6 +333,9 @@ func load_combat(combat: Dictionary, team: int = 0) -> void:
 			"max_hp": float(entry["max_hp"]),
 			"hp": float(entry["max_hp"]),
 			"shield": float(entry.get("shield", 0.0)),
+			"mana": float(entry.get("mana", 0.0)),
+			"mana_max": float(entry.get("mana_max", 0.0)),
+			"has_ability": bool(entry.get("has_ability", false)),
 			"alive": true,
 			"death_time": -1.0,
 			"hit_time": -1.0,
@@ -452,6 +456,7 @@ func _apply_event(event: Dictionary, live: bool) -> void:
 			if attacker.is_empty() or target.is_empty():
 				return
 			attacker["hit_time"] = _time
+			attacker["mana"] = float(event.get("mana", attacker["mana"]))
 			# Girare l'attaccante verso il bersaglio rende leggibile chi sta
 			# colpendo chi anche quando la linea del colpo è già svanita.
 			_board.face_unit(int(event["uid"]), int(event["target"]))
@@ -473,6 +478,7 @@ func _apply_event(event: Dictionary, live: bool) -> void:
 				return
 			unit["hp"] = float(event["hp"])
 			unit["shield"] = float(event.get("shield", 0.0))
+			unit["mana"] = float(event.get("mana", unit["mana"]))
 			unit["hit_time"] = _time
 			var amount := int(roundf(float(event["amount"])))
 			if amount > 0:
@@ -495,12 +501,19 @@ func _apply_event(event: Dictionary, live: bool) -> void:
 			if unit.is_empty():
 				return
 			unit["hp"] = float(event["hp"])
+			unit["mana"] = float(event.get("mana", unit["mana"]))
+
+		"shield":
+			var unit: Dictionary = _units.get(int(event["uid"]), {})
+			if not unit.is_empty():
+				unit["shield"] = float(event["shield"])
 
 		"cast":
 			var unit: Dictionary = _units.get(int(event["uid"]), {})
 			if unit.is_empty():
 				return
 			unit["cast_time"] = _time
+			unit["mana"] = float(event.get("mana", 0.0))
 			_add_floater(int(event["uid"]), String(event.get("name", "")), Color(0.7, 0.8, 1.0), 0.30)
 			if live:
 				_play_sfx("cast")
@@ -634,11 +647,25 @@ func _draw_unit_hud(uid: int, unit: Dictionary) -> void:
 	var health_color := Color(0.45, 0.85, 0.45, alpha) if int(unit["team"]) == viewer_team else Color(0.9, 0.45, 0.42, alpha)
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * ratio, bar.size.y)), health_color, true)
 
-	# Lo scudo si sovrappone alla barra in chiaro, come nella vista precedente.
+	# Lo scudo copre la salute a tutta altezza, a partire dalla sua estremità
+	# verso sinistra: si legge come "questa parte di vita è protetta" e si
+	# accorcia man mano che assorbe colpi. Se supera la salute residua sborda
+	# nella parte vuota invece di sparire.
 	var shield_ratio: float = clampf(float(unit["shield"]) / maxf(1.0, float(unit["max_hp"])), 0.0, 1.0)
 	if shield_ratio > 0.0:
-		draw_rect(Rect2(bar.position, Vector2(bar.size.x * shield_ratio, 2.0)),
-			Color(0.9, 0.9, 0.95, alpha), true)
+		var shield_width := bar.size.x * shield_ratio
+		var shield_end := maxf(bar.size.x * ratio, shield_width)
+		draw_rect(Rect2(bar.position + Vector2(shield_end - shield_width, 0.0), Vector2(shield_width, bar.size.y)),
+			Color(0.95, 0.95, 1.0, 0.9 * alpha), true)
+
+	# Mana sotto la salute: dice quanto manca all'abilità. Solo per chi ne ha
+	# una, altrimenti una barra che si riempie senza mai scattare confonde.
+	if bool(unit["has_ability"]) and float(unit["mana_max"]) > 0.0:
+		var mana_bar := Rect2(bar.position + Vector2(0.0, bar.size.y + 2.0), Vector2(bar.size.x, MANA_BAR_HEIGHT))
+		draw_rect(mana_bar.grow(1.0), Color(0, 0, 0, 0.6 * alpha), true)
+		var mana_ratio: float = clampf(float(unit["mana"]) / float(unit["mana_max"]), 0.0, 1.0)
+		draw_rect(Rect2(mana_bar.position, Vector2(mana_bar.size.x * mana_ratio, mana_bar.size.y)),
+			Color(0.3, 0.55, 1.0, alpha), true)
 
 	if _time < float(unit["stun_until"]) and bool(unit["alive"]):
 		draw_string(_font, bar.position + Vector2(bar.size.x + 4.0, BAR_SIZE.y), "!",

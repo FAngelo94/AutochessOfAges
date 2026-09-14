@@ -26,6 +26,7 @@ const RPC_MATCH_HISTORY := "/rpc/player_match_history"
 const RPC_RECORD_DONATION := "/rpc/record_donation"
 const RPC_DONATION_SUMMARY := "/rpc/donation_summary"
 const RPC_PLAYER_DONATIONS := "/rpc/player_donations"
+const RPC_LEADERBOARD := "/rpc/leaderboard"
 const OWNED_CIVS_PATH := "/owned_civs"
 const PROFILES_PATH := "/profiles"
 
@@ -63,6 +64,15 @@ static func fetch_match_history(owner: Node, uid: String, limit: int, cb: Callab
 	var body := JSON.stringify({"p_profile_id": uid, "p_limit": limit})
 	_rpc(owner, RPC_MATCH_HISTORY, body, func(ok: bool, data: Variant) -> void:
 		cb.call(ok and data is Array, data if data is Array else []))
+
+
+## Classifica per mmr: i primi `limit` e la riga di `uid` (null se non ha
+## partite classificate). Posizioni e spareggi li calcola la RPC.
+## cb.call(ok: bool, data: Dictionary) con {top: Array, me: Dictionary|null}.
+static func fetch_leaderboard(owner: Node, uid: String, limit: int, cb: Callable) -> void:
+	var body := JSON.stringify({"p_uid": uid, "p_limit": limit})
+	_rpc(owner, RPC_LEADERBOARD, body, func(ok: bool, data: Variant) -> void:
+		cb.call(ok and data is Dictionary, data if data is Dictionary else {}))
 
 
 # --------------------------------------------------------------------------
