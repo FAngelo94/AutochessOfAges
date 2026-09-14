@@ -254,10 +254,10 @@ func _guest_card(is_guest: bool) -> Control:
 	return card
 
 
-## Pulsante nella colonna delle impostazioni che apre la schermata "Crediti".
+## Pulsante nella colonna delle impostazioni che apre la schermata "Riconoscimenti".
 func _credits_button() -> Control:
 	var button := Button.new()
-	button.text = "Crediti"
+	button.text = "Riconoscimenti"
 	button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	button.add_theme_font_size_override("font_size", 22)
 	Style.apply_plate(button, Style.BLUE, Style.BLUE_DEEP, 14, 4)
@@ -286,16 +286,36 @@ func _show_credits() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "CREDITI"
+	title.text = "RICONOSCIMENTI"
 	title.add_theme_font_size_override("font_size", 34)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
 
-	column.add_child(_person_card("Angelo Falci", "Sviluppatore e Game Designer"))
+	# Le sezioni superano l'altezza di uno schermo 16:9: scorrono, mentre titolo
+	# e Chiudi restano fissi.
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(scroll)
 
-	var grow := Control.new()
-	grow.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(grow)
+	var body := VBoxContainer.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 12)
+	scroll.add_child(body)
+
+	body.add_child(_section_title("Game Designer e Creatori"))
+	body.add_child(_names_card(["Angelo Falci"]))
+	body.add_child(_section_title("Sviluppatori"))
+	body.add_child(_names_card(["Angelo Falci", "Matteo Guardini"]))
+	body.add_child(_section_title("Designer"))
+	body.add_child(_names_card(["Leonardo Nuccilli", "Andrea Guardini"]))
+
+	body.add_child(_section_title("Colonna sonora"))
+	# Attribuzione richiesta dalla CC BY 4.0: titolo, autore, fonte, licenza e
+	# indicazione delle modifiche (le tracce sono tagliate per il loop).
+	body.add_child(_track_card("Juniper", ""))
+	body.add_child(_track_card("Lasting Hope", "Modificato: tagliato ai primi 45 secondi."))
+	body.add_child(_track_card("The Ice Giants", "Modificato: accorciato per il loop."))
 
 	var close := Button.new()
 	close.text = "Chiudi"
@@ -308,7 +328,16 @@ func _show_credits() -> void:
 	add_child(overlay)
 
 
-func _person_card(name: String, role: String) -> Control:
+func _section_title(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", Style.GOLD)
+	return label
+
+
+## Una card con un nome per riga: le persone di una stessa sezione.
+func _names_card(names: Array) -> Control:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
 
@@ -316,17 +345,59 @@ func _person_card(name: String, role: String) -> Control:
 	inner.add_theme_constant_override("separation", 4)
 	card.add_child(inner)
 
+	for person in names:
+		var name_label := Label.new()
+		name_label.text = person
+		name_label.add_theme_font_size_override("font_size", 20)
+		name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
+		inner.add_child(name_label)
+
+	return card
+
+
+const LICENSE_URL := "http://creativecommons.org/licenses/by/4.0/"
+
+
+## Card di attribuzione di un brano di Kevin MacLeod, nel formato indicato da
+## incompetech.com. `note` descrive le modifiche fatte al file, vuota se nessuna.
+func _track_card(title: String, note: String) -> Control:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", Style.plate(Style.PLATE, Style.PLATE_DARK, 12, 4))
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 2)
+	card.add_child(inner)
+
 	var name_label := Label.new()
-	name_label.text = name
-	name_label.add_theme_font_size_override("font_size", 20)
+	name_label.text = "\"%s\" Kevin MacLeod (incompetech.com)" % title
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_label.add_theme_font_size_override("font_size", 18)
 	name_label.add_theme_color_override("font_color", Style.GOLD.darkened(0.15))
 	inner.add_child(name_label)
 
-	var role_label := Label.new()
-	role_label.text = role
-	role_label.add_theme_font_size_override("font_size", 16)
-	role_label.add_theme_color_override("font_color", Style.TEXT_DIM)
-	inner.add_child(role_label)
+	var license := Label.new()
+	license.text = "Licensed under Creative Commons: By Attribution 4.0 License"
+	license.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	license.add_theme_font_size_override("font_size", 14)
+	license.add_theme_color_override("font_color", Style.TEXT_DIM)
+	inner.add_child(license)
+
+	var link := Button.new()
+	link.text = LICENSE_URL
+	link.flat = true
+	link.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	link.add_theme_font_size_override("font_size", 14)
+	link.add_theme_color_override("font_color", Style.BLUE)
+	link.pressed.connect(func() -> void: OS.shell_open(LICENSE_URL))
+	inner.add_child(link)
+
+	if note != "":
+		var note_label := Label.new()
+		note_label.text = note
+		note_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note_label.add_theme_font_size_override("font_size", 14)
+		note_label.add_theme_color_override("font_color", Style.TEXT_DIM)
+		inner.add_child(note_label)
 
 	return card
 
