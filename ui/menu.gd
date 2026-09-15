@@ -26,10 +26,17 @@ const HERO_CAMERA_OFFSET := Vector3(0, 1.35, 2.35)
 const HERO_ZOOM := 1.5
 
 ## Vetrina 3D della scheda di dettaglio eroe: stessa impostazione di quella in
-## home, più piccola perché condivide la modale con nome, civiltà e testo.
-const HERO_DETAIL_VIEW_SIZE := 170
+## home. La modale è ancorata all'84% dello schermo (_build_small_modal), con
+## nome/civiltà/testo che occupano una piccola parte di quello spazio: il
+## modello può prendersi la parte grande senza spingere via nulla.
+const HERO_DETAIL_VIEW_SIZE := 400
 const HERO_DETAIL_CAMERA_OFFSET := Vector3(0, 1.35, 2.35)
-const HERO_DETAIL_ZOOM := 1.5
+## Più largo di quanto l'altezza da sola richieda, come in collezione: un
+## eroe che tiene un'arma di traverso può sporgere più largo che alto quando
+## ruota, e uscire dall'inquadratura.
+const HERO_DETAIL_ZOOM := 1.9
+## Un giro completo ogni 24 secondi, come nella scheda unità in collezione.
+const HERO_DETAIL_AUTO_ROTATE_SPEED := TAU / 24.0
 
 ## Gli autoload si prendono dall'albero e non per nome globale: gli script
 ## compilati da riga di comando (test headless) non li vedrebbero.
@@ -73,11 +80,20 @@ var _hero_detail_camera: Camera3D
 var _hero_detail_model_root: Node3D
 var _hero_detail_dragging := false
 var _hero_detail_drag_last_x := 0.0
+## Vero finché il giocatore non tocca il modello: si spegne al primo drag e
+## resta spento per quell'eroe (si riaccende aprendone un altro).
+var _hero_detail_auto_rotating := true
 var _hero_detail_name: Label
 var _hero_detail_origin: Label
 var _hero_detail_lore: Label
 var _hero_detail_ability: Label
 var _hero_detail_select: Button
+
+
+func _process(delta: float) -> void:
+	if _hero_detail_auto_rotating and _hero_detail_panel != null and _hero_detail_panel.visible \
+			and _hero_detail_model_root != null:
+		_hero_detail_model_root.rotate_y(HERO_DETAIL_AUTO_ROTATE_SPEED * delta)
 
 
 func _ready() -> void:
@@ -691,6 +707,8 @@ func _on_hero_detail_viewport_input(event: InputEvent) -> void:
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			_hero_detail_dragging = mb.pressed
 			_hero_detail_drag_last_x = mb.position.x
+			if mb.pressed:
+				_hero_detail_auto_rotating = false
 	elif event is InputEventMouseMotion and _hero_detail_dragging:
 		var mm := event as InputEventMouseMotion
 		var delta_x := mm.position.x - _hero_detail_drag_last_x
@@ -707,6 +725,7 @@ func _show_hero_detail_model(hero_id: String) -> void:
 		child.queue_free()
 	_hero_detail_model_root.add_child(UnitModels.build_hero(hero_id))
 	_hero_detail_model_root.rotation.y = 0.0
+	_hero_detail_auto_rotating = true
 
 	var height := UnitModels.height_of_hero(hero_id)
 	var centre := Vector3(0, height * 0.58, 0)

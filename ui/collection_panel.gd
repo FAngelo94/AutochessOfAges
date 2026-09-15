@@ -30,12 +30,26 @@ var _detail_dragging := false
 var _detail_drag_last_x := 0.0
 var _filter_origin: String = ""
 var _filter_buttons: Dictionary = {}
+## Vero finché il giocatore non tocca il modello: si spegne al primo drag e
+## resta spento per quell'unità (si riaccende mostrandone un'altra).
+var _auto_rotating := true
 
 ## Inquadratura della scheda: più ravvicinata di quella delle caselline, dato
 ## che qui il modello è il punto della pagina e non un'icona fra le tante.
-const DETAIL_VIEW_SIZE := 260
+## Il modello è il motivo per cui si apre la scheda, quindi prende la parte
+## del leone: più delle caselline della griglia, la scritta serve solo a
+## confermare cosa si sta guardando.
+const DETAIL_VIEW_SIZE := 340
 const DETAIL_CAMERA_OFFSET := Vector3(1.15, 1.35, 2.05)
-const DETAIL_ZOOM := 1.4
+## Più largo di quanto l'altezza da sola richieda: la camera inquadra in base
+## alla sola altezza del modello, ma ruotando un'unità lunga (i bracci del
+## balestrone, una lancia tenuta di traverso) può sporgere più larga che alta
+## e uscire dall'inquadratura. Il margine in più tiene la sagoma dentro anche
+## quando gira.
+const DETAIL_ZOOM := 1.9
+## Un giro completo ogni 24 secondi: abbastanza lento da leggersi come "questo
+## si guarda da tutti i lati", non come qualcosa che gira per conto suo.
+const AUTO_ROTATE_SPEED := TAU / 24.0
 
 
 func _ready() -> void:
@@ -43,6 +57,11 @@ func _ready() -> void:
 	add_theme_stylebox_override("panel", Style.box(Style.SKY_TOP, Style.SKY_TOP, 0, 0))
 	visible = false
 	_build()
+
+
+func _process(delta: float) -> void:
+	if _auto_rotating and _detail_sheet != null and _detail_sheet.visible and _detail_model_root != null:
+		_detail_model_root.rotate_y(AUTO_ROTATE_SPEED * delta)
 
 
 func open() -> void:
@@ -236,6 +255,8 @@ func _on_detail_viewport_input(event: InputEvent) -> void:
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			_detail_dragging = mb.pressed
 			_detail_drag_last_x = mb.position.x
+			if mb.pressed:
+				_auto_rotating = false
 	elif event is InputEventMouseMotion and _detail_dragging:
 		var mm := event as InputEventMouseMotion
 		var delta_x := mm.position.x - _detail_drag_last_x
@@ -252,6 +273,7 @@ func _show_model(def: UnitDef) -> void:
 		child.queue_free()
 	_detail_model_root.add_child(UnitModels.build(def.id, def.origin))
 	_detail_model_root.rotation.y = 0.0
+	_auto_rotating = true
 
 	var height := UnitModels.height_of(def.id)
 	var centre := Vector3(0, height * 0.58, 0)
