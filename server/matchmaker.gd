@@ -247,7 +247,7 @@ func _seal() -> void:
 		_send(q.peer_id, Protocol.make(Protocol.MATCH_ASSIGNED, {
 			"match_id": match_id,
 			"worker_path": WORKER_PATH,
-			"match_token": MatchToken.mint(match_id, q.uid, now),
+			"match_token": MatchToken.mint(match_id, q.uid, now, MatchToken.REJOIN_TTL),
 			"seed": seed_value,
 		}))
 

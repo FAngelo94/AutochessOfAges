@@ -84,7 +84,7 @@ func _build() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "COLLEZIONE"
+	title.text = tr("COLLECTION_TITLE")
 	title.add_theme_font_size_override("font_size", 34)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
@@ -100,7 +100,7 @@ func _build() -> void:
 	filters.add_theme_constant_override("separation", 8)
 	filter_scroll.add_child(filters)
 
-	_filter_buttons[""] = _filter_button(filters, "Tutte", Style.TEXT_DIM, "")
+	_filter_buttons[""] = _filter_button(filters, tr("COLLECTION_ALL"), Style.TEXT_DIM, "")
 	for origin_id in GameData.origin_ids():
 		var id := String(origin_id)
 		_filter_buttons[id] = _filter_button(
@@ -119,7 +119,7 @@ func _build() -> void:
 	scroll.add_child(_grid)
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 26)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -188,7 +188,7 @@ func _build_detail_sheet() -> void:
 	column.add_child(_detail)
 
 	var back := Button.new()
-	back.text = "Indietro"
+	back.text = tr("UI_BACK")
 	back.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	back.add_theme_font_size_override("font_size", 26)
 	Style.apply_plate(back, Style.PLATE, Style.PLATE_DARK, 18, 6)
@@ -317,7 +317,7 @@ func _refresh() -> void:
 		entry.add_child(name)
 
 		var cost := Label.new()
-		cost.text = "%d oro" % def.cost
+		cost.text = tr("UNIT_COST_GOLD") % def.cost
 		cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		cost.add_theme_font_size_override("font_size", 18)
 		cost.add_theme_color_override("font_color", Style.rarity_color(def.cost))
@@ -366,26 +366,25 @@ func _show_detail(unit_id: String) -> void:
 
 	var lines: Array[String] = []
 	lines.append("[b][font_size=30]%s[/font_size][/b]" % def.display_name)
-	lines.append("[color=#9aa]%s — %d oro[/color]" % [", ".join(traits), def.cost])
+	lines.append("[color=#9aa]%s[/color]" % (tr("UNIT_TRAITS_COST") % [", ".join(traits), def.cost]))
 	lines.append("")
 
 	# Le statistiche a tutte e tre le stelle: è l'informazione che serve
 	# davvero per decidere se vale la pena inseguire una copia.
-	lines.append("[b]Statistiche[/b]")
+	lines.append("[b]%s[/b]" % tr("COLLECTION_STATS"))
 	for star in [1, 2, 3]:
-		lines.append("  %s  salute %d, danno %d" % [
-			"★".repeat(star),
+		lines.append("  %s  " % "★".repeat(star) + tr("COLLECTION_STAT_HP_DAMAGE") % [
 			int(def.stat_at_star("hp", star)),
 			int(def.stat_at_star("attack_damage", star)),
 		])
 	var stats := def.base_stats
-	lines.append("  gittata %d, velocità d'attacco %.2f" % [
+	lines.append("  " + tr("COLLECTION_STAT_RANGE_SPEED") % [
 		int(stats.get("range", 1)), float(stats.get("attack_speed", 0.0)),
 	])
-	lines.append("  armatura %d, resistenza magica %d" % [
+	lines.append("  " + tr("COLLECTION_STAT_ARMOR_MR") % [
 		int(stats.get("armor", 0)), int(stats.get("magic_resist", 0)),
 	])
-	lines.append("  mana %d/%d" % [int(stats.get("mana_start", 0)), int(stats.get("mana_max", 0))])
+	lines.append("  " + tr("COLLECTION_STAT_MANA") % [int(stats.get("mana_start", 0)), int(stats.get("mana_max", 0))])
 	lines.append("")
 
 	lines.append("[b]%s[/b]" % def.ability.get("name", "—"))
@@ -402,7 +401,7 @@ func _show_detail(unit_id: String) -> void:
 	# Non tutte le unità hanno ancora una scheda storica: si aggiunge solo in
 	# fondo, dopo le informazioni di gioco, e solo se presente.
 	if not def.lore.is_empty():
-		lines.append("[b]Storia[/b]")
+		lines.append("[b]%s[/b]" % tr("COLLECTION_LORE"))
 		lines.append("[color=#ccc]%s[/color]" % def.lore)
 		lines.append("")
 

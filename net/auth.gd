@@ -329,6 +329,25 @@ func request_history(limit: int, cb: Callable) -> void:
 			cb.call(done, matches))
 
 
+## Classifica per mmr: primi `limit` giocatori e la propria riga.
+## cb.call(ok: bool, data: Dictionary) con {top: Array, me: Dictionary} — `me`
+## vuoto se non si ha ancora una partita classificata. Da sloggati o da ospiti
+## risponde subito con esito negativo: la classifica esiste solo per gli account.
+func request_leaderboard(limit: int, cb: Callable) -> void:
+	if not is_logged_in():
+		cb.call(false, {})
+		return
+	_master_request(
+		Protocol.make(Protocol.LEADERBOARD_REQUEST, {
+			"session_token": _access_token,
+			"limit": limit,
+		}),
+		[Protocol.LEADERBOARD_DATA, Protocol.AUTH_FAIL],
+		func(ok: bool, msg: Dictionary) -> void:
+			var done := ok and Protocol.message_type(msg) == Protocol.LEADERBOARD_DATA
+			cb.call(done, msg if done else {}))
+
+
 ## Stato del Crowdfunding Store: totale raccolto, obiettivo, sostenitori e le
 ## proprie donazioni. cb.call(ok: bool, data: Dictionary).
 ##
@@ -588,7 +607,7 @@ static func email_looks_valid(email: String) -> bool:
 ## "" se la password va bene, altrimenti il messaggio da mostrare.
 static func password_problem(password: String) -> String:
 	if password.length() < 8:
-		return "La password deve avere almeno 8 caratteri."
+		return String(TranslationServer.translate("LOGIN_PASSWORD_TOO_SHORT"))
 	return ""
 
 

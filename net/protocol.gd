@@ -35,6 +35,7 @@ const DELETE_ACCOUNT := "DELETE_ACCOUNT"# {session_token} — cancellazione GDPR
 ## la RPC player_match_history (db/migrations/0004_match_units.sql).
 const HISTORY_REQUEST := "HISTORY_REQUEST"  # {session_token, limit}
 const DONATIONS_REQUEST := "DONATIONS_REQUEST"  # {session_token, limit}
+const LEADERBOARD_REQUEST := "LEADERBOARD_REQUEST"  # {session_token, limit}
 
 # --- Client -> Master ---------------------------------------------------------
 const HELLO := "HELLO"                  # {protocol_version, access_token}
@@ -52,7 +53,8 @@ const AUTH_PENDING := "AUTH_PENDING"    # {}
 const PROFILE_OK := "PROFILE_OK"        # {}
 const ACCOUNT_DELETED := "ACCOUNT_DELETED" # {}
 const DONATIONS_DATA := "DONATIONS_DATA"  # {total_cents, goal_cents, supporters, mine: [{amount_cents, created_at}]}
-const HISTORY_DATA := "HISTORY_DATA"    # {matches: [{match_id, ended_at, ranked, placement, hero_id, hp, mmr_delta, mmr_after, humans, units}]}
+const LEADERBOARD_DATA := "LEADERBOARD_DATA"  # {top: [{position, username, mmr, matches_played, wins, top4, is_me}], me: {...} | null}
+const HISTORY_DATA := "HISTORY_DATA"   # {matches: [{match_id, ended_at, ranked, placement, hero_id, hp, mmr_delta, mmr_after, humans, units}]}
 const WELCOME := "WELCOME"              # {user_id, username, stats}
 const REJECTED := "REJECTED"            # {reason: version|auth|banned|oversize}
 const QUEUE_UPDATE := "QUEUE_UPDATE"    # {players, seconds_left}
@@ -73,6 +75,14 @@ const CMD_MOVE_BENCH := "CMD_MOVE_BENCH"# {uid, slot}
 const READY := "READY"                  # {}
 const SPECTATE_REQUEST := "SPECTATE_REQUEST" # {player_index}
 const SURRENDER := "SURRENDER"          # {}
+## Battito applicativo del worker: nessuno dei due lati riceve un vero close-frame
+## quando l'OS sospende l'app in background e droppa il socket in silenzio — senza
+## questo scambio periodico, sia il client che il worker crederebbero la
+## connessione ancora viva all'infinito. Vedi net/remote_session.gd, server/game_worker.gd.
+const PING := "PING"                    # {}
+
+# --- Worker -> Client (anche in risposta a PING) ----------------------------
+const PONG := "PONG"                    # {}
 
 # --- Worker -> Client -------------------------------------------------------
 const MATCH_STATE := "MATCH_STATE"          # {state: MatchState.to_dict(for_index), for_index, next_opponent_index?}

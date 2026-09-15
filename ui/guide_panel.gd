@@ -40,7 +40,7 @@ func _build() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "GUIDA"
+	title.text = tr("GUIDE_TITLE")
 	title.add_theme_font_size_override("font_size", 34)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
@@ -61,7 +61,7 @@ func _build() -> void:
 	sections.add_child(_reset_tips_row())
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 26)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -104,7 +104,7 @@ func _reset_tips_row() -> Control:
 	card.add_theme_constant_override("separation", 4)
 
 	_reset_tips_button = Button.new()
-	_reset_tips_button.text = "Rivedi i suggerimenti"
+	_reset_tips_button.text = tr("GUIDE_RESET_TIPS")
 	_reset_tips_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	_reset_tips_button.add_theme_font_size_override("font_size", 18)
 	Style.apply_plate(_reset_tips_button, Style.PLATE, Style.PLATE_DARK, 16, 5)
@@ -122,4 +122,4 @@ func _reset_tips_row() -> Control:
 
 func _on_reset_tips_pressed() -> void:
 	get_node("/root/Profile").reset_tips()
-	_reset_tips_label.text = "I suggerimenti torneranno dalla prossima partita."
+	_reset_tips_label.text = tr("GUIDE_TIPS_RESET_DONE")

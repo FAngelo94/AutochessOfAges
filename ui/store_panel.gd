@@ -81,7 +81,7 @@ func _build() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "CROWDFUNDING STORE"
+	title.text = tr("STORE_TITLE")
 	title.add_theme_font_size_override("font_size", 30)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
@@ -109,7 +109,7 @@ func _build() -> void:
 	body.add_child(_build_goals())
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 26)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -209,7 +209,7 @@ func _build_goals() -> Control:
 	box.add_theme_constant_override("separation", 6)
 
 	var heading := Label.new()
-	heading.text = "Al raggiungimento della cifra:"
+	heading.text = tr("STORE_ON_REACHING_GOAL")
 	heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	heading.add_theme_font_size_override("font_size", 22)
 	heading.add_theme_color_override("font_color", Style.GOLD)
@@ -245,8 +245,8 @@ func _donate(amount_cents: int) -> void:
 	# L'attesa e l'esito stanno in una modale, non nella riga di stato: quella
 	# riga dice cos'è questa schermata, e un messaggio che va e viene la
 	# renderebbe illeggibile proprio mentre serve.
-	_pending = ModalDialog.notice(self, "Tributo in corso",
-		"Stiamo aprendo il pagamento di %s." % _euro(amount_cents))
+	_pending = ModalDialog.notice(self, tr("STORE_DONATION_PENDING_TITLE"),
+		tr("STORE_DONATION_PENDING_BODY") % _euro(amount_cents))
 	_store.donate(amount_cents)
 
 
@@ -264,11 +264,11 @@ func _dismiss_pending() -> void:
 func _refresh() -> void:
 	var available: bool = _store.backend.is_available() or _store.backend is MockStore
 	if not available:
-		_status.text = "Pagamenti non disponibili su questa piattaforma. Tutti i contenuti di gioco restano accessibili."
+		_status.text = tr("STORE_UNAVAILABLE")
 	elif not _is_logged_in():
-		_status.text = "Accedi con un account per lasciare un tributo: serve ad attribuirtelo."
+		_status.text = tr("STORE_LOGIN_TO_DONATE")
 	else:
-		_status.text = "Ogni tributo sostiene lo sviluppo del gioco."
+		_status.text = tr("STORE_STATUS")
 
 	for amount in _quick:
 		var button: Button = _quick[amount]
@@ -290,9 +290,9 @@ func _refresh_bar() -> void:
 	_bar.max_value = maxi(goal, 1)
 	_bar.value = clampi(_total_cents, 0, goal)
 	if _total_known:
-		_bar_label.text = "%s su %s" % [_euro(_total_cents), _euro(goal)]
+		_bar_label.text = tr("STORE_PROGRESS_KNOWN") % [_euro(_total_cents), _euro(goal)]
 	else:
-		_bar_label.text = "— su %s" % _euro(goal)
+		_bar_label.text = tr("STORE_PROGRESS_UNKNOWN") % _euro(goal)
 
 
 ## Chiede il totale al server. Da ospiti o offline non c'è nessuno a cui
@@ -322,8 +322,8 @@ func _request_total() -> void:
 func _on_donation_completed(amount_cents: int, success: bool, reason: String) -> void:
 	_dismiss_pending()
 	if success:
-		ModalDialog.notice(self, "Grazie, benefattore!",
-			"Il tuo tributo di %s è stato accolto." % _euro(amount_cents))
+		ModalDialog.notice(self, tr("STORE_THANK_YOU_TITLE"),
+			tr("STORE_THANK_YOU_BODY") % _euro(amount_cents))
 		# La riga la scrive il webhook di RevenueCat, che arriva in pochi
 		# secondi: il totale si richiede subito e poi ancora una volta, invece
 		# di inventare uno stato "in attesa" da riconciliare.
@@ -345,9 +345,8 @@ func _on_donation_completed(amount_cents: int, success: bool, reason: String) ->
 		# L'ambientazione si ferma al titolo: la frase sull'addebito e' in
 		# italiano piano e sta per prima, perche' e' la prima domanda di chi vede
 		# fallire un pagamento e non deve costargli un secondo di interpretazione.
-		ModalDialog.notice(self, "Il tributo non è giunto a destinazione",
-			"Non ti è stato addebitato nulla.\n\n"
-			+ "Il pagamento non è andato a buon fine. Puoi riprovare quando vuoi.")
+		ModalDialog.notice(self, tr("STORE_DONATION_FAILED_TITLE"),
+			tr("STORE_DONATION_FAILED_BODY"))
 	_refresh()
 
 

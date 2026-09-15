@@ -50,15 +50,17 @@ var _answered := false
 ## Avviso: un solo tasto, nessuna scelta da fare. Emette comunque `confirmed`
 ## alla chiusura, per chi voglia incatenarci qualcosa.
 static func notice(host: Node, title: String, message: String,
-		ok_text: String = "Ho capito") -> ModalDialog:
-	return _open(host, title, message, ok_text, "")
+		ok_text: String = "") -> ModalDialog:
+	var text: String = ok_text if ok_text != "" else String(TranslationServer.translate("UI_GOT_IT"))
+	return _open(host, title, message, text, "")
 
 
 ## Domanda: due tasti. `ok_text` è il verbo dell'azione ("Esci", "Abbandona"),
 ## non un "OK" generico — su un tasto che distrugge una partita in corso il
 ## giocatore deve leggere cosa sta per succedere.
 static func confirm(host: Node, title: String, message: String, ok_text: String,
-		cancel_text: String = "Annulla") -> ModalDialog:
+		cancel_text: String = "") -> ModalDialog:
+	cancel_text = cancel_text if cancel_text != "" else String(TranslationServer.translate("UI_CANCEL"))
 	return _open(host, title, message, ok_text, cancel_text)
 
 

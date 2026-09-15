@@ -15,6 +15,14 @@ config/description="Auto battler ambientato tra le civiltà antiche: Romani, Gal
 run/main_scene="res://ui/login.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.07, 0.1, 0.2, 1)
+boot_splash/image="res://art/splash/boot_logo.png"
+boot_splash/fullsize=false
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://translations/ui.it.translation", "res://translations/ui.en.translation")
+locale/fallback="it"
 
 [autoload]
 

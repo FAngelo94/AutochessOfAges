@@ -35,21 +35,74 @@ static func _load_json(path: String) -> Dictionary:
 	return parsed
 
 
+## Codice lingua a 2 lettere del locale corrente ("it", "en", ...). "it" è il
+## file JSON canonico: nessuna sovrascrittura, solo en/altre lingue cercano un
+## file *.{locale}.json affiancato.
+static func _locale_code() -> String:
+	return TranslationServer.get_locale().substr(0, 2)
+
+
+## Carica path e, se il locale corrente non è "it", sovrascrive i soli campi di
+## testo con quelli di path minus estensione + ".<locale>.json" (se esiste). Un
+## id o un campo assente dalla traduzione resta in italiano: un contenuto non
+## ancora tradotto non deve mai comparire vuoto o rompere il caricamento.
+## Pubblica: riusata da Catalog per data/catalog.json, che segue lo stesso
+## schema di traduzione ma vive fuori da GameData (non è bilanciamento).
+static func load_localized(path: String) -> Dictionary:
+	var base := _load_json(path)
+	var locale := _locale_code()
+	if locale == "it" or locale == "":
+		return base
+	var overlay_path := path.get_basename() + "." + locale + ".json"
+	if not FileAccess.file_exists(overlay_path):
+		return base
+	var overlay := _load_json(overlay_path)
+	return _merge_locale(base, overlay)
+
+
+## Fonde ricorsivamente overlay dentro base. I dizionari si uniscono chiave per
+## chiave; gli array di dizionari con "id" si abbinano per id (l'ordine può
+## differire tra i due file), gli altri array per indice; gli scalari
+## dell'overlay vincono sempre su quelli di base.
+static func _merge_locale(base, overlay):
+	if typeof(overlay) == TYPE_DICTIONARY and typeof(base) == TYPE_DICTIONARY:
+		for key in overlay.keys():
+			base[key] = _merge_locale(base[key], overlay[key]) if base.has(key) else overlay[key]
+		return base
+	if typeof(overlay) == TYPE_ARRAY and typeof(base) == TYPE_ARRAY:
+		var base_by_id := {}
+		var all_have_id: bool = base.size() > 0
+		for item in base:
+			if typeof(item) == TYPE_DICTIONARY and item.has("id"):
+				base_by_id[item["id"]] = item
+			else:
+				all_have_id = false
+		if all_have_id:
+			for ov_item in overlay:
+				if typeof(ov_item) == TYPE_DICTIONARY and ov_item.has("id") and base_by_id.has(ov_item["id"]):
+					_merge_locale(base_by_id[ov_item["id"]], ov_item)
+			return base
+		for i in range(min(base.size(), overlay.size())):
+			base[i] = _merge_locale(base[i], overlay[i])
+		return base
+	return overlay
+
+
 static func ensure_loaded() -> void:
 	if _loaded:
 		return
 	_loaded = true
 	_balance = _load_json(BALANCE_PATH)
-	_traits = _load_json(TRAITS_PATH)
-	var units_file := _load_json(UNITS_PATH)
+	_traits = load_localized(TRAITS_PATH)
+	var units_file := load_localized(UNITS_PATH)
 	for entry in units_file.get("units", []):
 		var def := UnitDef.from_dict(entry)
 		_units_by_id[def.id] = def
-	var heroes_file := _load_json(HEROES_PATH)
+	var heroes_file := load_localized(HEROES_PATH)
 	for entry in heroes_file.get("heroes", []):
 		var hdef := HeroDef.from_dict(entry)
 		_heroes_by_id[hdef.id] = hdef
-	_tutorial = _load_json(TUTORIAL_PATH)
+	_tutorial = load_localized(TUTORIAL_PATH)
 
 
 ## Ricarica i JSON da disco. Utile per iterare sul bilanciamento senza

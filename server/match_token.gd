@@ -12,6 +12,13 @@ extends RefCounted
 ## contengono '|', match_id e uid sono generati dal server).
 
 const DEFAULT_TTL := 120  # secondi: il tempo per passare dal master al worker
+## TTL del match_token consegnato al client in MATCH_ASSIGNED: quello stesso
+## token è anche l'unica credenziale che il worker chiede per un JOIN di
+## riconnessione (nessun altro controllo di identità in _on_join), quindi deve
+## coprire l'intera partita, non solo l'handoff master -> worker — un umano che
+## chiude il gioco e lo riapre più tardi deve poter rientrare con lo stesso
+## token che aveva. 6 ore è ampiamente oltre la durata di qualunque partita.
+const REJOIN_TTL := 6 * 3600
 
 
 static func mint(match_id: String, uid: String, now_unix: int = -1, ttl: int = DEFAULT_TTL) -> String:

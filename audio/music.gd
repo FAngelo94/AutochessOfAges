@@ -4,7 +4,8 @@ extends Node
 ##
 ## Eccezione consapevole alla regola "niente asset su disco": gli effetti sonori
 ## (Sfx) restano sintetizzati, ma una traccia musicale non si sintetizza in modo
-## decente. I file stanno in audio/*.ogg (CC BY 3.0 salvo diversa nota):
+## decente. I file stanno in audio/*.ogg (tutte di Kevin MacLeod,
+## incompetech.com, CC BY 4.0 — attribuzione nella schermata Riconoscimenti):
 ##
 ##   general  audio/general_theme.ogg  "Juniper" — sottofondo di menu, login,
 ##                                     collezione, negozio, guida, risultati

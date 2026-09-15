@@ -113,7 +113,7 @@ static func merge(into: Dictionary, other: Dictionary) -> Dictionary:
 	if into.is_empty():
 		into = {
 			"matches": 0, "total_rounds": 0, "level_sum": 0, "level_n": 0,
-			"max_level_seen": 0, "units": {}, "traits": {},
+			"max_level_seen": 0, "units": {}, "traits": {}, "heroes": {},
 			"_draw_sum": 0.0, "_duration_sum": 0.0, "_duration_n": 0.0,
 		}
 	for key in ["matches", "total_rounds", "level_sum", "level_n"]:
@@ -129,6 +129,9 @@ static func merge(into: Dictionary, other: Dictionary) -> Dictionary:
 
 	_merge_counters(into["units"], other.get("units", {}), ["id", "name", "origin", "cost"])
 	_merge_counters(into["traits"], other.get("traits", {}), ["trait", "threshold"])
+	if not into.has("heroes"):
+		into["heroes"] = {}
+	_merge_counters(into["heroes"], other.get("heroes", {}), ["id"])
 	return into
 
 

@@ -84,6 +84,19 @@ func _test_protocol() -> void:
 	check(Protocol.message_type(data) == Protocol.HISTORY_DATA
 		and data.get("matches", []).size() == 1, "HISTORY_DATA sopravvive alla codifica")
 
+	# La classifica idem: posizioni e mmr li calcola Postgres.
+	var lb := Protocol.decode(Protocol.encode(Protocol.make(Protocol.LEADERBOARD_REQUEST, {
+		"session_token": "t", "limit": 100})))
+	check(Protocol.message_type(lb) == Protocol.LEADERBOARD_REQUEST
+		and int(lb.get("limit", 0)) == 100, "LEADERBOARD_REQUEST sopravvive alla codifica")
+	var lb_data := Protocol.decode(Protocol.encode(Protocol.make(Protocol.LEADERBOARD_DATA, {
+		"top": [{"position": 1, "username": "a", "mmr": 1200, "is_me": false}],
+		"me": {"position": 140, "username": "b", "mmr": 980, "is_me": true}})))
+	check(Protocol.message_type(lb_data) == Protocol.LEADERBOARD_DATA
+		and lb_data.get("top", []).size() == 1
+		and int(lb_data.get("me", {}).get("position", 0)) == 140,
+		"LEADERBOARD_DATA sopravvive alla codifica")
+
 	# Le donazioni seguono la stessa strada: il totale della barra lo somma il
 	# server, il client si limita a chiederlo.
 	var don := Protocol.decode(Protocol.encode(Protocol.make(Protocol.DONATIONS_REQUEST, {

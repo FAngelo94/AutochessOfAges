@@ -1,0 +1,80 @@
+{
+  "_comment": "English text overlay for traits.json.",
+  "origins": {
+    "roman": {
+      "name": "Romans",
+      "description": "The tight formation turns infantry into a wall. Every threshold strengthens the whole team, not just the Romans.",
+      "tiers": [
+        { "text": "+12 armor and magic resist to all allies" },
+        { "text": "+25 armor and magic resist to all allies" },
+        { "text": "+45 armor and magic resist, +15% health to all allies" }
+      ]
+    },
+    "gaul": {
+      "name": "Gauls",
+      "description": "They fight better when the battle turns against them: every fallen ally raises the surviving Gauls' fury.",
+      "tiers": [
+        { "text": "+14% attack speed to Gauls, +8% more for every fallen ally" },
+        { "text": "Every fallen ally: +15% attack speed to Gauls. +10% baseline" },
+        { "text": "Every fallen ally: +22% attack speed to Gauls. +25% baseline and 15% of damage dealt stolen as health" }
+      ]
+    },
+    "teuton": {
+      "name": "Teutons",
+      "description": "They enter the field already protected by a shield that absorbs the first hits.",
+      "tiers": [
+        { "text": "Teutons start with 150 shield" },
+        { "text": "Teutons start with 320 shield and take 8% less damage" },
+        { "text": "Teutons start with 600 shield and take 18% less damage" }
+      ]
+    }
+  },
+  "classes": {
+    "infantry": {
+      "name": "Infantry",
+      "description": "Front line. The more infantry fielded, the longer the front holds.",
+      "tiers": [
+        { "text": "+18% health to Infantry" },
+        { "text": "+40% health and +20 armor to Infantry" }
+      ]
+    },
+    "archer": {
+      "name": "Archer",
+      "description": "Damage from range: critical hits and increased range.",
+      "tiers": [
+        { "text": "+20% critical chance to Archers" },
+        { "text": "+40% critical chance, +30% critical damage and +1 range to Archers" }
+      ]
+    },
+    "cavalry": {
+      "name": "Cavalry",
+      "description": "Opening charge: starts further ahead with a boosted opening strike.",
+      "tiers": [
+        { "text": "Cavalry's first attack deals 120 bonus damage" },
+        { "text": "The first attack deals 300 bonus damage and Cavalry moves 35% faster" }
+      ]
+    },
+    "druid": {
+      "name": "Druid",
+      "description": "Support: steady regeneration for wounded allies.",
+      "tiers": [
+        { "text": "All allies recover 12 health per second" }
+      ]
+    },
+    "berserker": {
+      "name": "Berserker",
+      "description": "Attacks also strike enemies adjacent to the target.",
+      "tiers": [
+        { "text": "Berserkers' attacks deal 25% of the damage to adjacent enemies" },
+        { "text": "Attacks deal 55% to adjacent enemies, +20% attack damage" }
+      ]
+    },
+    "siege": {
+      "name": "Siege",
+      "description": "War machines: damage proportional to the target's maximum health.",
+      "tiers": [
+        { "text": "Siege attacks deal 3% of the target's maximum health as bonus damage" }
+      ]
+    }
+  }
+}

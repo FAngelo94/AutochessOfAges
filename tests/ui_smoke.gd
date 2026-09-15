@@ -29,6 +29,9 @@ func _process(_delta: float) -> bool:
 	if _frames == 1:
 		var scene: PackedScene = load("res://ui/main.tscn")
 		_main = scene.instantiate()
+		# Test sincrono: si aspetta il round risolto appena premuto COMBATTI, non
+		# al frame in cui il thread di ui/main._begin_battle finisce.
+		_main.resolve_in_background = false
 		root.add_child(_main)
 		return false
 	if _frames == 2:

@@ -55,7 +55,7 @@ func _build() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "CRONOLOGIA"
+	title.text = tr("HISTORY_TITLE")
 	title.add_theme_font_size_override("font_size", 34)
 	title.add_theme_color_override("font_color", Style.GOLD)
 	column.add_child(title)
@@ -77,7 +77,7 @@ func _build() -> void:
 	scroll.add_child(_list)
 
 	var close := Button.new()
-	close.text = "Chiudi"
+	close.text = tr("UI_CLOSE")
 	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	close.add_theme_font_size_override("font_size", 26)
 	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
@@ -97,11 +97,11 @@ func _fetch_remote() -> void:
 	if _requested:
 		return
 	_requested = true
-	_status.text = "Carico le partite online…"
+	_status.text = tr("HISTORY_LOADING_ONLINE")
 	auth.request_history(REMOTE_LIMIT, func(ok: bool, matches: Array) -> void:
 		_requested = false
 		if not ok:
-			_status.text = "Partite online non raggiungibili: qui sotto solo quelle locali."
+			_status.text = tr("HISTORY_ONLINE_UNREACHABLE")
 			return
 		for entry in matches:
 			if typeof(entry) == TYPE_DICTIONARY:
@@ -118,10 +118,10 @@ func _refresh() -> void:
 	_rows.sort_custom(func(a, b): return String(a.get("ended_at", "")) > String(b.get("ended_at", "")))
 
 	if _rows.is_empty():
-		_status.text = "Nessuna partita ancora. Giocane una e la ritrovi qui."
+		_status.text = tr("HISTORY_EMPTY")
 		return
 	if not _requested:
-		_status.text = "%d partite" % _rows.size()
+		_status.text = tr("HISTORY_MATCH_COUNT") % _rows.size()
 
 	for row in _rows:
 		_list.add_child(_match_row(row))
@@ -146,7 +146,7 @@ func _match_row(row: Dictionary) -> Control:
 	pad.add_child(line)
 
 	var badge := Label.new()
-	badge.text = "%d°" % placement if placement > 0 else "—"
+	badge.text = tr("LEADERBOARD_ORDINAL") % placement if placement > 0 else "—"
 	badge.custom_minimum_size = Vector2(58, 0)
 	badge.add_theme_font_size_override("font_size", 30)
 	badge.add_theme_color_override("font_color", _placement_color(placement))
@@ -193,13 +193,13 @@ func _placement_color(placement: int) -> Color:
 
 func _mode_label(row: Dictionary) -> String:
 	if String(row.get("mode", "")) != "online":
-		return "vs computer"
-	return "classificata" if bool(row.get("ranked", false)) else "amichevole"
+		return tr("HISTORY_MODE_CPU")
+	return tr("HISTORY_MODE_RANKED") if bool(row.get("ranked", false)) else tr("HISTORY_MODE_FRIENDLY")
 
 
 func _hero_label(hero_id: String) -> String:
 	if hero_id == "" or not GameData.has_hero(hero_id):
-		return "eroe ignoto"
+		return tr("HISTORY_UNKNOWN_HERO")
 	return GameData.hero(hero_id).display_name
 
 
@@ -214,7 +214,7 @@ func _detail_text(row: Dictionary) -> String:
 	if units != "":
 		bits.append(units)
 	if int(row.get("hp", 0)) > 0:
-		bits.append("%d vita" % int(row["hp"]))
+		bits.append(tr("HISTORY_HP") % int(row["hp"]))
 	return "  ·  ".join(bits)
 
 

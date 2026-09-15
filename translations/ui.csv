@@ -1,0 +1,237 @@
+keys,it,en
+UI_CLOSE,Chiudi,Close
+UI_CANCEL,Annulla,Cancel
+UI_GOT_IT,Ho capito,Got it
+UI_LOGIN,Accedi,Log in
+SETTINGS_TITLE,IMPOSTAZIONI,SETTINGS
+SETTINGS_SFX_VOLUME,Volume effetti,Sound volume
+SETTINGS_MUSIC_VOLUME,Volume musica,Music volume
+SETTINGS_LANGUAGE,Lingua,Language
+SETTINGS_ACCOUNT,Account,Account
+SETTINGS_CONNECTED_AS,Connesso come %s,Signed in as %s
+SETTINGS_LOGOUT,Esci dall'account,Log out
+SETTINGS_DELETE_ACCOUNT,Elimina account,Delete account
+SETTINGS_GUEST,Stai giocando come ospite,You are playing as a guest
+SETTINGS_NO_ACCOUNT,Nessun account collegato,No account linked
+SETTINGS_CREDITS_BUTTON,Riconoscimenti,Credits
+SETTINGS_CREDITS_TITLE,RICONOSCIMENTI,CREDITS
+SETTINGS_CREDITS_DESIGNERS,Game Designer e Creatori,Game Designers and Creators
+SETTINGS_CREDITS_DEVELOPERS,Sviluppatori,Developers
+SETTINGS_CREDITS_DESIGN,Designer,Designers
+SETTINGS_CREDITS_MUSIC,Colonna sonora,Soundtrack
+SETTINGS_CREDITS_TRIMMED_45S,Modificato: tagliato ai primi 45 secondi.,Modified: trimmed to the first 45 seconds.
+SETTINGS_CREDITS_TRIMMED_LOOP,Modificato: accorciato per il loop.,Modified: shortened for the loop.
+SETTINGS_DELETE_ACCOUNT_BODY,"Questa azione è irreversibile: profilo, statistiche e civiltà sbloccate verranno cancellati dal server.
+
+Il single-player resta disponibile come ospite.","This action is irreversible: profile, stats and unlocked civilizations will be deleted from the server.
+
+Single-player remains available as a guest."
+SETTINGS_DELETE_ACCOUNT_CONFIRM,Elimina,Delete
+SETTINGS_DELETE_ACCOUNT_FAILED,Eliminazione non riuscita. Riprova più tardi.,Deletion failed. Please try again later.
+SETTINGS_ACCOUNT_DELETED_TITLE,Account eliminato,Account deleted
+SETTINGS_ACCOUNT_DELETED_BODY,"Il tuo account è stato cancellato dal server.
+
+Torni alla schermata iniziale, dove puoi crearne uno nuovo o giocare come ospite.","Your account has been deleted from the server.
+
+You are back at the start screen, where you can create a new one or play as a guest."
+LOGIN_REASON_EMAIL_TAKEN,Questa email è già registrata. Prova ad accedere.,This email is already registered. Try logging in instead.
+LOGIN_REASON_INVALID_CREDENTIALS,Email o password non corretti.,Incorrect email or password.
+LOGIN_REASON_INVALID,Controlla email e password.,Check your email and password.
+LOGIN_REASON_RATE_LIMITED,Troppi tentativi. Riprova tra qualche minuto.,Too many attempts. Try again in a few minutes.
+LOGIN_REASON_DB,"Servizio non disponibile, riprova più tardi.","Service unavailable, please try again later."
+LOGIN_REASON_GOOGLE,Accesso con Google non riuscito.,Google sign-in failed.
+LOGIN_REASON_EXPIRED,L'accesso con Google è scaduto. Riprova.,The Google sign-in expired. Please try again.
+LOGIN_REASON_DENIED,Accesso con Google annullato.,Google sign-in cancelled.
+LOGIN_FAILED,Accesso non riuscito.,Sign-in failed.
+LOGIN_GOOGLE,Continua con Google,Continue with Google
+LOGIN_GOOGLE_WAITING,In attesa di Google — annulla,Waiting for Google — cancel
+LOGIN_RESTORING,Accesso in corso…,Signing in…
+LOGIN_TITLE,ACCEDI,LOG IN
+LOGIN_EMAIL,Email,Email
+LOGIN_PASSWORD,Password,Password
+LOGIN_GO_SIGNUP,Non hai un account? Registrati,Don't have an account? Sign up
+LOGIN_OR,oppure,or
+LOGIN_SIGNUP_TITLE,CREA ACCOUNT,CREATE ACCOUNT
+LOGIN_USERNAME,Nome giocatore,Player name
+LOGIN_PASSWORD_MIN8,Password (almeno 8 caratteri),Password (at least 8 characters)
+LOGIN_PASSWORD_CONFIRM,Conferma password,Confirm password
+LOGIN_GO_LOGIN,Hai già un account? Accedi,Already have an account? Log in
+LOGIN_GUEST,Gioca come ospite,Play as a guest
+LOGIN_CHECK_EMAIL,Controlla l'indirizzo email.,Check the email address.
+LOGIN_CHOOSE_USERNAME,Scegli un nome giocatore.,Choose a player name.
+LOGIN_PASSWORDS_DONT_MATCH,Le password non coincidono.,Passwords don't match.
+LOGIN_PASSWORD_TOO_SHORT,La password deve avere almeno 8 caratteri.,Password must be at least 8 characters long.
+UI_BACK,Indietro,Back
+UI_SELECT,Seleziona,Select
+MENU_QUIT,Esci,Quit
+MENU_SUBTITLE,Legionari e Barbari,Legions and Barbarians
+MENU_PLAY,BATTAGLIA,BATTLE
+MENU_CHOOSE_MODE,SCEGLI MODALITÀ,CHOOSE MODE
+MENU_CHOOSE_HERO,SCEGLI EROE,CHOOSE HERO
+MENU_MODE_CPU,Contro il computer,Against the computer
+MENU_MODE_CPU_HINT,Affronta subito degli avversari controllati dal gioco.,Face opponents controlled by the game right away.
+MENU_MODE_PVP,Contro giocatori,Against players
+MENU_MODE_PVP_HINT,Partita online 8 giocatori. Richiede un account.,Online 8-player match. Requires an account.
+MENU_MODE_TOOLTIP,Modalità: %s,Mode: %s
+MENU_GUIDE,Guida,Guide
+MENU_COLLECTION,Collezione,Collection
+MENU_STORE,Negozio,Store
+MENU_LEADERBOARD,Classifica,Leaderboard
+MENU_HISTORY,Cronologia,History
+MENU_PVP_COMING_SOON,La modalità contro giocatori arriva in un prossimo aggiornamento.,The against-players mode is coming in a future update.
+MENU_PVP_NEEDS_ACCOUNT,"Per giocare contro altri giocatori serve un account.
+
+Stai giocando come ospite: puoi accedere in qualsiasi momento da Impostazioni → Accedi, con Google oppure con email e password.
+
+Da ospite restano disponibili le partite contro il computer.","You need an account to play against other players.
+
+You are playing as a guest: you can log in at any time from Settings → Log in, with Google or with email and password.
+
+As a guest, matches against the computer remain available."
+MENU_HERO_TOOLTIP,Eroe: %s,Hero: %s
+STORE_TITLE,CROWDFUNDING STORE,CROWDFUNDING STORE
+STORE_ON_REACHING_GOAL,Al raggiungimento della cifra:,Once the goal is reached:
+STORE_DONATION_PENDING_TITLE,Tributo in corso,Payment in progress
+STORE_DONATION_PENDING_BODY,Stiamo aprendo il pagamento di %s.,We're opening the payment of %s.
+STORE_UNAVAILABLE,Pagamenti non disponibili su questa piattaforma. Tutti i contenuti di gioco restano accessibili.,Payments are not available on this platform. All game content remains accessible.
+STORE_LOGIN_TO_DONATE,Accedi con un account per lasciare un tributo: serve ad attribuirtelo.,Log in with an account to leave a contribution: it's needed to attribute it to you.
+STORE_STATUS,Ogni tributo sostiene lo sviluppo del gioco.,Every contribution supports the game's development.
+STORE_PROGRESS_KNOWN,%s su %s,%s of %s
+STORE_PROGRESS_UNKNOWN,— su %s,— of %s
+STORE_THANK_YOU_TITLE,"Grazie, benefattore!","Thank you, benefactor!"
+STORE_THANK_YOU_BODY,Il tuo tributo di %s è stato accolto.,Your contribution of %s has been received.
+STORE_DONATION_FAILED_TITLE,Il tributo non è giunto a destinazione,The contribution didn't go through
+STORE_DONATION_FAILED_BODY,"Non ti è stato addebitato nulla.
+
+Il pagamento non è andato a buon fine. Puoi riprovare quando vuoi.","You haven't been charged anything.
+
+The payment was not successful. You can try again whenever you like."
+LOBBY_TITLE,SALA D'ATTESA,WAITING ROOM
+LOBBY_CONNECTING,Connessione al server…,Connecting to the server…
+LOBBY_QUEUE_COUNT,Giocatori in coda: %d/%d,Players in queue: %d/%d
+LOBBY_WAITING,In attesa di altri giocatori…,Waiting for other players…
+LOBBY_QUEUED_AS,In coda come %s,Queued as %s
+LOBBY_QUEUED,In coda,In queue
+LOBBY_STARTS_IN,La partita inizia tra %d s,The match starts in %d s
+LOBBY_STARTING,Avvio della partita…,Starting the match…
+LOBBY_MATCH_FOUND,Partita trovata!,Match found!
+LOBBY_REJECTED,Accesso rifiutato dal server (%s).,Access rejected by the server (%s).
+LOBBY_NOT_CONFIGURED,La modalità online non è ancora configurata su questo dispositivo.,Online mode is not configured on this device yet.
+LOBBY_UNREACHABLE,Impossibile raggiungere il server. Riprova più tardi.,Cannot reach the server. Please try again later.
+LOBBY_MATCH_NOT_STARTED,Partita non avviata,Match not started
+LOBBY_REASON_VERSION,aggiorna il gioco,update the game
+LOBBY_REASON_AUTH,sessione non valida,invalid session
+LOBBY_REASON_BANNED,account sospeso,account suspended
+LEADERBOARD_TITLE,CLASSIFICA,LEADERBOARD
+LEADERBOARD_LOGIN_REQUIRED,Accedi con un account per vedere la classifica.,Log in with an account to see the leaderboard.
+LEADERBOARD_LOADING,Carico la classifica…,Loading the leaderboard…
+LEADERBOARD_UNREACHABLE,Classifica non raggiungibile. Riprova più tardi.,Leaderboard unreachable. Please try again later.
+LEADERBOARD_EMPTY,Nessun giocatore in classifica: gioca una partita online per entrare.,No players on the leaderboard yet: play an online match to get in.
+LEADERBOARD_PLAY_TO_ENTER,Gioca una partita classificata per entrare in classifica.,Play a ranked match to get on the leaderboard.
+LEADERBOARD_YOUR_POSITION,La tua posizione: %s,Your position: %s
+LEADERBOARD_YOU_SUFFIX,  (tu),  (you)
+LEADERBOARD_MATCHES_PLAYED,%d partite,%d matches
+LEADERBOARD_WINS,%d vittorie,%d wins
+LEADERBOARD_ORDINAL,%d°,#%d
+HISTORY_TITLE,CRONOLOGIA,HISTORY
+HISTORY_LOADING_ONLINE,Carico le partite online…,Loading online matches…
+HISTORY_ONLINE_UNREACHABLE,Partite online non raggiungibili: qui sotto solo quelle locali.,Online matches unreachable: only local ones below.
+HISTORY_EMPTY,Nessuna partita ancora. Giocane una e la ritrovi qui.,No matches yet. Play one and you'll find it here.
+HISTORY_MATCH_COUNT,%d partite,%d matches
+HISTORY_MODE_CPU,vs computer,vs computer
+HISTORY_MODE_RANKED,classificata,ranked
+HISTORY_MODE_FRIENDLY,amichevole,friendly
+HISTORY_UNKNOWN_HERO,eroe ignoto,unknown hero
+HISTORY_HP,%d vita,%d HP
+GUIDE_TITLE,GUIDA,GUIDE
+GUIDE_RESET_TIPS,Rivedi i suggerimenti,Review the tips
+GUIDE_TIPS_RESET_DONE,I suggerimenti torneranno dalla prossima partita.,The tips will come back starting with the next match.
+COLLECTION_TITLE,COLLEZIONE,COLLECTION
+COLLECTION_ALL,Tutte,All
+UNIT_COST_GOLD,%d oro,%d gold
+UNIT_TRAITS_COST,%s — %d oro,%s — %d gold
+COLLECTION_STATS,Statistiche,Stats
+COLLECTION_STAT_HP_DAMAGE,"salute %d, danno %d","health %d, damage %d"
+COLLECTION_STAT_RANGE_SPEED,"gittata %d, velocità d'attacco %.2f","range %d, attack speed %.2f"
+COLLECTION_STAT_ARMOR_MR,"armatura %d, resistenza magica %d","armor %d, magic resist %d"
+COLLECTION_STAT_MANA,mana %d/%d,mana %d/%d
+COLLECTION_LORE,Storia,Lore
+COMBAT_BERSERKER_TIME,Berserker Time,Berserker Time
+MATCH_SYNERGIES,SINERGIE,SYNERGIES
+MATCH_XP,Esperienza,Experience
+MATCH_SHOP,NEGOZIO,SHOP
+MATCH_REROLL,Aggiorna,Reroll
+MATCH_RANK_TOOLTIP,Posizione attuale. A parità di vita sta davanti chi l'ha persa più tardi.,Current position. At equal health, whoever lost it later ranks higher.
+MATCH_ACTION_COST,%s · %d oro,%s · %d gold
+MATCH_SELL,Vendi,Sell
+MATCH_BACK_TO_MENU,Torna al menu principale,Back to main menu
+MATCH_FIGHT,COMBATTI,FIGHT
+MATCH_READY,PRONTO,READY
+MATCH_CHRONICLE,CRONACA,CHRONICLE
+MATCH_RETURNING_TO_PREP,Si torna alla preparazione…,Returning to preparation…
+MATCH_YOU,Tu,You
+MATCH_LAST_BATTLE,Ultima battaglia — %s,Last battle — %s
+MATCH_REVIEW_LAST_BATTLE,Rivedi l'ultima battaglia di %s,Review %s's last battle
+MATCH_NO_BATTLE_TO_REVIEW,%s non ha una battaglia da rivedere,%s has no battle to review
+MATCH_NEXT_OPPONENT_PREFIX,Prossimo avversario. ,Next opponent.
+MATCH_NEW_GAME,NUOVA PARTITA,NEW GAME
+MATCH_BACK_TO_MENU_BUTTON,Torna al menu,Back to menu
+MATCH_FINISHED,PARTITA CONCLUSA,MATCH OVER
+MATCH_YOUR_PLACEMENT,Il tuo piazzamento: %d° su %d,Your placement: %d of %d
+MATCH_ELIMINATED,SEI STATO ELIMINATO,YOU WERE ELIMINATED
+MATCH_ELIMINATED_SUBTITLE,%d° posto · tocca un giocatore per rivedere la sua ultima battaglia,Place %d · tap a player to review their last battle
+MATCH_UNITS,Unità,Units
+MATCH_TIER_UNITS,%d unità,%d units
+MATCH_TIER_REACHED, — raggiunta, — reached
+MATCH_ROUND,Round %s,Round %s
+MATCH_UNITS_COUNT,Unità %d/%d,Units %d/%d
+MATCH_STREAK,Serie %+d,Streak %+d
+MATCH_STREAK_GOLD_BONUS, (+%d oro), (+%d gold)
+MATCH_SELL_VALUE,Vendi · %d,Sell · %d
+MATCH_LOG_NEW_GAME,Nuova partita,New game
+MATCH_LOG_SEED,(seed %d),(seed %d)
+MATCH_LOG_AVAILABLE_CIVS,Civiltà disponibili: %s,Available civilizations: %s
+MATCH_WAITING,IN ATTESA…,WAITING…
+MATCH_PREP_COUNTDOWN,Preparazione: %d s,Preparation: %d s
+MATCH_CONNECTION_LOST,Connessione persa — riconnessione…,Connection lost — reconnecting…
+MATCH_RECONNECT,Riconnetti,Reconnect
+MATCH_TO_BATTLE,ALLA BATTAGLIA…,TO BATTLE…
+MATCH_ERR_GOLD_FOR_REROLL,Oro insufficiente per aggiornare il negozio.,Not enough gold to reroll the shop.
+MATCH_ERR_CANT_BUY_XP,Non puoi comprare esperienza adesso.,You can't buy experience right now.
+MATCH_ERR_BOARD_FULL,Puoi schierare al massimo %d unità (livello %d).,You can field at most %d units (level %d).
+MATCH_ERR_PHASE_CLOSED,Non puoi farlo adesso: la fase di preparazione è chiusa.,You can't do that now: the preparation phase is closed.
+MATCH_ERR_NOT_ALLOWED,Mossa non consentita.,Move not allowed.
+MATCH_ERR_REJECTED_BY_SERVER,Comando rifiutato dal server.,Command rejected by the server.
+MATCH_ERR_ELIMINATED,Sei stato eliminato: non puoi più comprare né aggiornare.,You've been eliminated: you can no longer buy or reroll.
+MATCH_ERR_INVALID_SESSION,Sessione non valida — prova a riconnetterti.,Invalid session — try reconnecting.
+MATCH_ERR_COMMAND_TOO_BIG,"Comando troppo grande, ignorato.","Command too large, ignored."
+MATCH_ERR_REJECTED_REASON,Comando rifiutato (%s).,Command rejected (%s).
+MATCH_ROUND_VS,Round %s — contro %s,Round %s — against %s
+MATCH_NOBODY,nessuno,nobody
+MATCH_VICTORY,Vittoria — %d danni all'avversario,Victory — %d damage to the opponent
+MATCH_DEFEAT,Sconfitta — %d danni alla tua vita,Defeat — %d damage to your health
+MATCH_LOG_OVER,Partita conclusa.,Match over.
+MATCH_LOG_WINNER,Vince %s.,%s wins.
+MATCH_LOG_YOUR_PLACEMENT,Il tuo piazzamento: %d° su %d.,Your placement: %d of %d.
+MATCH_OVER_USE_MENU_TO_EXIT,Partita conclusa — usa ☰ per uscire,Match over — use ☰ to exit
+MATCH_LOG_RANK,"Grado: %s (%d mmr, %s%d)","Rank: %s (%d mmr, %s%d)"
+MATCH_EXIT_MATCH_TITLE,Uscire dalla partita?,Leave the match?
+MATCH_EXIT_MATCH_BODY,Vuoi tornare al menu?,Do you want to go back to the menu?
+MATCH_EXIT,Esci,Exit
+MATCH_SURRENDER_TITLE,Abbandonare la partita?,Forfeit the match?
+MATCH_SURRENDER_BODY,La partita verrà contata come una sconfitta e il posto in classifica ne risentirà.,The match will count as a loss and your leaderboard position will be affected.
+MATCH_SURRENDER,Abbandona,Forfeit
+MATCH_EXIT_COMBAT_TITLE,Uscire dal combattimento?,Leave the battle?
+MATCH_EXIT_COMBAT_BODY,La partita in corso andrà persa: non è possibile riprenderla da dove l'hai lasciata.,The current match will be lost: it can't be resumed from where you left it.
+MATCH_LOG_ROUND,Round %s,Round %s
+MATCH_LOG_VICTORY,Vittoria,Victory
+MATCH_LOG_VS_DAMAGE_DEALT,contro %s (−%d vita avversario),against %s (−%d opponent health)
+MATCH_LOG_DEFEAT,Sconfitta,Defeat
+MATCH_LOG_VS_DAMAGE_TAKEN,contro %s (−%d vita),against %s (−%d health)
+MATCH_LOG_DURATION,durata %.1fs,duration %.1fs
+MATCH_LOG_ELIMINATED,Sei stato eliminato: %d° posto.,You've been eliminated: place %d.
+MATCH_LOG_ALIVE_COUNT,in gioco: %d,in play: %d
+MATCH_LOG_SOLD,Venduto %s per %d oro.,Sold %s for %d gold.
+MATCH_ERR_NEED_GOLD_FOR,Servono %d oro per %s.,You need %d gold for %s.
+MATCH_ERR_BENCH_FULL,Panchina piena.,Bench full.
+MATCH_LOG_BOUGHT,Comprato %s.,Bought %s.
