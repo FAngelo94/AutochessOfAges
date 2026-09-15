@@ -415,18 +415,21 @@ func _test_heroes() -> void:
 
 	var pool := UnitPool.new()
 
-	# Cesare: 3-6 oro casuali a ogni sconfitta, sempre nel range, riproducibile
+	# Cesare: min-max oro casuali a ogni sconfitta, sempre nel range, riproducibile
 	# a parità di seed. È l'unica fonte di casualità nuova aggiunta dagli eroi,
 	# quindi va verificata contro il rischio più grave del progetto: se non
 	# passasse dallo SimRNG del player, romperebbe il determinismo.
+	var cesare_params: Dictionary = GameData.hero("cesare").ability_params
+	var cesare_min := int(cesare_params["min"])
+	var cesare_max := int(cesare_params["max"])
 	var cesare := Player.new(pool, SimRNG.new(42))
 	cesare.hero_id = "cesare"
 	var bonuses: Array[int] = []
 	for i in 200:
 		var income := cesare.grant_round_income(false)
 		bonuses.append(int(income["hero_bonus"]))
-	var out_of_range := bonuses.filter(func(b: int) -> bool: return b < 3 or b > 6)
-	check(out_of_range.is_empty(), "il bonus di Cesare resta sempre tra 3 e 6",
+	var out_of_range := bonuses.filter(func(b: int) -> bool: return b < cesare_min or b > cesare_max)
+	check(out_of_range.is_empty(), "il bonus di Cesare resta sempre tra min e max di heroes.json",
 		str(out_of_range))
 
 	var cesare_repeat := Player.new(pool, SimRNG.new(42))
@@ -440,7 +443,7 @@ func _test_heroes() -> void:
 	check(int(no_hero.grant_round_income(false)["hero_bonus"]) == 0,
 		"senza eroe selezionato non c'è alcun bonus")
 
-	# Vercingetorige: 1 oro per ogni evento di fusione. Comprando quattro copie
+	# Vercingetorige: gold_per_merge oro per ogni evento di fusione. Comprando quattro copie
 	# una alla volta si fondono le prime due in una 2★, le altre due in
 	# un'altra 2★, e infine le due 2★ in una 3★: tre fusioni in tutto (lo
 	# stesso conteggio verificato da "quattro copie diventano una 3★" sopra).
@@ -449,7 +452,8 @@ func _test_heroes() -> void:
 	vercingetorige.gold = 0
 	for i in 4:
 		vercingetorige.grant_unit("legionarius")
-	check(vercingetorige.gold == 3, "Vercingetorige guadagna 1 oro per ognuna delle tre fusioni della catena",
+	var per_merge := int(GameData.hero("vercingetorige").ability_params["gold_per_merge"])
+	check(vercingetorige.gold == 3 * per_merge, "Vercingetorige guadagna gold_per_merge oro per ognuna delle tre fusioni della catena",
 		str(vercingetorige.gold))
 
 	# Bot: l'eroe assegnato deve essere valido e deterministico a parità di seed.

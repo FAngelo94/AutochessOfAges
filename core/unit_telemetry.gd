@@ -33,6 +33,8 @@ extends RefCounted
 var units: Dictionary = {}
 ## trait_id@soglia -> {trait, threshold, games, wins, draws}
 var traits: Dictionary = {}
+## hero_id ("" = nessuno) -> contatori per posto-partita e per round
+var heroes: Dictionary = {}
 
 var total_rounds: int = 0
 var draws: int = 0
@@ -60,6 +62,11 @@ func _init() -> void:
 			"healing": 0.0, "casts": 0, "attacks": 0, "crits": 0, "deaths": 0,
 			"star_sum": 0,
 			"fielded_end": 0, "placement_sum": 0, "placement_n": 0, "top4": 0,
+			# posti-partita che l'hanno schierata almeno un round, e la stella più
+			# alta raggiunta in quei posti (istogramma: i contatori si sommano
+			# quando si fondono gli shard, un massimo no)
+			"picked": 0, "picked_placement_sum": 0,
+			"peak_star_1": 0, "peak_star_2": 0, "peak_star_3": 0, "peak_star_4": 0,
 		}
 
 
@@ -92,6 +99,15 @@ func on_round_resolved(results: Array) -> void:
 		var outcome := int(combat.get("outcome", -1)) if not combat.is_empty() else -1
 		var drew := outcome == CombatSim.Outcome.DRAW
 		var won := bool(r.get("won", false))
+		if not combat.is_empty() and not r.get("ghost", false):
+			var h := _hero_row(player.hero_id)
+			h["rounds"] += 1
+			if drew:
+				h["round_draws"] += 1
+			elif won:
+				h["wins"] += 1
+			else:
+				h["losses"] += 1
 		var seat: Dictionary = _seats.get(player.index, {})
 		for inst in player.board_units():
 			var row: Dictionary = seat.get(inst.def.id, {
@@ -202,6 +218,14 @@ func on_match_finished(state: MatchState) -> void:
 		level_n += 1
 		max_level_seen = maxi(max_level_seen, p.level)
 		var top4: bool = p.placement <= half
+		var h := _hero_row(p.hero_id)
+		h["games"] += 1
+		h["placement_sum"] += p.placement
+		h["level_sum"] += p.level
+		if top4:
+			h["top4"] += 1
+		if p.placement == 1:
+			h["first"] += 1
 		var seat: Dictionary = _seats.get(p.index, {})
 		for inst in p.board_units():
 			var u: Dictionary = units[inst.def.id]
@@ -216,7 +240,21 @@ func on_match_finished(state: MatchState) -> void:
 					int(seat[inst.def.id]["final_star"]), inst.star)
 		for unit_id in seat:
 			seat[unit_id]["placement"] = p.placement
+			var u: Dictionary = units[unit_id]
+			u["picked"] += 1
+			u["picked_placement_sum"] += p.placement
+			var peak_key := "peak_star_%d" % clampi(int(seat[unit_id]["final_star"]), 1, 4)
+			u[peak_key] += 1
 		_seats[p.index] = seat
+
+
+func _hero_row(hero_id: String) -> Dictionary:
+	if not heroes.has(hero_id):
+		heroes[hero_id] = {
+			"id": hero_id, "games": 0, "placement_sum": 0, "top4": 0, "first": 0,
+			"level_sum": 0, "rounds": 0, "wins": 0, "losses": 0, "round_draws": 0,
+		}
+	return heroes[hero_id]
 
 
 ## Righe leggere per il DB: una per (giocatore umano, unità schierata almeno un
@@ -260,7 +298,7 @@ func report_dict(extra: Dictionary = {}) -> Dictionary:
 		"round_draw_pct": pct(draws, duration_n),
 		"avg_round_duration": duration_sum / maxf(duration_n, 1),
 		"level_sum": level_sum, "level_n": level_n, "max_level_seen": max_level_seen,
-		"units": units, "traits": traits,
+		"units": units, "traits": traits, "heroes": heroes,
 	}
 	for key in extra:
 		out[key] = extra[key]
