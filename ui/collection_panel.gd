@@ -41,7 +41,12 @@ var _auto_rotating := true
 ## confermare cosa si sta guardando.
 const DETAIL_VIEW_SIZE := 340
 const DETAIL_CAMERA_OFFSET := Vector3(1.15, 1.35, 2.05)
-const DETAIL_ZOOM := 1.4
+## Più largo di quanto l'altezza da sola richieda: la camera inquadra in base
+## alla sola altezza del modello, ma ruotando un'unità lunga (i bracci del
+## balestrone, una lancia tenuta di traverso) può sporgere più larga che alta
+## e uscire dall'inquadratura. Il margine in più tiene la sagoma dentro anche
+## quando gira.
+const DETAIL_ZOOM := 1.9
 ## Un giro completo ogni 24 secondi: abbastanza lento da leggersi come "questo
 ## si guarda da tutti i lati", non come qualcosa che gira per conto suo.
 const AUTO_ROTATE_SPEED := TAU / 24.0
