@@ -8,51 +8,171 @@
     body { font-family: system-ui, sans-serif; max-width: 44rem; margin: 3rem auto;
            padding: 0 1rem; line-height: 1.6; color: #1a1a1a; background: #fafafa; }
     h1 { font-size: 1.6rem; } h2 { font-size: 1.15rem; margin-top: 2rem; }
-    code { background: #eee; padding: .1rem .3rem; border-radius: 3px; }
-    .todo { background: #fff3cd; border: 1px solid #ffe08a; padding: .8rem 1rem;
-            border-radius: 6px; }
+    h3 { font-size: 1rem; margin-top: 1.2rem; }
+    table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+    th, td { border: 1px solid #ddd; padding: .45rem .6rem; text-align: left; vertical-align: top; }
+    th { background: #f0f0f0; }
+    .meta { color: #555; font-size: .95rem; }
   </style>
 </head>
 <body>
-  <h1>Privacy policy — Autochess Of Ages</h1>
+  <h1>Informativa sulla privacy — Autochess Of Ages</h1>
+  <p class="meta">Ultimo aggiornamento: 16 settembre 2026</p>
 
-  <p class="todo"><strong>BOZZA.</strong> Prima della pubblicazione sul Play Store,
-  fai rivedere questo testo (idealmente da un legale). Ultimo aggiornamento:
-  <code>2026-09-16</code>.</p>
+  <p>La presente informativa è resa ai sensi degli artt. 13 e 14 del Regolamento (UE)
+  2016/679 (“GDPR”) e descrive come vengono trattati i dati personali degli utenti del
+  videogioco <strong>Autochess Of Ages</strong> (l'“App”) e dei relativi servizi online.</p>
 
-  <h2>Titolare del trattamento</h2>
-  <p>Angelo Falci — contatto: <a href="mailto:angelo.falci94@gmail.com">angelo.falci94@gmail.com</a>.</p>
+  <h2>1. Titolare del trattamento</h2>
+  <p>Angelo Falci — email:
+  <a href="mailto:angelo.falci94@gmail.com">angelo.falci94@gmail.com</a>.<br>
+  Non è stato nominato un Responsabile della protezione dei dati (DPO), non essendo
+  obbligatorio. Per qualsiasi richiesta relativa alla privacy puoi scrivere all'indirizzo
+  indicato.</p>
 
-  <h2>Dati raccolti</h2>
+  <h2>2. Utilizzo senza account</h2>
+  <p>L'App può essere usata come <strong>ospite</strong>, senza creare un account. In
+  questo caso la partita contro il computer, le preferenze (volume, lingua, civiltà ed eroe
+  preferiti) e la cronologia delle partite locali restano <strong>esclusivamente sul tuo
+  dispositivo</strong> e non vengono inviate ai nostri server. L'App non utilizza strumenti
+  di analisi, di profilazione né pubblicità.</p>
+
+  <h2>3. Dati trattati</h2>
+  <table>
+    <tr><th>Categoria</th><th>Dati</th><th>Quando</th></tr>
+    <tr><td>Dati dell'account</td>
+      <td>Indirizzo email; nome utente; identificativo dell'account Google (se accedi con
+      Google); impronta crittografica (hash bcrypt) della password, mai la password in
+      chiaro (se accedi con email e password)</td>
+      <td>Registrazione e accesso</td></tr>
+    <tr><td>Dati di gioco</td>
+      <td>Partite giocate, vittorie, piazzamenti, punteggio in classifica (MMR), unità
+      schierate e risultati delle partite online, civiltà ed eroe preferiti</td>
+      <td>Partite online con account</td></tr>
+    <tr><td>Dati di sessione</td>
+      <td>Token di accesso (conservati sul server solo in forma di hash)</td>
+      <td>Accesso</td></tr>
+    <tr><td>Dati tecnici</td>
+      <td>Indirizzo IP, data e ora della richiesta, risorsa richiesta, user agent</td>
+      <td>Ogni connessione ai server</td></tr>
+    <tr><td>Dati di acquisto</td>
+      <td>Identificativo della transazione, prodotto, importo, valuta, store, identificativo
+      utente dell'acquisto (l'identificativo dell'account oppure, se acquisti come ospite,
+      un identificativo del dispositivo)</td>
+      <td>Contributi facoltativi tramite il negozio in-app</td></tr>
+  </table>
+  <p>Se accedi con Google, dal tuo profilo Google riceviamo solo email, identificativo e
+  nome; <strong>il nome del profilo Google viene usato come nome utente iniziale</strong>.
+  Non riceviamo in alcun caso i dati della tua carta o del tuo metodo di pagamento, che
+  sono gestiti esclusivamente da Google Play.</p>
+
+  <h2>4. Finalità, base giuridica e conservazione</h2>
+  <table>
+    <tr><th>Finalità</th><th>Base giuridica</th><th>Conservazione</th></tr>
+    <tr><td>Creazione e gestione dell'account, autenticazione</td>
+      <td>Esecuzione del contratto (art. 6.1.b GDPR)</td>
+      <td>Fino alla cancellazione dell'account; le sessioni di accesso scadono dopo al
+      massimo 90 giorni</td></tr>
+    <tr><td>Partite online, matchmaking, statistiche, cronologia e classifica</td>
+      <td>Esecuzione del contratto (art. 6.1.b)</td>
+      <td>Fino alla cancellazione dell'account (vedi §8 per i dati resi anonimi)</td></tr>
+    <tr><td>Bilanciamento del gioco tramite statistiche aggregate sulle unità</td>
+      <td>Legittimo interesse al miglioramento del gioco (art. 6.1.f)</td>
+      <td>Fino alla cancellazione dell'account, poi solo in forma non riconducibile a te</td></tr>
+    <tr><td>Sicurezza, prevenzione abusi e diagnosi dei malfunzionamenti (log dei server)</td>
+      <td>Legittimo interesse alla sicurezza del servizio (art. 6.1.f)</td>
+      <td>30 giorni</td></tr>
+    <tr><td>Registrazione dei contributi e visualizzazione del totale raccolto</td>
+      <td>Esecuzione del contratto (art. 6.1.b) e obblighi di legge contabili e fiscali
+      (art. 6.1.c)</td>
+      <td>Per il periodo previsto dalla normativa fiscale (in Italia, 10 anni)</td></tr>
+  </table>
+  <p>Il conferimento dei dati dell'account è necessario solo per usare le funzioni online:
+  senza di essi puoi comunque giocare come ospite.</p>
+
+  <h2>5. Dati visibili ad altri giocatori</h2>
+  <p>Il tuo <strong>nome utente</strong>, il punteggio MMR e le statistiche di gioco sono
+  visibili agli altri giocatori nelle partite online e nella <strong>classifica
+  pubblica</strong>. L'indirizzo email e gli identificativi interni non sono mai mostrati.
+  Se accedi con Google e non desideri che il nome del tuo profilo compaia, usa l'accesso
+  con email e password scegliendo un nome utente di fantasia.</p>
+
+  <h2>6. Destinatari e fornitori</h2>
+  <p>I dati non sono venduti né ceduti a terzi per finalità proprie. Sono comunicati solo ai
+  seguenti fornitori, nei limiti necessari al servizio:</p>
   <ul>
-    <li><strong>Solo se effettui l'accesso con Google:</strong> indirizzo email e
-      nome del profilo Google, tramite Google Sign-In.</li>
-    <li>Statistiche di gioco (partite giocate, vittorie, piazzamenti, punteggio MMR).</li>
-    <li>Cronologia delle partite online in forma aggregata.</li>
+    <li><strong>Hetzner Online GmbH</strong> (Germania) — hosting dei server e del database,
+      in qualità di responsabile del trattamento; i dati sono conservati nell'Unione
+      Europea.</li>
+    <li><strong>Google</strong> — autenticazione tramite Google Sign-In e gestione dei
+      pagamenti tramite Google Play, che agisce come titolare autonomo secondo la propria
+      informativa (<a href="https://policies.google.com/privacy">policies.google.com/privacy</a>).</li>
+    <li><strong>RevenueCat, Inc.</strong> (Stati Uniti) — gestione tecnica degli acquisti
+      in-app, in qualità di responsabile del trattamento
+      (<a href="https://www.revenuecat.com/privacy">revenuecat.com/privacy</a>).</li>
   </ul>
-  <p>Senza accesso il gioco è pienamente utilizzabile come ospite e non viene
-  raccolto alcun dato personale su un server.</p>
+  <p>Potremmo inoltre comunicare i dati alle autorità quando richiesto dalla legge.</p>
 
-  <h2>Finalità e base giuridica</h2>
-  <p>I dati servono a far funzionare l'account, il matchmaking e le classifiche
-  (esecuzione del servizio richiesto dall'utente, art. 6.1.b GDPR).</p>
+  <h2>7. Trasferimenti fuori dall'Unione Europea</h2>
+  <p>Google e RevenueCat possono trattare i dati negli Stati Uniti. Tali trasferimenti
+  avvengono sulla base della decisione di adeguatezza UE–USA (EU-U.S. Data Privacy
+  Framework), per le società certificate, o delle clausole contrattuali standard approvate
+  dalla Commissione europea (art. 46 GDPR).</p>
 
-  <h2>Dove sono conservati</h2>
-  <p>Su un server gestito dal titolare, ospitato in Unione Europea (Germania,
-  Hetzner). Nessun dato è venduto o ceduto a terzi.
-  L'unico fornitore esterno coinvolto è Google, limitatamente all'autenticazione.</p>
+  <h2>8. Cancellazione dell'account</h2>
+  <p>Puoi eliminare l'account in qualsiasi momento dall'App
+  (<a href="/elimina-account">istruzioni</a>). La cancellazione è immediata e comporta
+  l'eliminazione di profilo, email, nome utente, credenziali, sessioni, statistiche e
+  preferenze. Restano conservati soltanto:</p>
+  <ul>
+    <li>i risultati delle partite online già concluse, associati a un identificativo
+      casuale non più collegato ad alcun profilo e quindi non riconducibile a te: gli altri
+      giocatori di quelle partite continuano a vederne l'esito;</li>
+    <li>i dati delle transazioni di acquisto, per gli obblighi di legge indicati al §4;</li>
+    <li>i log tecnici, fino alla loro scadenza di 30 giorni.</li>
+  </ul>
+  <p>I dati trattati da Google e RevenueCat restano soggetti alle rispettive politiche; per
+  la loro cancellazione puoi contattare noi, che inoltreremo la richiesta, o direttamente
+  il fornitore.</p>
 
-  <h2>Conservazione</h2>
-  <p>I dati dell'account restano finché l'account esiste. Le sessioni di accesso
-  scadono automaticamente dopo 7 giorni.</p>
+  <h2>9. I tuoi diritti</h2>
+  <p>Nei limiti previsti dagli artt. 15–22 GDPR hai diritto di: accedere ai tuoi dati;
+  chiederne la rettifica o la cancellazione; chiedere la limitazione del trattamento;
+  ricevere i dati in formato strutturato (portabilità); <strong>opporti</strong> al
+  trattamento basato sul legittimo interesse. Per esercitarli scrivi a
+  <a href="mailto:angelo.falci94@gmail.com">angelo.falci94@gmail.com</a>: risponderemo
+  entro un mese. Potremmo chiederti di scrivere dall'indirizzo email dell'account per
+  verificare la tua identità.</p>
+  <p>Hai inoltre il diritto di proporre reclamo all'autorità di controllo: in Italia il
+  <strong>Garante per la protezione dei dati personali</strong>
+  (<a href="https://www.garanteprivacy.it">garanteprivacy.it</a>), oppure l'autorità del
+  Paese UE in cui risiedi o lavori.</p>
 
-  <h2>I tuoi diritti</h2>
-  <p>Hai diritto di accesso, rettifica, cancellazione, limitazione e portabilità.
-  Puoi eliminare l'account e tutti i dati collegati in autonomia:
-  <a href="/elimina-account">istruzioni per la cancellazione</a>. Per ogni altra
-  richiesta scrivi a <a href="mailto:angelo.falci94@gmail.com">angelo.falci94@gmail.com</a>.</p>
+  <h2>10. Processi decisionali automatizzati</h2>
+  <p>L'abbinamento tra giocatori e il calcolo del punteggio MMR sono automatici, ma
+  riguardano solo lo svolgimento del gioco e non producono effetti giuridici né incidono
+  in modo significativo sulla tua persona (art. 22 GDPR).</p>
 
-  <h2>Minori</h2>
-  <p>Il servizio non è rivolto a minori di 13 anni.</p>
+  <h2>11. Minori</h2>
+  <p>I servizi online dell'App non sono rivolti a minori di <strong>13 anni</strong>, che non
+  devono creare un account. Se hai un'età inferiore a quella del consenso digitale prevista
+  nel tuo Paese (in Italia 14 anni), puoi creare un account solo con l'autorizzazione di chi
+  esercita la responsabilità genitoriale. Se veniamo a sapere che un account appartiene a un
+  minore di 13 anni, lo cancelliamo. I genitori possono segnalarlo all'indirizzo indicato al
+  §1.</p>
+
+  <h2>12. Sicurezza</h2>
+  <p>Le comunicazioni con i server sono cifrate (TLS). Le password e i token di accesso sono
+  conservati solo in forma di hash, il database non è esposto su Internet e l'accesso ai
+  server è limitato. Nessun sistema è però sicuro al 100%: in caso di violazione dei dati
+  che comporti un rischio per te, ti informeremo come previsto dagli artt. 33–34 GDPR.</p>
+
+  <h2>13. Cookie</h2>
+  <p>L'App e queste pagine web non utilizzano cookie né tecnologie di tracciamento.</p>
+
+  <h2>14. Modifiche</h2>
+  <p>Questa informativa può essere aggiornata, ad esempio per l'introduzione di nuove
+  funzioni. La data di ultimo aggiornamento è indicata in alto; in caso di modifiche
+  rilevanti te ne daremo avviso nell'App.</p>
 </body>
 </html>
