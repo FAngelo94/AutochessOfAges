@@ -26,10 +26,11 @@ var sfx_volume: float = 0.8
 ## Volume della musica di sottofondo, lineare 0..1. Preferenza di dispositivo
 ## come sfx_volume: non va sul server.
 var music_volume: float = 0.2
-## Lingua scelta esplicitamente ("it"/"en"), vuota se mai scelta: in quel caso
-## si segue la lingua del sistema operativo. Preferenza di dispositivo come
+## Lingua dell'app ("it"/"en"). Inglese finché il giocatore non ne sceglie
+## un'altra, poi resta quella salvata. Preferenza di dispositivo come
 ## combat_speed: non va sul server.
-var locale: String = ""
+const DEFAULT_LOCALE := "en"
+var locale: String = DEFAULT_LOCALE
 ## Ultima modalità scelta nel menu ("cpu" / "pvp"). Vuota al primo avvio. La
 ## stringa non è validata qui: ui/menu.gd la confronta con le proprie costanti e
 ## ricade su "contro il computer" se non la riconosce, così app/ non deve
@@ -91,7 +92,10 @@ func load_profile() -> void:
 	combat_speed = float(config.get_value("preferences", "combat_speed", 1.0))
 	sfx_volume = float(config.get_value("preferences", "sfx_volume", 0.8))
 	music_volume = float(config.get_value("preferences", "music_volume", 0.2))
+	# Profili vecchi salvano "" per "mai scelta": vale il default.
 	locale = String(config.get_value("preferences", "locale", ""))
+	if locale == "":
+		locale = DEFAULT_LOCALE
 	match_mode = String(config.get_value("preferences", "match_mode", ""))
 	matches_played = int(config.get_value("stats", "matches_played", 0))
 	best_placement = int(config.get_value("stats", "best_placement", 0))
@@ -186,8 +190,7 @@ func set_locale(value: String) -> void:
 ## Applica il locale corrente a TranslationServer. Chiamata sia da set_locale()
 ## sia all'avvio (login.gd), prima che qualunque testo venga costruito.
 func apply_locale() -> void:
-	if locale != "":
-		TranslationServer.set_locale(locale)
+	TranslationServer.set_locale(locale)
 	GameData.reload()
 	Catalog.reload()
 

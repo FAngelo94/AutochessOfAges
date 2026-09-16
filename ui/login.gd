@@ -161,7 +161,7 @@ func _language_switch_button(label: String, locale_id: String, current: String) 
 	button.text = label
 	button.custom_minimum_size = Vector2(52, 44)
 	button.add_theme_font_size_override("font_size", 16)
-	if locale_id == current or (current == "" and locale_id == "it"):
+	if locale_id == current:
 		Style.apply_plate(button, Style.GOLD, Style.GOLD_DEEP, 12, 4)
 		button.add_theme_color_override("font_color", Style.INK)
 	else:

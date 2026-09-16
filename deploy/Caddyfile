@@ -58,13 +58,15 @@ game.tuodominio.it {
 	}
 
 	# --- pagine statiche obbligatorie per il Play Store / GDPR ---
-	# installare i file: sudo install -d /opt/autochess/www &&
-	#   sudo cp deploy/www/*.html /opt/autochess/www/
-	# personalizzare privacy.html col proprio testo e contatto.
-	@pages path /privacy /elimina-account
+	# installare i file: sudo install -d /opt/autochess/www/it &&
+	#   sudo cp deploy/www/*.html /opt/autochess/www/ &&
+	#   sudo cp deploy/www/it/*.html /opt/autochess/www/it/
+	# inglese di default, italiano sotto /it — personalizzare col proprio contatto.
+	# inglese (default) a /..., italiano sotto /it/...
+	@pages path / /privacy /termini /elimina-account /it /it/privacy /it/termini /it/elimina-account
 	handle @pages {
 		root * /opt/autochess/www
-		try_files {path}.html
+		try_files {path} {path}.html {path}/index.html index.html
 		file_server
 	}
 

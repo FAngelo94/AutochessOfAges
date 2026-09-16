@@ -210,7 +210,7 @@ func _language_button(label: String, locale_id: String, current: String) -> Butt
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	button.add_theme_font_size_override("font_size", 18)
-	if locale_id == current or (current == "" and locale_id == "it"):
+	if locale_id == current:
 		Style.apply_plate(button, Style.GOLD, Style.GOLD_DEEP, 14, 4)
 		button.add_theme_color_override("font_color", Style.INK)
 	else:
