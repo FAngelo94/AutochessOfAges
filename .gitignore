@@ -26,3 +26,8 @@ android/.build_version
 
 # keystore passwords for Android export
 export_presets.cfg.credentials
+
+# official keystore files for Android export
+*.jks
+
+*.secret
