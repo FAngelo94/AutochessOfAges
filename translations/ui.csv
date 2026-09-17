@@ -63,9 +63,9 @@ LOGIN_PASSWORDS_DONT_MATCH,Le password non coincidono.,Passwords don't match.
 LOGIN_PASSWORD_TOO_SHORT,La password deve avere almeno 8 caratteri.,Password must be at least 8 characters long.
 UI_BACK,Indietro,Back
 UI_SELECT,Seleziona,Select
-MENU_QUIT,Esci,Quit
 MENU_SUBTITLE,Legionari e Barbari,Legions and Barbarians
 MENU_PLAY,BATTAGLIA,BATTLE
+MENU_TAB_BATTLE,Battaglia,Battle
 MENU_CHOOSE_MODE,SCEGLI MODALITÀ,CHOOSE MODE
 MENU_CHOOSE_HERO,SCEGLI EROE,CHOOSE HERO
 MENU_MODE_CPU,Contro il computer,Against the computer

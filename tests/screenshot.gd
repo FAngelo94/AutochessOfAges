@@ -50,15 +50,15 @@ func _process(_delta: float) -> bool:
 		6:
 			_save("menu.png")
 			# La guida non mostra modelli 3D: non serve attendere i ritratti.
-			_menu._on_guide_pressed()
+			_menu.select_tab(_menu.TAB_GUIDE, false)
 		7:
 			_save("guida.png")
-			_menu._guide_panel.visible = false
+			_menu.select_tab(_menu.TAB_BATTLE, false)
 			_menu._settings_panel.open()
 		8:
 			_save("impostazioni.png")
 			_menu._settings_panel.visible = false
-			_menu._on_collection_pressed()
+			_menu.select_tab(_menu.TAB_COLLECTION, false)
 			_waiting_portraits = true
 		11:
 			_save("collezione.png")
@@ -114,16 +114,25 @@ func _process(_delta: float) -> bool:
 			_menu = (load("res://ui/menu.tscn") as PackedScene).instantiate()
 			root.add_child(_menu)
 		58:
-			_menu._history_panel.open()
+			_menu._on_history_pressed()
+			_menu.select_tab(_menu.TAB_HISTORY, false)
 		59:
 			_save("cronologia.png")
-			_menu._history_panel.visible = false
 			# Nessun server qui: si mostra una risposta finta con la stessa
 			# funzione che usa la callback di rete.
-			_menu._leaderboard_panel.visible = true
+			_menu._on_leaderboard_pressed()
 			_menu._leaderboard_panel.show_data(_fake_leaderboard())
 		60:
 			_save("classifica.png")
+			_menu.select_tab(_menu.TAB_STORE, false)
+		61:
+			_save("negozio.png")
+			# Metà scorrimento: la prova visiva che la transizione fa vedere le
+			# due pagine affiancate invece di saltare.
+			_menu.select_tab(_menu.TAB_COLLECTION)
+		64:
+			_save("transizione.png")
+		80:
 			var profile := root.get_node("/root/Profile")
 			profile.seen_tips = _saved_tips
 			profile.save_profile()

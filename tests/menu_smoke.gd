@@ -75,10 +75,12 @@ func _run() -> void:
 		"ci sono tante opzioni eroe quanti eroi in heroes.json",
 		str(_menu._hero_option_buttons.size()))
 
+	_check_tabs()
+
 	# Collezione: si apre, elenca tutte le unità e mostra una scheda.
 	_menu._on_collection_pressed()
 	var collection: CollectionPanel = _menu._collection_panel
-	check(collection.visible, "la collezione si apre")
+	check(_menu._current_tab == _menu.TAB_COLLECTION and collection.visible, "la collezione si apre")
 	check(collection._grid.get_child_count() == GameData.all_units().size(),
 		"la collezione elenca tutte le unità (una casella per unità)",
 		"%d di %d" % [collection._grid.get_child_count(), GameData.all_units().size()])
@@ -92,7 +94,6 @@ func _run() -> void:
 			romans += 1
 	check(collection._grid.get_child_count() == romans,
 		"il filtro per civiltà riduce l'elenco", str(collection._grid.get_child_count()))
-	collection.visible = false
 
 	# Cronologia: da ospite (nessun login) deve aprirsi lo stesso e mostrare le
 	# sole partite locali, senza errori — e' il percorso di chi gioca offline.
@@ -104,12 +105,11 @@ func _run() -> void:
 			{"mode": "cpu", "placement": 2, "hero_id": "cesare", "hp": 30,
 			 "ended_at": "2026-01-01T10:00:00", "units": [{"unit_id": "legionarius", "final_star": 2}]}]))
 		restore.close()
-	history.open()
-	check(history.visible, "la cronologia si apre")
+	_menu._on_history_pressed()
+	check(_menu._current_tab == _menu.TAB_HISTORY and history.visible, "la cronologia si apre")
 	check(history._list.get_child_count() == 1,
 		"la cronologia elenca le partite locali", str(history._list.get_child_count()))
 	check(history._status.text.contains("1"), "dice quante partite ci sono", history._status.text)
-	history.visible = false
 	var put_back := FileAccess.open(MatchLog.HISTORY_PATH, FileAccess.WRITE)
 	if put_back != null:
 		put_back.store_string(JSON.stringify(saved_history))
@@ -117,8 +117,8 @@ func _run() -> void:
 
 	# Classifica: esiste solo online. Da ospite si apre e lo dice, senza lista.
 	var leaderboard: LeaderboardPanel = _menu._leaderboard_panel
-	leaderboard.open()
-	check(leaderboard.visible, "la classifica si apre")
+	_menu._on_leaderboard_pressed()
+	check(leaderboard.visible and not history.visible, "la classifica si apre al posto della cronologia")
 	check(leaderboard._list.get_child_count() == 0, "da ospite la classifica è vuota",
 		str(leaderboard._list.get_child_count()))
 	check(leaderboard._status.text.contains("Accedi"), "da ospite chiede di accedere",
@@ -130,13 +130,16 @@ func _run() -> void:
 	check(leaderboard._list.get_child_count() == 3, "fuori dai primi c'è la propria riga in fondo",
 		str(leaderboard._list.get_child_count()))
 	check(leaderboard._status.text.contains("140"), "dice la propria posizione", leaderboard._status.text)
-	leaderboard.visible = false
+	_menu.select_tab(_menu.TAB_BATTLE, false)
+	_menu.select_tab(_menu.TAB_HISTORY, false)
+	check(leaderboard.visible, "la cronologia ricorda il segmento classifica")
+	_menu._show_history_section(false)
 
 	# Guida: si apre, elenca tutti i capitoli e marca la voce come vista.
 	check(not _profile.has_seen_tip("guide_opened"), "la guida non è ancora stata vista")
 	_menu._on_guide_pressed()
 	var guide: GuidePanel = _menu._guide_panel
-	check(guide.visible, "la guida si apre")
+	check(_menu._current_tab == _menu.TAB_GUIDE and guide.visible, "la guida si apre")
 	check(_profile.has_seen_tip("guide_opened"), "aprire la guida marca la voce come vista")
 
 	var sections: Array = GameData.guide_sections()
@@ -146,7 +149,6 @@ func _run() -> void:
 		if "{" in body:
 			bad_placeholder = String(section.get("id", ""))
 	check(bad_placeholder == "", "nessun segnaposto resta non sostituito nella guida", bad_placeholder)
-	guide.visible = false
 
 	# reset_tips() rimette in coda tutto, incluso il pulsante della guida.
 	_profile.mark_tip_seen("shop")
@@ -158,9 +160,9 @@ func _run() -> void:
 	# l'unico punto d'ingresso, la schermata di battaglia non ha più un
 	# proprio pulsante carrello.
 	_menu._on_store_pressed()
-	check(_menu._store_panel.visible, "il negozio si apre dal menu")
+	check(_menu._current_tab == _menu.TAB_STORE, "il negozio si apre dal menu")
 	_check_store_panel(_menu)
-	_menu._store_panel.visible = false
+	_menu.select_tab(_menu.TAB_BATTLE, false)
 
 	# Modalità: la scelta si salva sul profilo e si ritrova al rientro nel menu.
 	# Il valore salvato va scritto e ripristinato esplicitamente: leggere lo stato
@@ -343,6 +345,88 @@ func _restore_profile() -> void:
 	_profile.best_placement = _saved_best
 	_profile.seen_tips = _saved_tips
 	_profile.save_profile()
+
+
+## Home a schede: si parte da Battaglia, le pagine scorrono con un'animazione
+## e lo swipe orizzontale cambia scheda senza rubare gli scroll verticali.
+func _check_tabs() -> void:
+	var width: float = _menu._pages_clip.size.x
+	check(_menu._current_tab == _menu.TAB_BATTLE, "il menu parte dalla scheda battaglia")
+	check(_menu._tab_buttons.size() == 5, "ci sono cinque schede", str(_menu._tab_buttons.size()))
+	check(is_equal_approx(_menu._pages_strip.position.x, -2.0 * width),
+		"la pagina battaglia è quella inquadrata", str(_menu._pages_strip.position.x))
+
+	var close_text := TranslationServer.translate("UI_CLOSE")
+	var with_close := ""
+	for panel: Control in [_menu._store_panel, _menu._collection_panel, _menu._guide_panel,
+			_menu._history_panel, _menu._leaderboard_panel]:
+		if _has_button_text(panel, close_text):
+			with_close = panel.get_class() + " " + str(panel.get_script().get_global_name())
+	check(with_close == "", "i pannelli in home non hanno il pulsante chiudi", with_close)
+
+	# Mai verso la Guida qui: aprirla la marca come vista, e un controllo più
+	# sotto verifica proprio che non lo sia ancora.
+	_menu.select_tab(_menu.TAB_HISTORY)
+	check(_menu._page_tween != null and _menu._page_tween.is_running(),
+		"cambiare scheda avvia l'animazione di scorrimento")
+	check(is_equal_approx(_menu._pages_strip.position.x, -2.0 * width),
+		"l'animazione parte dalla pagina precedente, non salta all'arrivo")
+	_menu.select_tab(_menu.TAB_BATTLE, false)
+	check(is_equal_approx(_menu._pages_strip.position.x, -2.0 * width) and not _menu._page_tween.is_valid(),
+		"senza animazione la pagina è subito al suo posto")
+
+	_menu.select_tab(_menu.TAB_STORE, false)
+	check(is_equal_approx(_menu._pages_strip.position.x, 0.0), "il negozio è la prima pagina a sinistra")
+	check(_menu._hero_viewport.render_target_update_mode == SubViewport.UPDATE_DISABLED,
+		"fuori dalla scheda battaglia l'eroe 3D non si disegna")
+	_menu.select_tab(_menu.TAB_BATTLE, false)
+	check(_menu._hero_viewport.render_target_update_mode == SubViewport.UPDATE_ALWAYS,
+		"tornati in battaglia l'eroe 3D si disegna di nuovo")
+
+	_menu.select_tab(_menu.TAB_STORE, false)
+	_swipe(Vector2(620, 600), Vector2(320, 610))
+	check(_menu._current_tab == _menu.TAB_COLLECTION, "uno swipe verso sinistra passa alla scheda a destra",
+		str(_menu._current_tab))
+	_swipe(Vector2(320, 600), Vector2(620, 590))
+	check(_menu._current_tab == _menu.TAB_STORE, "uno swipe verso destra torna alla scheda a sinistra",
+		str(_menu._current_tab))
+	_menu.select_tab(_menu.TAB_BATTLE, false)
+	_swipe(Vector2(620, 900), Vector2(560, 400))
+	check(_menu._current_tab == _menu.TAB_BATTLE, "uno scroll verticale non cambia scheda")
+	_swipe(Vector2(620, 600), Vector2(590, 600))
+	check(_menu._current_tab == _menu.TAB_BATTLE, "un trascinamento corto non cambia scheda")
+	_menu.select_tab(_menu.TAB_STORE, false)
+	_swipe(Vector2(320, 600), Vector2(620, 600))
+	check(_menu._current_tab == _menu.TAB_STORE, "dalla prima scheda non si va oltre")
+	_menu.select_tab(_menu.TAB_BATTLE, false)
+	_menu._mode_panel.visible = true
+	_swipe(Vector2(620, 600), Vector2(320, 600))
+	check(_menu._current_tab == _menu.TAB_BATTLE, "con una modale aperta lo swipe non cambia scheda")
+	_menu._mode_panel.visible = false
+	_menu.select_tab(_menu.TAB_BATTLE, false)
+
+
+func _swipe(from: Vector2, to: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = from
+	_menu._input(down)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = to
+	_menu._input(up)
+	_menu.select_tab(_menu._current_tab, false)
+
+
+func _has_button_text(node: Node, text: String) -> bool:
+	if node is Button and (node as Button).text == text:
+		return true
+	for child in node.get_children():
+		if _has_button_text(child, text):
+			return true
+	return false
 
 
 func check(condition: bool, label: String, detail: String = "") -> void:

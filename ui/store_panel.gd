@@ -22,6 +22,11 @@ extends Panel
 
 signal closed
 
+## Vero quando il pannello è una pagina della home a schede (ui/menu.gd):
+## niente pulsante Chiudi — si esce cambiando scheda — e resta visibile dentro
+## la sua pagina. Va impostato prima di add_child, che fa partire _ready().
+var embedded := false
+
 ## La barra è pubblica: il totale arriva dal server, che lo somma dalle righe
 ## scritte dal webhook di RevenueCat. Solo col negozio finto, in sviluppo, si
 ## ripiega sul totale locale — altrimenti la barra resterebbe a zero e non si
@@ -50,7 +55,7 @@ var _auth: Node
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_theme_stylebox_override("panel", Style.box(Style.SKY_TOP, Style.SKY_TOP, 0, 0))
-	visible = false
+	visible = embedded
 	_store = get_node("/root/Store")
 	_auth = get_node_or_null("/root/Auth")
 	_build()
@@ -72,8 +77,8 @@ func _build() -> void:
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 22)
 	margin.add_theme_constant_override("margin_right", 22)
-	margin.add_theme_constant_override("margin_top", _safe_top_margin())
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_top", Style.safe_top_margin())
+	margin.add_theme_constant_override("margin_bottom", 8 if embedded else 18)
 	add_child(margin)
 
 	var column := VBoxContainer.new()
@@ -108,37 +113,16 @@ func _build() -> void:
 	body.add_child(_build_progress())
 	body.add_child(_build_goals())
 
-	var close := Button.new()
-	close.text = tr("UI_CLOSE")
-	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-	close.add_theme_font_size_override("font_size", 26)
-	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
-	close.pressed.connect(func() -> void:
-		visible = false
-		closed.emit())
-	column.add_child(close)
-
-
-## Margine superiore che tiene conto del ritaglio della fotocamera frontale.
-##
-## Su molti telefoni la fotocamera sta in alto al centro e si mangia i primi
-## ~100 px: con un margine fisso il titolo ci finisce sotto. Il sistema sa dove
-## comincia l'area sicura, quindi la si chiede a lui invece di indovinare un
-## numero che andrebbe bene su un solo modello.
-##
-## La conversione non e' un dettaglio: l'area sicura e' in pixel di SCHERMO,
-## mentre il progetto disegna in unita' di una viewport larga 720
-## (stretch canvas_items). Usare i pixel cosi' come arrivano darebbe un margine
-## enorme su un telefono ad alta densita'.
-func _safe_top_margin() -> int:
-	const BASE := 38
-	var screen := DisplayServer.screen_get_size()
-	if screen.x <= 0:
-		return BASE   # headless o schermo non interrogabile
-	var safe := DisplayServer.get_display_safe_area()
-	var ui_width := float(ProjectSettings.get_setting("display/window/size/viewport_width", 720))
-	var inset := int(safe.position.y * (ui_width / float(screen.x)))
-	return maxi(BASE, inset + 12)
+	if not embedded:
+		var close := Button.new()
+		close.text = tr("UI_CLOSE")
+		close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+		close.add_theme_font_size_override("font_size", 26)
+		Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
+		close.pressed.connect(func() -> void:
+			visible = false
+			closed.emit())
+		column.add_child(close)
 
 
 ## I tagli, tre per riga. L'importo È il pulsante: donare è un gesto singolo e

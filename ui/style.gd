@@ -185,6 +185,40 @@ static func apply_plate(button: Button, fill: Color, edge: Color, radius: int = 
 	button.add_theme_stylebox_override("disabled", plate(fill.darkened(0.30), edge.darkened(0.40), radius, lip))
 
 
+## Margine superiore che tiene conto del ritaglio della fotocamera frontale.
+##
+## Su molti telefoni la fotocamera sta in alto al centro e si mangia i primi
+## ~100 px: con un margine fisso il titolo ci finisce sotto. Il sistema sa dove
+## comincia l'area sicura, quindi la si chiede a lui invece di indovinare.
+##
+## La conversione non e' un dettaglio: l'area sicura e' in pixel di SCHERMO,
+## mentre il progetto disegna in unita' di una viewport larga 720
+## (stretch canvas_items). Usare i pixel cosi' come arrivano darebbe un margine
+## enorme su un telefono ad alta densita'.
+static func safe_top_margin(base: int = 38) -> int:
+	return maxi(base, _safe_insets().x + 12)
+
+
+## Quanto la barra dei gesti di sistema copre il fondo dello schermo, in unità
+## della viewport. 0 dove non esiste (desktop, headless).
+static func safe_bottom_inset() -> int:
+	return _safe_insets().y
+
+
+static func _safe_insets() -> Vector2i:
+	var screen := DisplayServer.screen_get_size()
+	if screen.x <= 0 or screen.y <= 0:
+		return Vector2i.ZERO   # headless o schermo non interrogabile
+	var safe := DisplayServer.get_display_safe_area()
+	if safe.size.x <= 0 or safe.size.y <= 0:
+		return Vector2i.ZERO
+	var ui_width := float(ProjectSettings.get_setting("display/window/size/viewport_width", 720))
+	var scale := ui_width / float(screen.x)
+	var top := int(safe.position.y * scale)
+	var bottom := int(maxf(0.0, float(screen.y - (safe.position.y + safe.size.y))) * scale)
+	return Vector2i(top, bottom)
+
+
 ## Fondale sfumato come TextureRect: un ColorRect piatto su schermo lungo fa
 ## sembrare il menu una pagina vuota con roba in mezzo.
 static func backdrop(top: Color, bottom: Color) -> TextureRect:

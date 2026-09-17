@@ -13,6 +13,11 @@ extends Panel
 
 signal closed
 
+## Vero quando il pannello è una pagina della home a schede (ui/menu.gd):
+## niente pulsante Chiudi — si esce cambiando scheda — e resta visibile dentro
+## la sua pagina. Va impostato prima di add_child, che fa partire _ready().
+var embedded := false
+
 ## Quanti giocatori chiedere. Il tetto vero lo impone il master (LEADERBOARD_MAX).
 const REMOTE_LIMIT := 100
 
@@ -27,7 +32,7 @@ var _requested := false
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_theme_stylebox_override("panel", Style.box(Style.SKY_TOP, Style.SKY_TOP, 0, 0))
-	visible = false
+	visible = embedded
 	_build()
 
 
@@ -43,8 +48,8 @@ func _build() -> void:
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 20)
 	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_top", 38)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_top", 12 if embedded else Style.safe_top_margin())
+	margin.add_theme_constant_override("margin_bottom", 8 if embedded else 18)
 	add_child(margin)
 
 	var column := VBoxContainer.new()
@@ -73,15 +78,16 @@ func _build() -> void:
 	_list.add_theme_constant_override("separation", 8)
 	scroll.add_child(_list)
 
-	var close := Button.new()
-	close.text = tr("UI_CLOSE")
-	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-	close.add_theme_font_size_override("font_size", 26)
-	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
-	close.pressed.connect(func() -> void:
-		visible = false
-		closed.emit())
-	column.add_child(close)
+	if not embedded:
+		var close := Button.new()
+		close.text = tr("UI_CLOSE")
+		close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+		close.add_theme_font_size_override("font_size", 26)
+		Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
+		close.pressed.connect(func() -> void:
+			visible = false
+			closed.emit())
+		column.add_child(close)
 
 
 func _fetch() -> void:

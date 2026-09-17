@@ -15,12 +15,20 @@ extends Panel
 
 signal closed
 
+## Vero quando il pannello è una pagina della home a schede (ui/menu.gd):
+## niente pulsante Chiudi — si esce cambiando scheda — e resta visibile dentro
+## la sua pagina. Va impostato prima di add_child, che fa partire _ready().
+var embedded := false
+
 ## Tre colonne: su 720 px di larghezza ogni casella resta sopra i 200 px, cioè
 ## abbastanza da far leggere la figura. Con sei diventavano francobolli.
 const GRID_COLUMNS := 3
 const SLOT_SIZE := Vector2(206, 184)
 
 var _grid: GridContainer
+## Filtri a scorrimento orizzontale: la home a schede non ci fa partire lo
+## swipe di pagina sopra.
+var filter_scroll: ScrollContainer
 var _detail: RichTextLabel
 var _detail_sheet: Panel
 var _detail_viewport: SubViewport
@@ -55,7 +63,7 @@ const AUTO_ROTATE_SPEED := TAU / 24.0
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_theme_stylebox_override("panel", Style.box(Style.SKY_TOP, Style.SKY_TOP, 0, 0))
-	visible = false
+	visible = embedded
 	_build()
 
 
@@ -80,8 +88,8 @@ func _build() -> void:
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 20)
 	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_top", 38)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_top", Style.safe_top_margin())
+	margin.add_theme_constant_override("margin_bottom", 8 if embedded else 18)
 	add_child(margin)
 
 	var column := VBoxContainer.new()
@@ -96,7 +104,7 @@ func _build() -> void:
 
 	# I filtri scorrono in orizzontale: con quattro civiltà ci stanno, con otto
 	# no, e una riga che va a capo da sola sposterebbe la griglia ogni volta.
-	var filter_scroll := ScrollContainer.new()
+	filter_scroll = ScrollContainer.new()
 	filter_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	filter_scroll.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
 	column.add_child(filter_scroll)
@@ -123,15 +131,16 @@ func _build() -> void:
 	_grid.add_theme_constant_override("v_separation", 10)
 	scroll.add_child(_grid)
 
-	var close := Button.new()
-	close.text = tr("UI_CLOSE")
-	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-	close.add_theme_font_size_override("font_size", 26)
-	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
-	close.pressed.connect(func() -> void:
-		visible = false
-		closed.emit())
-	column.add_child(close)
+	if not embedded:
+		var close := Button.new()
+		close.text = tr("UI_CLOSE")
+		close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+		close.add_theme_font_size_override("font_size", 26)
+		Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
+		close.pressed.connect(func() -> void:
+			visible = false
+			closed.emit())
+		column.add_child(close)
 
 	_build_detail_sheet()
 

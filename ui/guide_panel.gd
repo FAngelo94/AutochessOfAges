@@ -8,14 +8,20 @@ extends Panel
 
 signal closed
 
+## Vero quando il pannello è una pagina della home a schede (ui/menu.gd):
+## niente pulsante Chiudi — si esce cambiando scheda — e resta visibile dentro
+## la sua pagina. Va impostato prima di add_child, che fa partire _ready().
+var embedded := false
+
 var _reset_tips_button: Button
 var _reset_tips_label: Label
+var _sections_scroll: ScrollContainer
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_theme_stylebox_override("panel", Style.box(Style.SKY_TOP, Style.SKY_TOP, 0, 0))
-	visible = false
+	visible = embedded
 	_build()
 
 
@@ -31,8 +37,8 @@ func _build() -> void:
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 20)
 	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_top", 38)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_top", Style.safe_top_margin())
+	margin.add_theme_constant_override("margin_bottom", 8 if embedded else 18)
 	add_child(margin)
 
 	var column := VBoxContainer.new()
@@ -49,6 +55,7 @@ func _build() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	column.add_child(scroll)
+	_sections_scroll = scroll
 
 	var sections := VBoxContainer.new()
 	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -60,15 +67,16 @@ func _build() -> void:
 
 	sections.add_child(_reset_tips_row())
 
-	var close := Button.new()
-	close.text = tr("UI_CLOSE")
-	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-	close.add_theme_font_size_override("font_size", 26)
-	Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
-	close.pressed.connect(func() -> void:
-		visible = false
-		closed.emit())
-	column.add_child(close)
+	if not embedded:
+		var close := Button.new()
+		close.text = tr("UI_CLOSE")
+		close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+		close.add_theme_font_size_override("font_size", 26)
+		Style.apply_plate(close, Style.BLUE, Style.BLUE_DEEP, 18, 6)
+		close.pressed.connect(func() -> void:
+			visible = false
+			closed.emit())
+		column.add_child(close)
 
 
 func _chapter(entry: Dictionary) -> Control:
@@ -120,6 +128,15 @@ func _reset_tips_row() -> Control:
 	return card
 
 
+## L'ultima riga del capitolo finale: senza scorrere fin lì e senza risaltare
+## dal grigio scarico dei sottotitoli, la conferma passa inosservata proprio
+## quando l'utente sta guardando il pulsante appena premuto, più in alto.
 func _on_reset_tips_pressed() -> void:
 	get_node("/root/Profile").reset_tips()
 	_reset_tips_label.text = tr("GUIDE_TIPS_RESET_DONE")
+	_reset_tips_label.add_theme_color_override("font_color", Style.GOLD)
+	# La label deve prima riprendere la sua dimensione col nuovo testo, o
+	# ensure_control_visible scorre sul rettangolo vuoto di un istante fa.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_sections_scroll.ensure_control_visible(_reset_tips_label)

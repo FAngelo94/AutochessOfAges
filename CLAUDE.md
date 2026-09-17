@@ -136,7 +136,7 @@ authoritative multiplayer (server simulates, client replays) and for reproducibl
 | `core/match_state.gd` | rounds, pairings, damage, eliminations |
 | `core/bot_brain.gd` | opponent prep AI |
 | `ui/login.gd` | login screen — **this is the main scene**: Google, email/password, or guest |
-| `ui/menu.gd` | start screen, reached only after login/guest; hero selection lives here |
+| `ui/menu.gd` | start screen, reached only after login/guest: 5-tab home (Store, Collection, Battle, Guide, History) with a fixed bottom bar, animated horizontal page slide and swipe; Battle is the landing tab and holds hero/mode selection; Leaderboard is a segment inside History, Settings a ⚙️ on the Battle page |
 | `ui/castle_backdrop.gd` | `class_name CastleBackdrop` — the runtime-drawn castle facade, shared by login and menu |
 | `ui/lobby.gd` | matchmaking waiting room (queue count + 30s countdown) |
 | `ui/main.gd` | in-match screen; local mode unchanged, remote mode shows prep timer + PRONTO |
@@ -268,7 +268,9 @@ the "saved" copy too, silently defeating the test's own restore step.
 `ui/login.tscn` is the main scene; it gates `ui/menu.tscn` behind a login (Google, email/password,
 or guest) and is skipped straight to the menu when the backend is unconfigured, already logged in,
 or already guest — see `tests/auth_smoke.gd` for the invariant. From the menu you enter a match,
-and from a match you return via **Menu** (not back through login). Keeping these as separate
+and from a match you return via **Menu** (not back through login). Inside the menu, Store/Collection/Guide/History/Leaderboard
+panels are built with `embedded = true` (set before `add_child`): no Close button, they are pages of the tab pager and
+never hide themselves — switch pages with `select_tab()`, not by toggling `visible`. Keeping these as separate
 scenes (instead of overlapping panels) guarantees every match starts from a clean state, since the
 scene change destroys the previous one.
 

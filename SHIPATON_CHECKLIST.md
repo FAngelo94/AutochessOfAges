@@ -18,7 +18,7 @@ Fonti:
 - [ ] **RevenueCat in produzione**: `data/catalog.json` usa ancora la chiave Test Store (`test_…`). Servono la chiave di produzione, i prodotti delle donazioni creati su Play Console e collegati a RevenueCat, e un acquisto reale verificato.
 - [ ] **Materiali in inglese**: descrizione, istruzioni di test e video in inglese (o con traduzione inglese).
 - [ ] **Video demo**: meno di 2 minuti, pubblico su YouTube o Vimeo, registrato sul dispositivo, senza musica protetta da copyright se non si ha il permesso (verificare la licenza di `audio/prep_theme.ogg`).
-- [ ] **Icona 1024×1024**: oggi esiste solo `icon.svg`.
+- [x] **Icona 1024×1024**: oggi esiste solo `icon.svg`.
 - [ ] **Screenshot 1179×2556** senza cornice del dispositivo (almeno uno): il viewport del gioco è 720×1280, quindi va generato apposta.
 - [ ] **Accesso per i giudici**: il regolamento chiede una prova gratuita o un codice promo per sbloccare gli acquisti. Oggi un acquisto non sblocca ancora nulla nell'app (le estetiche arrivano col prossimo aggiornamento): spiegarlo nelle istruzioni di test, oppure consegnare già qualcosa di visibile (anche solo un badge "sostenitore") da far vedere ai giudici con un codice promo.
 - [ ] **Disponibilità negli Stati Uniti**: includerli nei paesi di distribuzione.
@@ -28,9 +28,9 @@ Fonti:
 
 - [x] **Target SDK**: `export_presets.cfg` ha `target_sdk="36"`.
 - [x] **Keystore di release** + export **AAB** firmato.
-- [ ] **Privacy policy** e **pagina di cancellazione account** compilate e online.
-- [ ] **Data safety form** e **content rating** (IARC) su Play Console.
-- [ ] **Consenso OAuth Google** portato da "Testing" a "In produzione".
+- [x] **Privacy policy** e **pagina di cancellazione account** compilate e online.
+- [x] **Data safety form** e **content rating** (IARC) su Play Console.
+- [x] **Consenso OAuth Google** portato da "Testing" a "In produzione".
 
 ## Da chiarire
 

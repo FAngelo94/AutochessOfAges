@@ -7,9 +7,11 @@ extends Control
 ## — significa che iniziare una partita ricrea sempre uno stato pulito: nessun
 ## residuo del round precedente può sopravvivere a un cambio di scena.
 ##
-## Il layout è pensato per il portrait 720×1280: una colonna sola, che riempie
-## la larghezza invece di stare in una colonna centrata, e nessun bersaglio
-## tattile sotto Style.TOUCH_MIN.
+## Il layout è pensato per il portrait 720×1280. La home è a schede: cinque
+## pagine affiancate (Negozio, Collezione, Battaglia, Guida, Cronologia) che
+## scorrono in orizzontale, e una barra fissa in basso per sceglierle — oltre
+## allo swipe. Battaglia è la scheda di partenza e l'unica da cui si entra in
+## partita. Nessun bersaglio tattile sotto Style.TOUCH_MIN.
 
 const GAME_SCENE := "res://ui/main.tscn"
 const LOBBY_SCENE := "res://ui/lobby.tscn"
@@ -17,13 +19,34 @@ const LOBBY_SCENE := "res://ui/lobby.tscn"
 const MODE_CPU := "cpu"
 const MODE_PVP := "pvp"
 
+const TAB_STORE := 0
+const TAB_COLLECTION := 1
+const TAB_BATTLE := 2
+const TAB_GUIDE := 3
+const TAB_HISTORY := 4
+const TAB_COUNT := 5
+
+## Altezza della barra delle schede, sopra l'eventuale barra dei gesti: icona
+## più etichetta su due righe, e mai sotto il minimo tattile.
+const TAB_BAR_HEIGHT := 112
+## La scheda Battaglia sporge sopra la barra: è il cuore della home anche
+## quando si sta guardando un'altra pagina.
+const TAB_CENTER_RAISE := 18
+const PAGE_SLIDE_SECONDS := 0.3
+## Spostamento orizzontale minimo perché un trascinamento conti come swipe, e
+## rapporto minimo orizzontale/verticale: sotto, è uno scroll verticale.
+const SWIPE_MIN_PX := 90.0
+const SWIPE_AXIS_RATIO := 1.6
+
 
 ## Vetrina 3D dell'eroe in cima alla schermata: stesse proporzioni della
 ## scheda unità in collezione, ma qui il modello è vivo e ruotabile a
 ## trascinamento invece che una posa fissa.
-const HERO_VIEW_SIZE := 240
+const HERO_VIEW_SIZE := 480
 const HERO_CAMERA_OFFSET := Vector3(0, 1.35, 2.35)
 const HERO_ZOOM := 1.5
+## Un giro completo ogni 24 secondi, come nella scheda di dettaglio.
+const HERO_AUTO_ROTATE_SPEED := TAU / 24.0
 
 ## Vetrina 3D della scheda di dettaglio eroe: stessa impostazione di quella in
 ## home. La modale è ancorata all'84% dello schermo (_build_small_modal), con
@@ -47,7 +70,6 @@ var _collection_panel: CollectionPanel
 var _history_panel: HistoryPanel
 var _leaderboard_panel: LeaderboardPanel
 var _guide_panel: GuidePanel
-var _guide_button: Button
 var _settings_panel: SettingsPanel
 var _mode_panel: Panel
 var _mode_button: Button
@@ -58,6 +80,33 @@ var _match_mode: String = MODE_CPU
 ## l'mmr esiste solo per un account, calcolato server-side dopo ogni partita
 ## classificata (db/migrations/0002_rank_mmr.sql).
 var _rank_label: Label
+
+## Pager: _pages_clip ritaglia, _pages_strip è la fila delle cinque pagine
+## affiancate che scorre in x. _pages è indicizzato con le costanti TAB_*.
+var _current_tab := TAB_BATTLE
+var _pages_clip: Control
+var _pages_strip: Control
+var _pages: Array[Control] = []
+var _tab_buttons: Array[Button] = []
+var _tab_indicator: ColorRect
+var _page_tween: Tween
+var _indicator_tween: Tween
+var _swipe_start := Vector2.ZERO
+var _swipe_tracking := false
+## Zone in cui un trascinamento orizzontale ha già un significato (ruotare
+## l'eroe, scorrere i filtri della collezione): lì non si cambia pagina.
+var _swipe_blockers: Array[Control] = []
+
+var _history_toggle_matches: Button
+var _history_toggle_leaderboard: Button
+
+## Colonna con tutto il contenuto e spaziatore elastico in cima: dentro uno
+## ScrollContainer SIZE_EXPAND_FILL non basta più da solo (il contenitore
+## dimensiona il figlio al suo minimo, non riempie lo spazio), quindi
+## _apply_layout() calcola a mano quanto vuoto avanzare al suo interno.
+var _content_column: VBoxContainer
+var _content_scroll: ScrollContainer
+var _grow_spacer: Control
 
 var _hero_panel: Panel
 var _hero_button: Button
@@ -72,6 +121,9 @@ var _hero_camera: Camera3D
 var _hero_model_root: Node3D
 var _hero_dragging := false
 var _hero_drag_last_x := 0.0
+## Vero finché il giocatore non tocca il modello in home: si spegne al primo
+## drag, come nella scheda di dettaglio.
+var _hero_auto_rotating := true
 
 var _hero_detail_panel: Panel
 var _hero_detail_id: String = ""
@@ -91,6 +143,8 @@ var _hero_detail_select: Button
 
 
 func _process(delta: float) -> void:
+	if _hero_auto_rotating and _hero_model_root != null:
+		_hero_model_root.rotate_y(HERO_AUTO_ROTATE_SPEED * delta)
 	if _hero_detail_auto_rotating and _hero_detail_panel != null and _hero_detail_panel.visible \
 			and _hero_detail_model_root != null:
 		_hero_detail_model_root.rotate_y(HERO_DETAIL_AUTO_ROTATE_SPEED * delta)
@@ -106,6 +160,7 @@ func _ready() -> void:
 		_music.play_general()
 	_match_mode = _restored_mode()
 	_build()
+	_apply_layout()
 	_refresh_rank_label()
 	var auth := get_node_or_null("/root/Auth")
 	if auth != null:
@@ -132,7 +187,71 @@ func _ready() -> void:
 
 func _build() -> void:
 	add_child(Style.backdrop(Style.SKY_TOP, Style.SKY_BOTTOM))
-	add_child(CastleBackdrop.new())
+	var bar_height := TAB_BAR_HEIGHT + Style.safe_bottom_inset()
+
+	_pages_clip = Control.new()
+	_pages_clip.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pages_clip.offset_bottom = -bar_height
+	# Senza ritaglio le pagine vicine si vedrebbero ai lati durante lo
+	# scorrimento, e riceverebbero i tocchi fuori dallo schermo.
+	_pages_clip.clip_contents = true
+	_pages_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_pages_clip)
+
+	_pages_strip = Control.new()
+	_pages_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pages_clip.add_child(_pages_strip)
+
+	_store_panel = StorePanel.new()
+	_store_panel.embedded = true
+	_collection_panel = CollectionPanel.new()
+	_collection_panel.embedded = true
+	_guide_panel = GuidePanel.new()
+	_guide_panel.embedded = true
+
+	# Stesso ordine delle costanti TAB_*.
+	_add_page(_build_panel_page(_store_panel))
+	_add_page(_build_panel_page(_collection_panel))
+	_add_page(_build_battle_page())
+	_add_page(_build_panel_page(_guide_panel))
+	_add_page(_build_history_page())
+	_swipe_blockers.append(_collection_panel.filter_scroll)
+
+	add_child(_build_tab_bar(bar_height))
+
+	# Tutto ciò che segue sta sopra pagine e barra: le modali le coprono.
+	_settings_panel = SettingsPanel.new()
+	add_child(_settings_panel)
+
+	_build_mode_panel()
+	_update_mode_button()
+	_build_hero_panel()
+	_build_hero_detail_panel()
+	_update_hero_button()
+
+	_pages_clip.resized.connect(_layout_pages)
+	_layout_pages()
+	select_tab(TAB_BATTLE, false)
+
+
+func _add_page(page: Control) -> void:
+	page.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pages_strip.add_child(page)
+	_pages.append(page)
+
+
+## Una pagina che è un pannello esistente in modalità incorporata: il pannello
+## si ancora da solo a tutta la pagina nel suo _ready().
+func _build_panel_page(panel: Panel) -> Control:
+	var page := Control.new()
+	page.add_child(panel)
+	return page
+
+
+## La home vera e propria: castello, eroe, grado e BATTAGLIA.
+func _build_battle_page() -> Control:
+	var page := Control.new()
+	page.add_child(CastleBackdrop.new())
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -143,58 +262,397 @@ func _build() -> void:
 	margin.add_theme_constant_override("margin_right", int(CastleBackdrop.COLUMN_W) + 14)
 	margin.add_theme_constant_override("margin_top", int(CastleBackdrop.SPRING_Y) + 16)
 	margin.add_theme_constant_override("margin_bottom", int(CastleBackdrop.FLOOR_H) + 6)
-	add_child(margin)
+	page.add_child(margin)
+
+	# Su schermi bassi il contenuto non ci sta tutto in una volta: scorrimento
+	# solo verticale come rete di sicurezza, la larghezza resta quella della
+	# colonna.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	margin.add_child(scroll)
+	_content_scroll = scroll
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 16)
-	margin.add_child(column)
+	column.add_theme_constant_override("separation", 10)
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(column)
+	_content_column = column
 
 	# Il titolo è ancorato in alto, appena sotto l'arco: se galleggiasse su uno
 	# spaziatore elastico si staccherebbe dalla cornice su ogni schermo diverso.
 	column.add_child(_banner())
-	column.add_child(_grow())
+	_grow_spacer = _grow()
+	column.add_child(_grow_spacer)
 	column.add_child(_hero_display())
 	_rank_label = _rank_readout()
 	column.add_child(_rank_label)
-	column.add_child(_spacer(6))
 	column.add_child(_battle_row())
-	column.add_child(_nav_bar())
 
-	# Su Android e Web l'uscita non ha senso: là si esce dal sistema operativo
-	# o chiudendo la scheda, e un pulsante che non fa nulla è peggio che assente.
-	if OS.get_name() not in ["Android", "Web", "iOS"]:
-		var quit := Button.new()
-		quit.text = tr("MENU_QUIT")
-		quit.flat = true
-		quit.custom_minimum_size = Vector2(0, 56)
-		quit.add_theme_font_size_override("font_size", 20)
-		quit.add_theme_color_override("font_color", Style.TEXT_DIM)
-		quit.pressed.connect(func() -> void: get_tree().quit())
-		column.add_child(quit)
+	# Impostazioni: un'icona nell'angolo, non una scheda — si aprono di rado.
+	var settings_button := Button.new()
+	settings_button.text = "⚙️"
+	settings_button.add_theme_font_size_override("font_size", 26)
+	Style.apply_plate(settings_button, Style.PLATE, Style.PLATE_DARK, 18, 6)
+	settings_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	settings_button.offset_right = -12
+	settings_button.offset_left = -12 - Style.TOUCH_MIN
+	settings_button.offset_top = Style.safe_top_margin(12)
+	settings_button.offset_bottom = settings_button.offset_top + Style.TOUCH_MIN
+	settings_button.pressed.connect(func() -> void: _settings_panel.open())
+	page.add_child(settings_button)
 
-	_store_panel = StorePanel.new()
-	add_child(_store_panel)
+	return page
 
-	_collection_panel = CollectionPanel.new()
-	add_child(_collection_panel)
+
+## Cronologia e classifica condividono la pagina: un selettore a due segmenti
+## in cima sceglie quale dei due pannelli mostrare.
+func _build_history_page() -> Control:
+	var page := Control.new()
+	page.add_child(Style.backdrop(Style.SKY_TOP, Style.SKY_BOTTOM))
+
+	var column := VBoxContainer.new()
+	column.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	column.add_theme_constant_override("separation", 0)
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	page.add_child(column)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", Style.safe_top_margin())
+	margin.add_theme_constant_override("margin_bottom", 0)
+	column.add_child(margin)
+
+	var toggle := HBoxContainer.new()
+	toggle.add_theme_constant_override("separation", 10)
+	margin.add_child(toggle)
+
+	_history_toggle_matches = Button.new()
+	_history_toggle_matches.text = "📜 " + tr("MENU_HISTORY")
+	_history_toggle_leaderboard = Button.new()
+	_history_toggle_leaderboard.text = "🏆 " + tr("MENU_LEADERBOARD")
+	for button: Button in [_history_toggle_matches, _history_toggle_leaderboard]:
+		button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.add_theme_font_size_override("font_size", 20)
+		toggle.add_child(button)
+	_history_toggle_matches.pressed.connect(func() -> void: _show_history_section(false))
+	_history_toggle_leaderboard.pressed.connect(func() -> void: _show_history_section(true))
+
+	var body := Control.new()
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(body)
 
 	_history_panel = HistoryPanel.new()
-	add_child(_history_panel)
-
+	_history_panel.embedded = true
+	body.add_child(_history_panel)
 	_leaderboard_panel = LeaderboardPanel.new()
-	add_child(_leaderboard_panel)
+	_leaderboard_panel.embedded = true
+	body.add_child(_leaderboard_panel)
+	_show_history_section(false, false)
 
-	_guide_panel = GuidePanel.new()
-	add_child(_guide_panel)
+	return page
 
-	_settings_panel = SettingsPanel.new()
-	add_child(_settings_panel)
 
-	_build_mode_panel()
-	_update_mode_button()
-	_build_hero_panel()
-	_build_hero_detail_panel()
-	_update_hero_button()
+func _build_tab_bar(bar_height: int) -> Control:
+	var bar := Control.new()
+	bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	bar.offset_top = -bar_height
+	bar.offset_bottom = 0
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var background := Panel.new()
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var style := Style.box(Style.STONE_DARK, Style.GOLD_DEEP, 0, 0)
+	style.border_width_top = 3
+	background.add_theme_stylebox_override("panel", style)
+	bar.add_child(background)
+
+	# La fila sale di TAB_CENTER_RAISE sopra la barra: solo la scheda centrale
+	# è abbastanza alta da occupare quello spazio, le altre stanno in basso.
+	var row := HBoxContainer.new()
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 6
+	row.offset_right = -6
+	row.offset_top = -TAB_CENTER_RAISE
+	row.offset_bottom = -Style.safe_bottom_inset() - 4
+	row.add_theme_constant_override("separation", 4)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(row)
+
+	row.add_child(_tab_button(TAB_STORE, "🛒", "MENU_STORE"))
+	row.add_child(_tab_button(TAB_COLLECTION, "🎴", "MENU_COLLECTION"))
+	row.add_child(_tab_button(TAB_BATTLE, "⚔️", "MENU_TAB_BATTLE"))
+	row.add_child(_tab_button(TAB_GUIDE, "📖", "MENU_GUIDE"))
+	row.add_child(_tab_button(TAB_HISTORY, "📜", "MENU_HISTORY"))
+
+	# Filo d'oro che scivola sopra la scheda attiva insieme alle pagine: dice
+	# da dove si arriva e dove si va.
+	_tab_indicator = ColorRect.new()
+	_tab_indicator.color = Style.GOLD
+	_tab_indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tab_indicator.size = Vector2(0, 5)
+	bar.add_child(_tab_indicator)
+	row.sort_children.connect(func() -> void: _move_tab_indicator(false))
+
+	return bar
+
+
+func _tab_button(index: int, icon: String, label_key: String) -> Button:
+	var button := Button.new()
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.size_flags_stretch_ratio = 1.15 if index == TAB_BATTLE else 1.0
+	button.size_flags_vertical = Control.SIZE_SHRINK_END
+	var height := TAB_BAR_HEIGHT - 8 + (TAB_CENTER_RAISE if index == TAB_BATTLE else 0)
+	button.custom_minimum_size = Vector2(0, maxi(height, Style.TOUCH_MIN))
+	button.tooltip_text = tr(label_key)
+	button.pressed.connect(func() -> void: select_tab(index))
+
+	# Icona e nome come etichette dentro al pulsante: nel testo del Button
+	# l'emoji verrebbe della stessa taglia del nome, cioè illeggibile. Le
+	# etichette ignorano il mouse, quindi il tocco resta tutto del pulsante.
+	var stack := VBoxContainer.new()
+	stack.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	stack.add_theme_constant_override("separation", 0)
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(stack)
+
+	var icon_label := Label.new()
+	icon_label.name = "Icon"
+	icon_label.text = icon
+	icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon_label.add_theme_font_size_override("font_size", 34 if index == TAB_BATTLE else 30)
+	icon_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.add_child(icon_label)
+
+	var name_label := Label.new()
+	name_label.name = "Name"
+	name_label.text = tr(label_key)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.clip_text = true
+	name_label.add_theme_font_size_override("font_size", 18 if index == TAB_BATTLE else 16)
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.add_child(name_label)
+
+	_tab_buttons.append(button)
+	return button
+
+
+## Posizioni delle pagine dalla larghezza reale del ritaglio. Un resize non
+## anima nulla: rimette la fila esattamente sulla pagina corrente.
+func _layout_pages() -> void:
+	if _pages_clip == null:
+		return
+	var page_size := _pages_clip.size
+	for i in _pages.size():
+		_pages[i].position = Vector2(i * page_size.x, 0)
+		_pages[i].size = page_size
+	_pages_strip.size = Vector2(TAB_COUNT * page_size.x, page_size.y)
+	if _page_tween != null and _page_tween.is_valid():
+		_page_tween.kill()
+	_pages_strip.position = Vector2(-_current_tab * page_size.x, 0)
+	_move_tab_indicator(false)
+	_apply_layout()
+
+
+## Cambia scheda facendo scorrere la fila delle pagine. La direzione viene dal
+## segno della differenza: una scheda a destra entra da destra, e viceversa.
+func select_tab(index: int, animate: bool = true) -> void:
+	index = clampi(index, 0, TAB_COUNT - 1)
+	if index == _current_tab and animate:
+		return
+	var previous := _current_tab
+	_current_tab = index
+	if previous == TAB_COLLECTION and index != TAB_COLLECTION:
+		_collection_panel._detail_sheet.visible = false
+
+	var target_x := -index * _pages_clip.size.x
+	if _page_tween != null and _page_tween.is_valid():
+		_page_tween.kill()
+	if animate and is_inside_tree():
+		# Durante lo scorrimento si vedono sia la pagina di partenza sia quella
+		# d'arrivo: il rendering dell'eroe si spegne solo a scorrimento finito.
+		_set_hero_rendering(true)
+		_page_tween = create_tween()
+		_page_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_page_tween.tween_property(_pages_strip, "position:x", target_x, PAGE_SLIDE_SECONDS)
+		_page_tween.finished.connect(func() -> void: _set_hero_rendering(_current_tab == TAB_BATTLE))
+	else:
+		_pages_strip.position.x = target_x
+		_set_hero_rendering(index == TAB_BATTLE)
+
+	_on_tab_activated(index)
+	_update_tab_buttons()
+	_move_tab_indicator(animate)
+
+
+func _set_hero_rendering(on: bool) -> void:
+	if _hero_viewport != null:
+		_hero_viewport.render_target_update_mode = \
+				SubViewport.UPDATE_ALWAYS if on else SubViewport.UPDATE_DISABLED
+
+
+func _on_tab_activated(index: int) -> void:
+	match index:
+		TAB_STORE:
+			_store_panel.open()
+		TAB_COLLECTION:
+			_collection_panel.open()
+		TAB_GUIDE:
+			_guide_panel.open()
+		TAB_HISTORY:
+			_show_history_section(_leaderboard_panel.visible)
+
+
+func _show_history_section(leaderboard: bool, open_panel: bool = true) -> void:
+	_history_panel.visible = not leaderboard
+	_leaderboard_panel.visible = leaderboard
+	if open_panel:
+		if leaderboard:
+			_leaderboard_panel.open()
+		else:
+			_history_panel.open()
+	for pair in [[_history_toggle_matches, not leaderboard], [_history_toggle_leaderboard, leaderboard]]:
+		var button: Button = pair[0]
+		var active: bool = pair[1]
+		Style.apply_plate(button, Style.GOLD if active else Style.PLATE, Style.GOLD_DEEP if active else Style.PLATE_DARK, 18, 6)
+		_set_font_color(button, Style.INK if active else Style.TEXT_DIM)
+
+
+## Scheda attiva dorata. La Guida, finché non è mai stata aperta, resta blu con
+## nome d'oro e un punto: richiama l'occhio senza sembrare già selezionata.
+func _update_tab_buttons() -> void:
+	var guide_unseen: bool = not _profile.has_seen_tip("guide_opened")
+	for i in _tab_buttons.size():
+		var button := _tab_buttons[i]
+		var name_label := button.find_child("Name", true, false) as Label
+		var text := name_label.text.trim_prefix("• ")
+		var color := Style.TEXT_DIM
+		if i == _current_tab:
+			Style.apply_plate(button, Style.GOLD, Style.GOLD_DEEP, 16, 6)
+			color = Style.INK
+		elif i == TAB_GUIDE and guide_unseen:
+			Style.apply_plate(button, Style.BLUE, Style.BLUE_DEEP, 16, 6)
+			color = Style.GOLD
+			text = "• " + text
+		elif i == TAB_BATTLE:
+			Style.apply_plate(button, Style.STONE, Style.GOLD_DEEP, 16, 6)
+			color = Style.GOLD
+		else:
+			Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 16, 6)
+		name_label.text = text
+		name_label.add_theme_color_override("font_color", color)
+
+
+func _set_font_color(button: Button, color: Color) -> void:
+	for key in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		button.add_theme_color_override(key, color)
+
+
+func _move_tab_indicator(animate: bool) -> void:
+	if _tab_indicator == null or _current_tab >= _tab_buttons.size():
+		return
+	var button := _tab_buttons[_current_tab]
+	var bar := _tab_indicator.get_parent() as Control
+	var target := Vector2(button.global_position.x - bar.global_position.x + 14,
+			button.global_position.y - bar.global_position.y - 9)
+	var width := maxf(0.0, button.size.x - 28)
+	if _indicator_tween != null and _indicator_tween.is_valid():
+		_indicator_tween.kill()
+	if animate and is_inside_tree():
+		_indicator_tween = create_tween().set_parallel(true)
+		_indicator_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_indicator_tween.tween_property(_tab_indicator, "position", target, PAGE_SLIDE_SECONDS)
+		_indicator_tween.tween_property(_tab_indicator, "size:x", width, PAGE_SLIDE_SECONDS)
+	else:
+		_tab_indicator.position = target
+		_tab_indicator.size.x = width
+
+
+## Swipe: si osserva e basta, senza consumare l'evento — un tocco breve deve
+## arrivare comunque ai pulsanti, uno verticale agli scroll. Sul telefono il
+## tocco arriva anche come mouse emulato: basta ascoltare quello.
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var mb := event as InputEventMouseButton
+	if mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if mb.pressed:
+		_swipe_tracking = _swipe_allowed_at(mb.position)
+		_swipe_start = mb.position
+		return
+	if not _swipe_tracking:
+		return
+	_swipe_tracking = false
+	var d := mb.position - _swipe_start
+	if absf(d.x) >= SWIPE_MIN_PX and absf(d.x) >= absf(d.y) * SWIPE_AXIS_RATIO:
+		select_tab(_current_tab + (1 if d.x < 0 else -1))
+
+
+func _swipe_allowed_at(point: Vector2) -> bool:
+	if _any_modal_open():
+		return false
+	if _pages_clip == null or not _pages_clip.get_global_rect().has_point(point):
+		return false
+	for blocker in _swipe_blockers:
+		if blocker != null and blocker.is_visible_in_tree() and blocker.get_global_rect().has_point(point):
+			return false
+	return true
+
+
+func _any_modal_open() -> bool:
+	for panel: Control in [_hero_panel, _hero_detail_panel, _mode_panel, _settings_panel]:
+		if panel != null and panel.visible:
+			return true
+	return _collection_panel != null and _collection_panel._detail_sheet != null \
+			and _collection_panel._detail_sheet.visible
+
+
+## Tasto indietro di Android: chiude la modale aperta, poi riporta alla
+## scheda Battaglia, e solo da lì esce dal gioco.
+func _enter_tree() -> void:
+	get_tree().quit_on_go_back = false
+
+
+func _exit_tree() -> void:
+	get_tree().quit_on_go_back = true
+
+
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_GO_BACK_REQUEST:
+		return
+	if _any_modal_open():
+		for panel: Control in [_hero_panel, _hero_detail_panel, _mode_panel, _settings_panel]:
+			panel.visible = false
+		_collection_panel._detail_sheet.visible = false
+	elif _current_tab != TAB_BATTLE:
+		select_tab(TAB_BATTLE)
+	else:
+		get_tree().quit()
+
+
+## Dentro uno ScrollContainer il figlio è dimensionato al proprio minimo, non
+## riempie il contenitore: _grow_spacer con SIZE_EXPAND_FILL da solo non fa
+## più nulla, quindi qui si misura a mano quanto avanza e lo si dà a lui, così
+## eroe e pulsanti restano spinti in basso invece di ammucchiarsi sotto al
+## titolo con un vuoto sotto — esattamente il buco lasciato da Esci. Se il
+## contenuto non ci sta (schermo basso), lo spazio calcolato è 0 e resta lo
+## scorrimento come rete di sicurezza.
+func _apply_layout() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if _content_column == null or _content_scroll == null or _grow_spacer == null:
+		return
+	var available := _content_scroll.size.y
+	# Il minimo della colonna include già il vuoto assegnato la volta prima:
+	# va tolto, o ogni ricalcolo (avvio, resize, layout delle pagine) ne
+	# restituirebbe solo una parte e i pulsanti risalirebbero.
+	var content_min := _content_column.get_combined_minimum_size().y - _grow_spacer.custom_minimum_size.y
+	_grow_spacer.custom_minimum_size.y = maxf(0.0, available - content_min)
 
 
 func _banner() -> Control:
@@ -226,8 +684,8 @@ func _hero_display() -> Control:
 	column.add_child(_hero_name_label)
 
 	var frame := PanelContainer.new()
-	frame.add_theme_stylebox_override("panel", Style.plate(Style.STONE.darkened(0.35), Style.GOLD_DEEP, 18, 6))
-	frame.custom_minimum_size = Vector2(0, HERO_VIEW_SIZE + 18)
+	frame.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	frame.custom_minimum_size = Vector2(0, HERO_VIEW_SIZE + 6)
 	column.add_child(frame)
 
 	var center := CenterContainer.new()
@@ -239,6 +697,7 @@ func _hero_display() -> Control:
 	viewport_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	viewport_container.gui_input.connect(_on_hero_viewport_input)
 	center.add_child(viewport_container)
+	_swipe_blockers.append(viewport_container)
 
 	_build_hero_viewport(viewport_container)
 
@@ -298,6 +757,8 @@ func _on_hero_viewport_input(event: InputEvent) -> void:
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			_hero_dragging = mb.pressed
 			_hero_drag_last_x = mb.position.x
+			if mb.pressed:
+				_hero_auto_rotating = false
 	elif event is InputEventMouseMotion and _hero_dragging:
 		var mm := event as InputEventMouseMotion
 		var delta_x := mm.position.x - _hero_drag_last_x
@@ -746,118 +1207,6 @@ func _open_hero_detail(hero_id: String) -> void:
 	_hero_detail_panel.visible = true
 
 
-## Due righe, non una. Su 720 px di larghezza tre etichette ("Guida",
-## "Collezione", "Negozio") piu' due icone non ci stanno: misurato, l'ultima
-## icona finiva mezza fuori dallo schermo. La cronologia scende quindi con le
-## impostazioni sulla seconda riga, dove ha spazio per il nome per esteso.
-func _nav_bar() -> Control:
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 10)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	column.add_child(row)
-
-	_guide_button = Button.new()
-	_guide_button.text = "📖 " + tr("MENU_GUIDE")
-	_guide_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-	_guide_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_guide_button.add_theme_font_size_override("font_size", 20)
-	_guide_button.pressed.connect(_on_guide_pressed)
-	row.add_child(_guide_button)
-	_update_guide_button()
-
-	for entry in [["🎴 " + tr("MENU_COLLECTION"), _on_collection_pressed], ["🛒 " + tr("MENU_STORE"), _on_store_pressed]]:
-		var button := Button.new()
-		button.text = String(entry[0])
-		button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 20)
-		Style.apply_plate(button, Style.BLUE, Style.BLUE_DEEP, 18, 6)
-		button.pressed.connect(entry[1] as Callable)
-		row.add_child(button)
-
-	var second := HBoxContainer.new()
-	second.add_theme_constant_override("separation", 10)
-	column.add_child(second)
-
-	# Solo icona, come l'ingranaggio: Cronologia resta la voce larga della riga.
-	var leaderboard_button := Button.new()
-	leaderboard_button.text = "🏆"
-	leaderboard_button.tooltip_text = tr("MENU_LEADERBOARD")
-	leaderboard_button.custom_minimum_size = Vector2(Style.TOUCH_MIN, Style.TOUCH_MIN)
-	leaderboard_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	leaderboard_button.add_theme_font_size_override("font_size", 20)
-	Style.apply_plate(leaderboard_button, Style.PLATE, Style.PLATE_DARK, 18, 6)
-	leaderboard_button.pressed.connect(func() -> void: _leaderboard_panel.open())
-	second.add_child(leaderboard_button)
-
-	var history_button := Button.new()
-	history_button.text = "📜 " + tr("MENU_HISTORY")
-	history_button.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-	history_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	history_button.add_theme_font_size_override("font_size", 20)
-	Style.apply_plate(history_button, Style.PLATE, Style.PLATE_DARK, 18, 6)
-	history_button.pressed.connect(func() -> void: _history_panel.open())
-	second.add_child(history_button)
-
-	# Solo icona: non toglie larghezza alla voce accanto.
-	var settings_button := Button.new()
-	settings_button.text = "⚙️"
-	settings_button.custom_minimum_size = Vector2(Style.TOUCH_MIN, Style.TOUCH_MIN)
-	settings_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	settings_button.add_theme_font_size_override("font_size", 20)
-	Style.apply_plate(settings_button, Style.PLATE, Style.PLATE_DARK, 18, 6)
-	settings_button.pressed.connect(func() -> void: _settings_panel.open())
-	second.add_child(settings_button)
-
-	return column
-
-
-## Il pulsante Guida è dorato finché non è mai stato aperto: è la seconda
-## cosa che si nota all'avvio dopo BATTAGLIA, senza aprirsi da sola — una
-## modale che compare al primo avvio si chiude senza essere letta.
-func _update_guide_button() -> void:
-	if _profile.has_seen_tip("guide_opened"):
-		Style.apply_plate(_guide_button, Style.BLUE, Style.BLUE_DEEP, 18, 6)
-	else:
-		Style.apply_plate(_guide_button, Style.GOLD, Style.GOLD_DEEP, 18, 6)
-		_guide_button.add_theme_color_override("font_color", Style.INK)
-
-
-func _on_guide_pressed() -> void:
-	_guide_panel.open()
-	_update_guide_button()
-
-
-## Titolo di sezione con un filo d'oro che corre fino al bordo: separa le
-## sezioni senza aggiungere un altro pannello, e riprende la ghiera dell'arco.
-func _section(text: String) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-
-	var label := Label.new()
-	label.text = text
-	label.add_theme_font_size_override("font_size", 19)
-	label.add_theme_color_override("font_color", Style.GOLD.darkened(0.2))
-	row.add_child(label)
-
-	var rule := ColorRect.new()
-	rule.color = Style.GOLD_DEEP.darkened(0.25)
-	rule.custom_minimum_size = Vector2(0, 2)
-	rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(rule)
-
-	return row
-
-
-func _spacer(height: int) -> Control:
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, height)
-	return spacer
-
-
 ## Spaziatore elastico: assorbe lui l'altezza in più dei telefoni allungati,
 ## così su 19.5:9 il menu si distribuisce invece di lasciare un buco in fondo.
 func _grow() -> Control:
@@ -904,11 +1253,25 @@ func _show_pvp_unavailable(message: String) -> void:
 
 
 func _on_collection_pressed() -> void:
-	_collection_panel.open()
+	select_tab(TAB_COLLECTION)
 
 
 func _on_store_pressed() -> void:
-	_store_panel.open()
+	select_tab(TAB_STORE)
+
+
+func _on_guide_pressed() -> void:
+	select_tab(TAB_GUIDE)
+
+
+func _on_history_pressed() -> void:
+	select_tab(TAB_HISTORY)
+	_show_history_section(false)
+
+
+func _on_leaderboard_pressed() -> void:
+	select_tab(TAB_HISTORY)
+	_show_history_section(true)
 
 
 ## La modalità salvata, o "contro il computer" se il profilo non ne ha ancora
