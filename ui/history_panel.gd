@@ -148,9 +148,9 @@ func _match_row(row: Dictionary) -> Control:
 		pad.add_theme_constant_override("margin_" + side, 10)
 	frame.add_child(pad)
 
-	var line := HBoxContainer.new()
-	line.add_theme_constant_override("separation", 12)
-	pad.add_child(line)
+	var outer := HBoxContainer.new()
+	outer.add_theme_constant_override("separation", 12)
+	pad.add_child(outer)
 
 	var badge := Label.new()
 	badge.text = tr("LEADERBOARD_ORDINAL") % placement if placement > 0 else "—"
@@ -158,24 +158,45 @@ func _match_row(row: Dictionary) -> Control:
 	badge.add_theme_font_size_override("font_size", 30)
 	badge.add_theme_color_override("font_color", _placement_color(placement))
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	line.add_child(badge)
+	outer.add_child(badge)
 
 	var column := VBoxContainer.new()
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_theme_constant_override("separation", 2)
-	line.add_child(column)
+	column.add_theme_constant_override("separation", 4)
+	outer.add_child(column)
 
-	var head := Label.new()
-	head.text = "%s · %s" % [_mode_label(row), _hero_label(String(row.get("hero_id", "")))]
-	head.add_theme_font_size_override("font_size", 20)
+	# Prima riga: modalità, eroe e vita rimasta insieme. La vita è l'esito
+	# immediato della partita — mostrarla qui, invece che in coda alla riga
+	# della data fra le altre informazioni, la fa risaltare.
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
 	column.add_child(head)
 
-	var detail := Label.new()
-	detail.text = _detail_text(row)
-	detail.add_theme_font_size_override("font_size", 16)
-	detail.add_theme_color_override("font_color", Style.TEXT_DIM)
-	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	column.add_child(detail)
+	var head_label := Label.new()
+	head_label.text = "%s · %s" % [_mode_label(row), _hero_label(String(row.get("hero_id", "")))]
+	head_label.add_theme_font_size_override("font_size", 20)
+	head_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(head_label)
+
+	var hp := int(row.get("hp", 0))
+	if hp > 0:
+		var hp_label := Label.new()
+		hp_label.text = tr("HISTORY_HP") % hp
+		hp_label.add_theme_font_size_override("font_size", 20)
+		hp_label.add_theme_color_override("font_color", Style.TORCH)
+		head.add_child(hp_label)
+
+	var when := String(row.get("ended_at", ""))
+	if when != "":
+		var date_label := Label.new()
+		date_label.text = when.replace("T", " ").left(16)
+		date_label.add_theme_font_size_override("font_size", 15)
+		date_label.add_theme_color_override("font_color", Style.TEXT_DIM)
+		column.add_child(date_label)
+
+	var icons := _unit_icons_row(row.get("units", []))
+	if icons != null:
+		column.add_child(icons)
 
 	var delta := int(row.get("mmr_delta", 0))
 	if delta != 0:
@@ -184,9 +205,51 @@ func _match_row(row: Dictionary) -> Control:
 		mmr.add_theme_font_size_override("font_size", 22)
 		mmr.add_theme_color_override("font_color", Style.GOLD if delta > 0 else Style.TEXT_DIM)
 		mmr.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		line.add_child(mmr)
+		outer.add_child(mmr)
 
 	return frame
+
+
+const UNIT_ICON_SIZE := Vector2(48, 48)
+
+## Le unità finali come le stesse caselline 2D della collezione — ritratto e
+## stella — invece del nome scritto: si riconoscono a colpo d'occhio. Nessun
+## rendering 3D qui: UnitSlot pesca dal magazzino di ritratti già pronto
+## (Portraits) e da solo mostra il proprio ripiego testuale se un ritratto non
+## è ancora arrivato.
+func _unit_icons_row(units: Variant) -> Control:
+	if typeof(units) != TYPE_ARRAY:
+		return null
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+
+	for entry in units:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var unit_id := String(entry.get("unit_id", ""))
+		if not GameData.has_unit(unit_id):
+			continue
+		var def := GameData.unit(unit_id)
+		var star := int(entry.get("final_star", 1))
+
+		var slot := UnitSlot.new()
+		slot.custom_minimum_size = UNIT_ICON_SIZE
+		slot.focus_mode = Control.FOCUS_NONE
+		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.show_unit(def, star, UnitSlot.Badge.STARS, Style.PANEL, Style.rarity_color(def.cost), 1)
+		row.add_child(slot)
+
+	if row.get_child_count() == 0:
+		return null
+
+	# Scorrimento orizzontale: una squadra piena (sei unità) non entra sempre
+	# nella larghezza della riga.
+	var scroll := ScrollContainer.new()
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, UNIT_ICON_SIZE.y)
+	scroll.add_child(row)
+	return scroll
 
 
 ## Il primo posto è oro, il resto sfuma: il colore dice l'esito prima del testo.
@@ -210,31 +273,3 @@ func _hero_label(hero_id: String) -> String:
 	return GameData.hero(hero_id).display_name
 
 
-## Seconda riga: data, unità finali, vita rimasta. Le unità arrivano già pronte
-## dal server (RPC player_match_history) o dalla telemetria locale.
-func _detail_text(row: Dictionary) -> String:
-	var bits: Array = []
-	var when := String(row.get("ended_at", ""))
-	if when != "":
-		bits.append(when.replace("T", " ").left(16))
-	var units := _unit_names(row.get("units", []))
-	if units != "":
-		bits.append(units)
-	if int(row.get("hp", 0)) > 0:
-		bits.append(tr("HISTORY_HP") % int(row["hp"]))
-	return "  ·  ".join(bits)
-
-
-func _unit_names(units: Variant) -> String:
-	if typeof(units) != TYPE_ARRAY:
-		return ""
-	var names: Array = []
-	for entry in units:
-		if typeof(entry) != TYPE_DICTIONARY:
-			continue
-		var unit_id := String(entry.get("unit_id", ""))
-		if not GameData.has_unit(unit_id):
-			continue
-		var star := int(entry.get("final_star", 1))
-		names.append(GameData.unit(unit_id).display_name + ("★".repeat(star) if star > 1 else ""))
-	return ", ".join(names)
