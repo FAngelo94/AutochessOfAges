@@ -38,6 +38,24 @@ var _detail_dragging := false
 var _detail_drag_last_x := 0.0
 var _filter_origin: String = ""
 var _filter_buttons: Dictionary = {}
+## Elenco (filtrato) mostrato in griglia, per scorrere avanti/indietro dalla
+## scheda di dettaglio senza doverla richiudere.
+var _shown_ids: Array[String] = []
+var _detail_index := -1
+var _detail_viewport_container: Control
+## Contenuto scorrevole (modello + testo) dentro la scheda: quello che scivola
+## durante l'animazione di cambio unità, frecce e pulsante Chiudi restano fermi.
+var _detail_content: Control
+var _detail_sliding := false
+var _swipe_tracking := false
+var _swipe_start := Vector2.ZERO
+## Stessa soglia dello swipe fra schede della home (ui/menu.gd).
+const SWIPE_MIN_PX := 90.0
+const SWIPE_AXIS_RATIO := 1.6
+## Stessa durata/curva dello scorrimento fra schede della home
+## (ui/menu.gd PAGE_SLIDE_SECONDS), qui applicata a metà corsa perché il
+## contenuto della scheda esce e rientra in due tratti separati.
+const DETAIL_SLIDE_SECONDS := 0.15
 ## Vero finché il giocatore non tocca il modello: si spegne al primo drag e
 ## resta spento per quell'unità (si riaccende mostrandone un'altra).
 var _auto_rotating := true
@@ -70,6 +88,70 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _auto_rotating and _detail_sheet != null and _detail_sheet.visible and _detail_model_root != null:
 		_detail_model_root.rotate_y(AUTO_ROTATE_SPEED * delta)
+
+
+## Scorrimento orizzontale sulla scheda di dettaglio: passa all'unità
+## successiva/precedente della griglia (filtrata) corrente senza chiudere la
+## scheda. Ignora i tocchi che partono sul modello 3D, che lì servono a
+## ruotarlo — stessa distinzione di ui/menu.gd fra swipe di pagina e i suoi
+## _swipe_blockers.
+func _input(event: InputEvent) -> void:
+	if _detail_sheet == null or not _detail_sheet.visible:
+		return
+	if not (event is InputEventMouseButton):
+		return
+	var mb := event as InputEventMouseButton
+	if mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if mb.pressed:
+		_swipe_tracking = not _point_in_detail_viewport(mb.position)
+		_swipe_start = mb.position
+		return
+	if not _swipe_tracking:
+		return
+	_swipe_tracking = false
+	var d := mb.position - _swipe_start
+	if absf(d.x) >= SWIPE_MIN_PX and absf(d.x) >= absf(d.y) * SWIPE_AXIS_RATIO:
+		_step_detail(1 if d.x < 0 else -1)
+
+
+func _point_in_detail_viewport(point: Vector2) -> bool:
+	return _detail_viewport_container != null and _detail_viewport_container.get_global_rect().has_point(point)
+
+
+## Gira in tondo (wrapi) invece di fermarsi ai bordi: la griglia è pensata per
+## essere sfogliata di seguito, non per farsi cercare l'ultima unità apposta.
+func _step_detail(direction: int) -> void:
+	if _detail_sliding or _detail_content == null:
+		return
+	if _shown_ids.size() <= 1 or _detail_index < 0:
+		return
+	_detail_index = wrapi(_detail_index + direction, 0, _shown_ids.size())
+	_slide_detail_to(_shown_ids[_detail_index], direction)
+
+
+## Stessa animazione di cambio scheda della home (ui/menu.gd select_tab): il
+## contenuto uscente scivola da un lato, quello nuovo entra dall'altro. Qui è
+## in due tempi anziché una sola fila che scorre, perché la scheda ha un solo
+## contenuto vivo (il viewport 3D) e non tante pagine già pronte affiancate.
+func _slide_detail_to(unit_id: String, direction: int) -> void:
+	_detail_sliding = true
+	var width := maxf(_detail_content.size.x, 1.0)
+
+	var out_tween := create_tween()
+	out_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	out_tween.tween_property(_detail_content, "position:x", -direction * width, DETAIL_SLIDE_SECONDS)
+	await out_tween.finished
+
+	_show_detail(unit_id)
+	_detail_content.position.x = direction * width
+
+	var in_tween := create_tween()
+	in_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	in_tween.tween_property(_detail_content, "position:x", 0.0, DETAIL_SLIDE_SECONDS)
+	await in_tween.finished
+
+	_detail_sliding = false
 
 
 func open() -> void:
@@ -180,10 +262,24 @@ func _build_detail_sheet() -> void:
 	column.add_theme_constant_override("separation", 12)
 	margin.add_child(column)
 
+	# Il contenuto scorrevole va ritagliato: senza clip_contents, farlo
+	# scivolare fuori durante l'animazione lo farebbe uscire dal riquadro
+	# invece di sparire dietro i bordi della scheda.
+	var clip := Control.new()
+	clip.clip_contents = true
+	clip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clip.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(clip)
+
+	_detail_content = VBoxContainer.new()
+	_detail_content.add_theme_constant_override("separation", 12)
+	_detail_content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	clip.add_child(_detail_content)
+
 	# Il modello 3D in cima, centrato: è la prima cosa che si vuole vedere
 	# aprendo la scheda di un'unità, prima ancora delle statistiche.
 	var viewport_center := CenterContainer.new()
-	column.add_child(viewport_center)
+	_detail_content.add_child(viewport_center)
 
 	var viewport_container := SubViewportContainer.new()
 	viewport_container.custom_minimum_size = Vector2(DETAIL_VIEW_SIZE, DETAIL_VIEW_SIZE)
@@ -191,6 +287,7 @@ func _build_detail_sheet() -> void:
 	viewport_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	viewport_container.gui_input.connect(_on_detail_viewport_input)
 	viewport_center.add_child(viewport_container)
+	_detail_viewport_container = viewport_container
 
 	_build_detail_viewport(viewport_container)
 
@@ -199,15 +296,38 @@ func _build_detail_sheet() -> void:
 	_detail.add_theme_font_size_override("normal_font_size", 20)
 	_detail.add_theme_font_size_override("bold_font_size", 20)
 	_detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(_detail)
+	_detail_content.add_child(_detail)
 
-	var back := Button.new()
-	back.text = tr("UI_BACK")
-	back.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
-	back.add_theme_font_size_override("font_size", 26)
-	Style.apply_plate(back, Style.PLATE, Style.PLATE_DARK, 18, 6)
-	back.pressed.connect(func() -> void: _detail_sheet.visible = false)
-	column.add_child(back)
+	# Frecce ai lati del pulsante Chiudi, non per tutta l'altezza della scheda:
+	# è una barra di navigazione, non una zona di tocco che copre il modello.
+	var bottom_row := HBoxContainer.new()
+	bottom_row.add_theme_constant_override("separation", 6)
+	column.add_child(bottom_row)
+
+	bottom_row.add_child(_nav_arrow_button("<", -1))
+
+	var close := Button.new()
+	close.text = tr("UI_CLOSE")
+	close.custom_minimum_size = Vector2(0, Style.TOUCH_MIN)
+	close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close.add_theme_font_size_override("font_size", 26)
+	Style.apply_plate(close, Style.PLATE, Style.PLATE_DARK, 18, 6)
+	close.pressed.connect(func() -> void: _detail_sheet.visible = false)
+	bottom_row.add_child(close)
+
+	bottom_row.add_child(_nav_arrow_button(">", 1))
+
+
+## Freccia laterale che sposta la scheda all'unità precedente/successiva.
+## direction è -1 (sinistra, unità precedente) o 1 (destra, unità successiva).
+func _nav_arrow_button(label: String, direction: int) -> Button:
+	var button := Button.new()
+	button.text = label
+	button.custom_minimum_size = Vector2(56, Style.TOUCH_MIN)
+	button.add_theme_font_size_override("font_size", 28)
+	Style.apply_plate(button, Style.PLATE, Style.PLATE_DARK, 14, 4)
+	button.pressed.connect(_step_detail.bind(direction))
+	return button
 
 
 ## Una postazione di rendering viva, non la texture statica di Portraits:
@@ -354,7 +474,12 @@ func _refresh() -> void:
 
 		_grid.add_child(entry)
 
+	_shown_ids.clear()
+	for def in shown:
+		_shown_ids.append(def.id)
+
 	if not shown.is_empty():
+		_detail_index = 0
 		_show_detail(shown[0].id)
 
 
@@ -363,6 +488,7 @@ func _refresh() -> void:
 ## aggiornata ma non mostrata — altrimenti aprire la collezione ti sbatterebbe
 ## dritto sulla prima unità invece che sulla griglia.
 func _open_detail(unit_id: String) -> void:
+	_detail_index = _shown_ids.find(unit_id)
 	_show_detail(unit_id)
 	_detail_sheet.visible = true
 

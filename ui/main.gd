@@ -1690,6 +1690,10 @@ func _start_new_match() -> void:
 
 	_session = _make_session()
 	_session.begin(_requested_seed(), _profile.effective_hero())
+	if session_mode == SessionMode.LOCAL:
+		var auth := get_node_or_null("/root/Auth")
+		if auth != null and auth.is_logged_in() and String(auth.username) != "":
+			_session.state().human_player().display_name = auth.username
 	_session.state_changed.connect(_refresh)
 	_session.round_concluded.connect(_on_round_concluded)
 	_session.command_rejected.connect(_on_command_rejected)

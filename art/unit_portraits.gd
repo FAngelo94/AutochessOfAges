@@ -71,17 +71,23 @@ func texture_for(unit_id: String) -> Texture2D:
 
 
 ## Ritratto dell'eroe, stessa logica asincrona di texture_for().
-func hero_texture_for(hero_id: String) -> Texture2D:
-	return _texture_for_impl(hero_id, "hero")
+## `facing_degrees` è la rotazione della figura (vedi UnitModels.build_hero):
+## a 0 è il ritratto normale, condiviso da menu/collezione; un angolo diverso
+## produce — e mette in cache a parte — una figura girata, usata dagli angoli
+## della battaglia.
+func hero_texture_for(hero_id: String, facing_degrees: float = 0.0) -> Texture2D:
+	return _texture_for_impl(hero_id, "hero", facing_degrees)
 
 
-func _texture_for_impl(id: String, kind: String) -> Texture2D:
+func _texture_for_impl(id: String, kind: String, facing_degrees: float = 0.0) -> Texture2D:
 	var key := "%s:%s" % [kind, id]
+	if kind == "hero" and facing_degrees != 0.0:
+		key = "%s:%d" % [key, int(round(facing_degrees))]
 	if _textures.has(key):
 		return _textures[key]
 	if is_available() and not _queued.has(key):
 		_queued[key] = true
-		_queue.append({"id": id, "kind": kind})
+		_queue.append({"id": id, "kind": kind, "facing": facing_degrees, "key": key})
 		_process_queue()
 	return null
 
@@ -177,14 +183,14 @@ func _render_batch() -> void:
 	var rendering: Array[Dictionary] = []
 	while not _queue.is_empty() and rendering.size() < _stations.size():
 		var entry: Dictionary = _queue.pop_front()
-		var key := "%s:%s" % [entry["kind"], entry["id"]]
+		var key: String = entry["key"]
 		var model: Node3D = null
 		var height := 1.0
 		if entry["kind"] == "hero":
 			if not GameData.has_hero(entry["id"]):
 				_queued.erase(key)
 				continue
-			model = UnitModels.build_hero(entry["id"])
+			model = UnitModels.build_hero(entry["id"], entry.get("facing", 0.0))
 			height = UnitModels.height_of_hero(entry["id"])
 		else:
 			if not GameData.has_unit(entry["id"]):
@@ -214,7 +220,7 @@ func _render_batch() -> void:
 
 	for i in rendering.size():
 		var entry: Dictionary = rendering[i]
-		var key := "%s:%s" % [entry["kind"], entry["id"]]
+		var key: String = entry["key"]
 		var viewport: SubViewport = _stations[i]["viewport"]
 		var image := viewport.get_texture().get_image()
 		if image != null and not image.is_empty() and image.get_used_rect().size != Vector2i.ZERO:

@@ -328,7 +328,11 @@ static func height_of(unit_id: String) -> float:
 ## per restare riconoscibile nel ritratto grande del menu e negli angoli della
 ## battaglia. Come per le unità, un file res://models/<hero_id>.glb ha la
 ## precedenza sulla figura procedurale.
-static func build_hero(hero_id: String) -> Node3D:
+## `facing_degrees` ruota la figura attorno a sé (asse Y) dopo averla costruita
+## — usato dai ritratti d'angolo in battaglia per farla guardare verso l'eroe
+## avversario invece che dritta in camera, senza toccare il ritratto piatto
+## usato altrove (menu, collezione), che resta a 0.
+static func build_hero(hero_id: String, facing_degrees: float = 0.0) -> Node3D:
 	var hdef := GameData.hero(hero_id)
 	var origin := hdef.origin if hdef != null else "roman"
 	var palette: Dictionary = PALETTES.get(origin, PALETTES["roman"])
@@ -340,6 +344,7 @@ static func build_hero(hero_id: String) -> Node3D:
 		_normalize_custom_model(custom, height_of_hero(hero_id))
 		_recolor_custom_model(custom, palette, CUSTOM_MODEL_RECOLOR.get(hero_id, {}))
 		root.add_child(custom)
+		root.rotation_degrees.y = facing_degrees
 		return root
 
 	match hero_id:
@@ -348,6 +353,7 @@ static func build_hero(hero_id: String) -> Node3D:
 		"teutobod": _build_teutobod(root, palette)
 		_: _build_archetype(root, palette, "infantry")
 
+	root.rotation_degrees.y = facing_degrees
 	return root
 
 

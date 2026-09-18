@@ -179,19 +179,16 @@ func _build_ground(world: Node3D) -> void:
 	base.position.y = -0.06
 	world.add_child(base)
 
-	var tile_mesh := CylinderMesh.new()
-	tile_mesh.top_radius = 0.54
-	tile_mesh.bottom_radius = 0.56
-	tile_mesh.height = 0.08
-	tile_mesh.radial_segments = 6
-	tile_mesh.rings = 1
-	var materials := [Color(0.15, 0.13, 0.13), Color(0.11, 0.10, 0.10)]
-	var dx := sqrt(3.0) * 0.58
-	var dz := 1.5 * 0.58
+	# Scacchiera vera (quadrati, non esagoni): il pavimento deve leggersi come
+	# "scacchiera" al primo sguardo, coerente col nome del gioco.
+	var tile_mesh := BoxMesh.new()
+	var square := 1.1
+	tile_mesh.size = Vector3(square, 0.08, square)
+	var materials := [Color(0.17, 0.14, 0.13), Color(0.09, 0.08, 0.08)]
 	for row in range(-40, 7):
 		for col in range(-22, 23):
-			var x := float(col) * dx + (dx * 0.5 if row % 2 != 0 else 0.0)
-			var z := float(row) * dz
+			var x := float(col) * square
+			var z := float(row) * square
 			var tile := MeshInstance3D.new()
 			tile.mesh = tile_mesh
 			var mat := StandardMaterial3D.new()
@@ -199,7 +196,6 @@ func _build_ground(world: Node3D) -> void:
 			mat.roughness = 0.9
 			tile.material_override = mat
 			tile.position = Vector3(x, -0.04, z)
-			tile.rotation_degrees.y = 30.0
 			world.add_child(tile)
 
 

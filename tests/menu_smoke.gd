@@ -360,7 +360,12 @@ func _check_tabs() -> void:
 	var with_close := ""
 	for panel: Control in [_menu._store_panel, _menu._collection_panel, _menu._guide_panel,
 			_menu._history_panel, _menu._leaderboard_panel]:
-		if _has_button_text(panel, close_text):
+		# La scheda di dettaglio della collezione ha un proprio Chiudi legittimo
+		# (chiude solo la scheda, non la pagina) — si esclude dalla ricerca.
+		var skip: Node = null
+		if panel == _menu._collection_panel:
+			skip = _menu._collection_panel._detail_sheet
+		if _has_button_text(panel, close_text, skip):
 			with_close = panel.get_class() + " " + str(panel.get_script().get_global_name())
 	check(with_close == "", "i pannelli in home non hanno il pulsante chiudi", with_close)
 
@@ -420,11 +425,13 @@ func _swipe(from: Vector2, to: Vector2) -> void:
 	_menu.select_tab(_menu._current_tab, false)
 
 
-func _has_button_text(node: Node, text: String) -> bool:
+func _has_button_text(node: Node, text: String, skip: Node = null) -> bool:
+	if node == skip:
+		return false
 	if node is Button and (node as Button).text == text:
 		return true
 	for child in node.get_children():
-		if _has_button_text(child, text):
+		if _has_button_text(child, text, skip):
 			return true
 	return false
 

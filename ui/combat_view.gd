@@ -67,6 +67,11 @@ const HERO_ZONE_TOP := 10.0
 const HERO_ZONE_BOTTOM := 72.0
 const HERO_PORTRAIT_SIZE := 56.0
 
+## Gli angoli sono fissi (vedi sotto): l'avversario sta sempre in alto a
+## sinistra e il giocatore sempre in basso a destra, quindi ognuno guarda
+## sempre verso l'angolo opposto — una leggera rotazione, non un dietro-front.
+const HERO_TURN_DEGREES := 20.0
+
 var speed: float = 1.0
 var is_playing: bool = false
 ## true mentre il fascio di fine round sta animando: _process() in questo
@@ -243,8 +248,8 @@ func set_hero_portraits(self_hero_id: String, opponent_hero_id: String) -> void:
 	_self_hero_id = self_hero_id
 	_opponent_hero_id = opponent_hero_id
 	var portraits := get_node("/root/Portraits")
-	_self_hero_portrait.texture = portraits.hero_texture_for(self_hero_id) if self_hero_id != "" else null
-	_opponent_hero_portrait.texture = portraits.hero_texture_for(opponent_hero_id) if opponent_hero_id != "" else null
+	_self_hero_portrait.texture = portraits.hero_texture_for(self_hero_id, -HERO_TURN_DEGREES) if self_hero_id != "" else null
+	_opponent_hero_portrait.texture = portraits.hero_texture_for(opponent_hero_id, HERO_TURN_DEGREES) if opponent_hero_id != "" else null
 
 
 ## Chiamato da ui/main.gd a battaglia conclusa (mai da _finish() stesso, per
@@ -278,9 +283,13 @@ func show_result_beam(winner_is_viewer: bool, damage: int) -> void:
 func _on_hero_portrait_ready(hero_id: String) -> void:
 	var portraits := get_node("/root/Portraits")
 	if hero_id == _self_hero_id:
-		_self_hero_portrait.texture = portraits.hero_texture_for(hero_id)
+		var self_texture: Texture2D = portraits.hero_texture_for(hero_id, HERO_TURN_DEGREES)
+		if self_texture != null:
+			_self_hero_portrait.texture = self_texture
 	if hero_id == _opponent_hero_id:
-		_opponent_hero_portrait.texture = portraits.hero_texture_for(hero_id)
+		var opponent_texture: Texture2D = portraits.hero_texture_for(hero_id, HERO_TURN_DEGREES)
+		if opponent_texture != null:
+			_opponent_hero_portrait.texture = opponent_texture
 
 
 func _on_resized() -> void:
