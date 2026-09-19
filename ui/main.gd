@@ -195,6 +195,7 @@ var _combat_top_name: Label
 var _combat_top_hp: Label
 var _combat_top_synergy_row: HBoxContainer
 var _combat_bottom_bar: HBoxContainer
+var _combat_bottom_name: Label
 var _combat_bottom_hp: Label
 var _combat_bottom_synergy_row: HBoxContainer
 var _combat_outcome: Label
@@ -773,7 +774,8 @@ func _build_combat_top_bar() -> Control:
 	_combat_top_bar.add_child(_combat_top_name)
 
 	_combat_top_hp = Label.new()
-	_combat_top_hp.add_theme_font_size_override("font_size", 15)
+	_combat_top_hp.add_theme_font_size_override("font_size", 24)
+	_combat_top_hp.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_combat_top_hp.add_theme_color_override("font_color", Color(0.92, 0.45, 0.42))
 	_combat_top_bar.add_child(_combat_top_hp)
 
@@ -785,28 +787,29 @@ func _build_combat_top_bar() -> Control:
 	return _combat_top_bar
 
 
-## Riga in basso: le stesse informazioni ma per la propria squadra — la vita
-## che si sta rischiando in questo round e le sinergie che la stanno
-## sostenendo, senza dover uscire dalla battaglia per ricordarsele.
+## Riga in basso: le stesse informazioni ma per la propria squadra — le
+## sinergie che la stanno sostenendo e, a destra, la vita che si sta rischiando
+## in questo round, senza dover uscire dalla battaglia per ricordarsele.
 func _build_combat_bottom_bar() -> Control:
 	_combat_bottom_bar = HBoxContainer.new()
 	_combat_bottom_bar.add_theme_constant_override("separation", 8)
 
-	var label := Label.new()
-	label.text = tr("MATCH_YOU")
-	label.add_theme_font_size_override("font_size", 15)
-	label.add_theme_color_override("font_color", Style.TEXT_DIM)
-	_combat_bottom_bar.add_child(label)
-
-	_combat_bottom_hp = Label.new()
-	_combat_bottom_hp.add_theme_font_size_override("font_size", 15)
-	_combat_bottom_hp.add_theme_color_override("font_color", Color(0.5, 0.85, 0.5))
-	_combat_bottom_bar.add_child(_combat_bottom_hp)
+	_combat_bottom_name = Label.new()
+	_combat_bottom_name.add_theme_font_size_override("font_size", 15)
+	_combat_bottom_name.add_theme_color_override("font_color", Style.TEXT_DIM)
+	_combat_bottom_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_combat_bottom_bar.add_child(_combat_bottom_name)
 
 	_combat_bottom_synergy_row = HBoxContainer.new()
 	_combat_bottom_synergy_row.add_theme_constant_override("separation", 4)
 	_combat_bottom_synergy_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_combat_bottom_bar.add_child(_combat_bottom_synergy_row)
+
+	_combat_bottom_hp = Label.new()
+	_combat_bottom_hp.add_theme_font_size_override("font_size", 24)
+	_combat_bottom_hp.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_combat_bottom_hp.add_theme_color_override("font_color", Color(0.5, 0.85, 0.5))
+	_combat_bottom_bar.add_child(_combat_bottom_hp)
 
 	return _combat_bottom_bar
 
@@ -825,6 +828,12 @@ func _refresh_combat_info(own: Dictionary) -> void:
 		_combat_top_hp.text = "❤ %d" % opponent.hp
 		_refresh_combat_synergy_row(_combat_top_synergy_row, opponent.board_units())
 
+	# Il nome vero solo se si è loggati (stessa condizione che lo assegna in
+	# _start_new_match); da ospite resta il "Tu"/"You" nella lingua scelta,
+	# non il "Giocatore 1" di ripiego, che sarebbe sempre italiano.
+	var auth := get_node_or_null("/root/Auth")
+	var logged_in: bool = auth != null and auth.is_logged_in() and String(auth.username) != ""
+	_combat_bottom_name.text = _short_name(player().display_name) if logged_in else tr("MATCH_YOU")
 	_combat_bottom_hp.text = "❤ %d" % player().hp
 	_refresh_combat_synergy_row(_combat_bottom_synergy_row, player().board_units())
 
