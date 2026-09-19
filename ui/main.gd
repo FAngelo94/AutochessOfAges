@@ -195,6 +195,7 @@ var _combat_top_name: Label
 var _combat_top_hp: Label
 var _combat_top_synergy_row: HBoxContainer
 var _combat_bottom_bar: HBoxContainer
+var _combat_bottom_name: Label
 var _combat_bottom_hp: Label
 var _combat_bottom_synergy_row: HBoxContainer
 var _combat_outcome: Label
@@ -217,7 +218,7 @@ var _spectator_status: Label
 var _spectator_rows: VBoxContainer
 var _spectator_restart: Button
 
-## Attesa prima di lasciare la battaglia da soli: il fascio del risultato più il
+## Attesa prima di lasciare la battaglia da soli: la salva del risultato più il
 ## tempo di leggere l'esito. Una var e non una const perché gli strumenti
 ## headless la spostano (tests/screenshot.gd la alza per non farsi chiudere
 ## l'overlay sotto lo scatto).
@@ -773,7 +774,8 @@ func _build_combat_top_bar() -> Control:
 	_combat_top_bar.add_child(_combat_top_name)
 
 	_combat_top_hp = Label.new()
-	_combat_top_hp.add_theme_font_size_override("font_size", 15)
+	_combat_top_hp.add_theme_font_size_override("font_size", 24)
+	_combat_top_hp.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_combat_top_hp.add_theme_color_override("font_color", Color(0.92, 0.45, 0.42))
 	_combat_top_bar.add_child(_combat_top_hp)
 
@@ -785,28 +787,29 @@ func _build_combat_top_bar() -> Control:
 	return _combat_top_bar
 
 
-## Riga in basso: le stesse informazioni ma per la propria squadra — la vita
-## che si sta rischiando in questo round e le sinergie che la stanno
-## sostenendo, senza dover uscire dalla battaglia per ricordarsele.
+## Riga in basso: le stesse informazioni ma per la propria squadra — le
+## sinergie che la stanno sostenendo e, a destra, la vita che si sta rischiando
+## in questo round, senza dover uscire dalla battaglia per ricordarsele.
 func _build_combat_bottom_bar() -> Control:
 	_combat_bottom_bar = HBoxContainer.new()
 	_combat_bottom_bar.add_theme_constant_override("separation", 8)
 
-	var label := Label.new()
-	label.text = tr("MATCH_YOU")
-	label.add_theme_font_size_override("font_size", 15)
-	label.add_theme_color_override("font_color", Style.TEXT_DIM)
-	_combat_bottom_bar.add_child(label)
-
-	_combat_bottom_hp = Label.new()
-	_combat_bottom_hp.add_theme_font_size_override("font_size", 15)
-	_combat_bottom_hp.add_theme_color_override("font_color", Color(0.5, 0.85, 0.5))
-	_combat_bottom_bar.add_child(_combat_bottom_hp)
+	_combat_bottom_name = Label.new()
+	_combat_bottom_name.add_theme_font_size_override("font_size", 15)
+	_combat_bottom_name.add_theme_color_override("font_color", Style.TEXT_DIM)
+	_combat_bottom_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_combat_bottom_bar.add_child(_combat_bottom_name)
 
 	_combat_bottom_synergy_row = HBoxContainer.new()
 	_combat_bottom_synergy_row.add_theme_constant_override("separation", 4)
 	_combat_bottom_synergy_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_combat_bottom_bar.add_child(_combat_bottom_synergy_row)
+
+	_combat_bottom_hp = Label.new()
+	_combat_bottom_hp.add_theme_font_size_override("font_size", 24)
+	_combat_bottom_hp.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_combat_bottom_hp.add_theme_color_override("font_color", Color(0.5, 0.85, 0.5))
+	_combat_bottom_bar.add_child(_combat_bottom_hp)
 
 	return _combat_bottom_bar
 
@@ -825,6 +828,12 @@ func _refresh_combat_info(own: Dictionary) -> void:
 		_combat_top_hp.text = "❤ %d" % opponent.hp
 		_refresh_combat_synergy_row(_combat_top_synergy_row, opponent.board_units())
 
+	# Il nome vero solo se si è loggati (stessa condizione che lo assegna in
+	# _start_new_match); da ospite resta il "Tu"/"You" nella lingua scelta,
+	# non il "Giocatore 1" di ripiego, che sarebbe sempre italiano.
+	var auth := get_node_or_null("/root/Auth")
+	var logged_in: bool = auth != null and auth.is_logged_in() and String(auth.username) != ""
+	_combat_bottom_name.text = _short_name(player().display_name) if logged_in else tr("MATCH_YOU")
 	_combat_bottom_hp.text = "❤ %d" % player().hp
 	_refresh_combat_synergy_row(_combat_bottom_synergy_row, player().board_units())
 
@@ -2084,11 +2093,11 @@ func _on_playback_finished() -> void:
 	# riquadro CLASSIFICA: spiegargli che le righe sono toccabili.
 	_tips.queue_tip("ranking")
 	if own.get("opponent") != null and not bool(own.get("ghost", false)):
-		_combat_view.show_result_beam(bool(own["won"]), int(own["damage_dealt"] if bool(own["won"]) else own["damage"]))
+		_combat_view.show_result_volley(bool(own["won"]), int(own["damage_dealt"] if bool(own["won"]) else own["damage"]))
 
 	# In locale il ritmo lo detta il client: LocalSession.request_ready() è
-	# sincrona e ha già risolto e riaperto il round, quindi si esce appena il
-	# fascio del risultato ha finito. In remoto il ritmo è del server e si
+	# sincrona e ha già risolto e riaperto il round, quindi si esce appena la
+	# salva del risultato ha finito. In remoto il ritmo è del server e si
 	# aspetta ROUND_STARTED, così gli otto rientrano insieme — a meno che la
 	# partita sia finita, e allora un altro round non arriverà mai.
 	if session_mode == SessionMode.LOCAL or not _final_standings.is_empty():
@@ -2109,7 +2118,7 @@ func _close_combat_overlay() -> void:
 
 ## Chiede l'uscita dalla battaglia. `immediate` = le battaglie del round sono
 ## finite tutte e il round dopo è già aperto (in remoto lo dice il server): si
-## esce subito. Altrimenti si lascia il tempo di vedere il fascio e leggere
+## esce subito. Altrimenti si lascia il tempo di vedere la salva e leggere
 ## l'esito prima di sparire.
 func _request_overlay_close(immediate: bool) -> void:
 	if not _combat_overlay.visible:
