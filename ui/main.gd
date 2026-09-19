@@ -218,7 +218,7 @@ var _spectator_status: Label
 var _spectator_rows: VBoxContainer
 var _spectator_restart: Button
 
-## Attesa prima di lasciare la battaglia da soli: il fascio del risultato più il
+## Attesa prima di lasciare la battaglia da soli: la salva del risultato più il
 ## tempo di leggere l'esito. Una var e non una const perché gli strumenti
 ## headless la spostano (tests/screenshot.gd la alza per non farsi chiudere
 ## l'overlay sotto lo scatto).
@@ -2093,11 +2093,11 @@ func _on_playback_finished() -> void:
 	# riquadro CLASSIFICA: spiegargli che le righe sono toccabili.
 	_tips.queue_tip("ranking")
 	if own.get("opponent") != null and not bool(own.get("ghost", false)):
-		_combat_view.show_result_beam(bool(own["won"]), int(own["damage_dealt"] if bool(own["won"]) else own["damage"]))
+		_combat_view.show_result_volley(bool(own["won"]), int(own["damage_dealt"] if bool(own["won"]) else own["damage"]))
 
 	# In locale il ritmo lo detta il client: LocalSession.request_ready() è
-	# sincrona e ha già risolto e riaperto il round, quindi si esce appena il
-	# fascio del risultato ha finito. In remoto il ritmo è del server e si
+	# sincrona e ha già risolto e riaperto il round, quindi si esce appena la
+	# salva del risultato ha finito. In remoto il ritmo è del server e si
 	# aspetta ROUND_STARTED, così gli otto rientrano insieme — a meno che la
 	# partita sia finita, e allora un altro round non arriverà mai.
 	if session_mode == SessionMode.LOCAL or not _final_standings.is_empty():
@@ -2118,7 +2118,7 @@ func _close_combat_overlay() -> void:
 
 ## Chiede l'uscita dalla battaglia. `immediate` = le battaglie del round sono
 ## finite tutte e il round dopo è già aperto (in remoto lo dice il server): si
-## esce subito. Altrimenti si lascia il tempo di vedere il fascio e leggere
+## esce subito. Altrimenti si lascia il tempo di vedere la salva e leggere
 ## l'esito prima di sparire.
 func _request_overlay_close(immediate: bool) -> void:
 	if not _combat_overlay.visible:

@@ -42,15 +42,19 @@ const ENEMY_COLOR := Color(0.92, 0.42, 0.38)
 const BAR_SIZE := Vector2(58.0, 8.0)
 const MANA_BAR_HEIGHT := 4.0
 
-## Fascio di fine round tra i ritratti eroe. Volutamente diverso dalle linee di
-## colpo tra unità (_draw_flash: un filo dritto che sbiadisce): qui è un dardo
-## caricato — parte una "testa" luminosa dal vincitore, il fascio la insegue
-## crepitando a più strati, e allo sconfitto scoppia un anello d'impatto. Le
-## fasi sono scandite su _result_time / RESULT_BEAM_DURATION.
-const RESULT_BEAM_DURATION := 0.62
-const RESULT_BEAM_TRAVEL := 0.34   # frazione in cui la testa raggiunge il bersaglio
-const RESULT_BEAM_SEGMENTS := 14
-const RESULT_BEAM_WOBBLE := 7.0    # ampiezza massima del crepitìo, in pixel
+## Salva di frecce di fine round tra i ritratti eroe. Volutamente diversa dalle
+## linee di colpo tra unità (_draw_flash: un filo dritto che sbiadisce): dal
+## vincitore parte una raffica di frecce ad arco, sfalsate e con un po' di
+## dispersione, che si conficcano nel ritratto dello sconfitto. Più vita si perde,
+## più frecce partono. Tutto è scandito su _result_time.
+const RESULT_VOLLEY_DURATION := 1.0
+const RESULT_VOLLEY_MIN_ARROWS := 3
+const RESULT_VOLLEY_MAX_ARROWS := 12
+const RESULT_VOLLEY_FLIGHT := 0.42    # secondi di volo di una freccia
+const RESULT_VOLLEY_STAGGER := 0.32   # finestra in cui partono tutte
+const RESULT_VOLLEY_IMPACT := 0.18    # durata dell'anello d'impatto
+const RESULT_ARROW_LENGTH := 30.0
+const RESULT_ARROW_SCALE := 1.5       # fattore su lunghezza e spessori: sul telefono 30 px sono troppo pochi
 
 ## Fasce riservate agli eroi sopra e sotto la scacchiera 3D: senza queste, il
 ## riquadro 3D copriva l'intero controllo e i ritratti agli angoli finivano
@@ -74,7 +78,7 @@ const HERO_TURN_DEGREES := 20.0
 
 var speed: float = 1.0
 var is_playing: bool = false
-## true mentre il fascio di fine round sta animando: _process() in questo
+## true mentre la salva di fine round sta animando: _process() in questo
 ## stato non tocca gli eventi di riproduzione, che sono già tutti esauriti.
 var _result_animating: bool = false
 
@@ -98,12 +102,12 @@ var _floaters: Array[Dictionary] = []
 ## Linee d'attacco disegnate per un istante: {from_uid, to_uid, color, born}
 var _flashes: Array[Dictionary] = []
 
-## Fascio finale che collega i due ritratti eroe a fine round, e il numero di
+## Salva finale tra i due ritratti eroe a fine round, e il numero di
 ## vita persa che sale sopra il ritratto sconfitto. Sono in coordinate
 ## schermo, non del mondo 3D: i ritratti sono agganciati agli angoli
 ## dell'interfaccia, non a un'unità in campo, quindi non possono usare
 ## _floaters/_flashes che proiettano da BattleBoard3D.
-var _hero_beam: Dictionary = {}
+var _hero_volley: Dictionary = {}
 var _hero_floater: Dictionary = {}
 ## Istante di riproduzione in cui il berserk è stato annunciato. < 0 = non
 ## ancora, ed è la simulazione a dirlo con un evento: la vista non conosce la
@@ -254,21 +258,25 @@ func set_hero_portraits(self_hero_id: String, opponent_hero_id: String) -> void:
 
 ## Chiamato da ui/main.gd a battaglia conclusa (mai da _finish() stesso, per
 ## restare fuori dalla vista di spettatore che non riproduce mai una
-## battaglia dal vivo): un breve fascio tra i due ritratti eroe, dal
+## battaglia dal vivo): una salva di frecce tra i due ritratti eroe, dal
 ## vincitore verso lo sconfitto, con il numero di vita realmente persa in
-## questo round — lo stesso valore già raccontato in _combat_outcome.
-func show_result_beam(winner_is_viewer: bool, damage: int) -> void:
+## questo round — lo stesso valore già raccontato in _combat_outcome. Il numero
+## di frecce cresce con quella vita.
+func show_result_volley(winner_is_viewer: bool, damage: int) -> void:
 	var source := _self_hero_portrait if winner_is_viewer else _opponent_hero_portrait
 	var target := _opponent_hero_portrait if winner_is_viewer else _self_hero_portrait
 
 	_result_time = 0.0
-	_hero_beam = {
+	# Il seme va impostato prima di costruire le frecce: _volley_noise lo legge.
+	_hero_volley = {
 		"active": true,
-		"from": source.position + source.size * 0.5,
-		"to": target.position + target.size * 0.5,
 		"color": OWN_COLOR if winner_is_viewer else ENEMY_COLOR,
 		"seed": randi(),
 	}
+	_hero_volley["arrows"] = _build_volley(
+		source.position + source.size * 0.5,
+		target.position + target.size * 0.5,
+		target.size, damage)
 	_hero_floater = {} if damage <= 0 else {
 		"text": "-%d" % damage,
 		"at": target.position + Vector2(target.size.x * 0.5, 0.0),
@@ -313,11 +321,11 @@ func load_combat(combat: Dictionary, team: int = 0) -> void:
 	_time = 0.0
 	_floaters.clear()
 	_flashes.clear()
-	# Un round nuovo azzera anche l'eventuale fascio del round precedente:
-	# senza questo, saltare subito al round successivo lascerebbe un fascio
-	# animato a metà sopra la battaglia appena iniziata.
+	# Un round nuovo azzera anche l'eventuale salva del round precedente:
+	# senza questo, saltare subito al round successivo lascerebbe delle frecce
+	# animate a metà sopra la battaglia appena iniziata.
 	_result_animating = false
-	_hero_beam = {}
+	_hero_volley = {}
 	_hero_floater = {}
 	_berserk_time = -1.0
 	_last_death_time = -1.0
@@ -389,15 +397,15 @@ func skip_to_end() -> void:
 
 
 func _process(delta: float) -> void:
-	# L'animazione del fascio di fine round riusa set_process() a riproduzione
+	# L'animazione della salva di fine round riusa set_process() a riproduzione
 	# già ferma, ma non deve far ripartire la lettura degli eventi né
 	# richiamare _finish() una seconda volta: ha il suo orologio e la sua
 	# uscita.
 	if _result_animating:
 		_result_time += delta
-		if _result_time >= RESULT_BEAM_DURATION:
+		if _result_time >= RESULT_VOLLEY_DURATION:
 			_result_animating = false
-			_hero_beam = {}
+			_hero_volley = {}
 			_hero_floater = {}
 			set_process(false)
 		queue_redraw()
@@ -631,7 +639,7 @@ func _draw() -> void:
 	_draw_clock()
 	_draw_berserk_banner()
 	if _result_animating:
-		_draw_hero_beam()
+		_draw_hero_volley()
 		_draw_hero_floater()
 
 
@@ -701,102 +709,123 @@ func _draw_floater(floater: Dictionary) -> void:
 		HORIZONTAL_ALIGNMENT_CENTER, 0, 20, color)
 
 
-## Rumore deterministico in [-1, 1] da tre interi: stesso frame -> stesso
-## crepitìo, così il fascio non tremola in modo diverso a ogni ridisegno dello
-## stesso istante (skip, ridimensionamento) ma cambia forma da un frame all'altro.
-func _beam_noise(index: int, salt: int) -> float:
-	var h: int = index * 374761393 + salt * 668265263 + int(_hero_beam.get("seed", 0)) * 2246822519
+## Rumore deterministico in [-1, 1] da due interi e dal seme della salva: le
+## frecce sono calcolate una volta sola in _build_volley, quindi la loro forma non
+## cambia tra un ridisegno e l'altro (skip, ridimensionamento).
+func _volley_noise(index: int, salt: int) -> float:
+	var h: int = index * 374761393 + salt * 668265263 + int(_hero_volley.get("seed", 0)) * 2246822519
 	h = (h ^ (h >> 13)) * 1274126177
 	h = h ^ (h >> 16)
 	return float(h & 0xffff) / 32768.0 - 1.0
 
 
-## Fascio tra i due ritratti eroe, in coordinate schermo dirette: entrambi i
+## Le frecce di una salva: {a, b, delay, flight, height}. Il numero cresce con la
+## vita persa; partenza e arrivo sono sparpagliati attorno al centro dei ritratti
+## (l'arrivo dentro il ritratto sconfitto) e l'arco è più alto sulle distanze
+## lunghe, così le frecce non viaggiano tutte identiche.
+func _build_volley(from: Vector2, to: Vector2, target_size: Vector2, damage: int) -> Array[Dictionary]:
+	var count := clampi(RESULT_VOLLEY_MIN_ARROWS + damage, RESULT_VOLLEY_MIN_ARROWS, RESULT_VOLLEY_MAX_ARROWS)
+	var reach := from.distance_to(to)
+	var spread_out := 14.0
+	var spread_in := minf(target_size.x, target_size.y) * 0.3
+	var arrows: Array[Dictionary] = []
+	for i in count:
+		var delay := maxf(0.0, RESULT_VOLLEY_STAGGER * (float(i) + 0.4 * _volley_noise(i, 1)) / float(count))
+		arrows.append({
+			"a": from + Vector2(_volley_noise(i, 2), _volley_noise(i, 3)) * spread_out,
+			"b": to + Vector2(_volley_noise(i, 4), _volley_noise(i, 5)) * spread_in,
+			"delay": delay,
+			"flight": RESULT_VOLLEY_FLIGHT * (1.0 + 0.12 * _volley_noise(i, 6)),
+			"height": reach * (0.28 + 0.08 * _volley_noise(i, 7)),
+		})
+	return arrows
+
+
+## Posizione della punta a t in [0, 1]: interpolazione lineare più uno scarto
+## verticale parabolico, che a schermo si legge come quota (la camera guarda
+## dall'alto, quindi "in alto" è solo su nello schermo).
+func _volley_point(arrow: Dictionary, t: float) -> Vector2:
+	var a: Vector2 = arrow["a"]
+	var b: Vector2 = arrow["b"]
+	return a.lerp(b, t) + Vector2(0.0, -float(arrow["height"]) * 4.0 * t * (1.0 - t))
+
+
+## Direzione di volo: la derivata della traiettoria. La freccia sale, si
+## appiattisce al vertice e scende in picchiata, come una vera.
+func _volley_direction(arrow: Dictionary, t: float) -> Vector2:
+	var a: Vector2 = arrow["a"]
+	var b: Vector2 = arrow["b"]
+	var velocity := (b - a) + Vector2(0.0, -float(arrow["height"]) * 4.0 * (1.0 - 2.0 * t))
+	return velocity.normalized() if velocity.length() > 0.001 else Vector2.DOWN
+
+
+## Salva tra i due ritratti eroe, in coordinate schermo dirette: entrambi i
 ## ritratti sono figli diretti di questo Control, quindi la loro `position`
 ## è già nello spazio in cui _draw() lavora, senza passare da project().
 ##
-## Non è la linea di colpo delle unità: è un dardo caricato in tre fasi —
-## la testa vola dal vincitore allo sconfitto, il fascio la insegue a strati
-## (alone, corpo, nucleo bianco) crepitando, e all'arrivo scoppia un anello.
-func _draw_hero_beam() -> void:
-	if not bool(_hero_beam.get("active", false)):
+## Ogni freccia ha tre fasi: attesa (sfalsata), volo ad arco, poi resta
+## conficcata nel bersaglio con un anello d'impatto finché la salva sbiadisce.
+func _draw_hero_volley() -> void:
+	if not bool(_hero_volley.get("active", false)):
 		return
 
-	var progress: float = clampf(_result_time / RESULT_BEAM_DURATION, 0.0, 1.0)
-	var from: Vector2 = _hero_beam["from"]
-	var to: Vector2 = _hero_beam["to"]
-	var base: Color = _hero_beam["color"]
+	var team: Color = _hero_volley["color"]
+	var fade := 1.0 - clampf((_result_time - RESULT_VOLLEY_DURATION * 0.8) / (RESULT_VOLLEY_DURATION * 0.2), 0.0, 1.0)
+	for arrow in _hero_volley["arrows"]:
+		var flight: float = arrow["flight"]
+		var t: float = (_result_time - float(arrow["delay"])) / flight
+		if t < 0.0:
+			continue
+		if t < 1.0:
+			# Si ingrandisce un poco al vertice: dà l'idea della quota.
+			_draw_arrow(_volley_point(arrow, t), _volley_direction(arrow, t), 1.0 + 0.25 * sin(t * PI), team, fade, true)
+			continue
+		var landed: Vector2 = arrow["b"]
+		_draw_arrow(landed, _volley_direction(arrow, 1.0), 1.0, team, fade, false)
+		var impact := (t - 1.0) * flight / RESULT_VOLLEY_IMPACT
+		if impact < 1.0:
+			var ring := team.lerp(Color.WHITE, 0.4)
+			ring.a = (1.0 - impact) * fade
+			draw_arc(landed, 4.0 + 14.0 * impact, 0.0, TAU, 20, ring, 2.0 * (1.0 - impact) + 0.5, true)
 
-	# Quanto del percorso è già "acceso": la testa corre da 0 a 1 nella prima
-	# frazione RESULT_BEAM_TRAVEL, poi il fascio resta pieno e infine sbiadisce.
-	var head: float = clampf(progress / RESULT_BEAM_TRAVEL, 0.0, 1.0)
-	head = 1.0 - pow(1.0 - head, 3.0)   # decelera arrivando
-	var fade: float = 1.0 - clampf((progress - 0.55) / 0.45, 0.0, 1.0)
 
-	var axis := to - from
-	var length := axis.length()
-	if length < 1.0:
-		return
-	var dir := axis / length
+## Una freccia con la punta in `tip`: asta con contorno scuro (leggibile su
+## qualsiasi sfondo), punta metallica e impennaggio nel colore della squadra
+## che tira. In volo ha una coda tenue che ne sottolinea la velocità.
+func _draw_arrow(tip: Vector2, dir: Vector2, scale: float, team: Color, alpha: float, in_flight: bool) -> void:
+	scale *= RESULT_ARROW_SCALE
 	var normal := Vector2(-dir.y, dir.x)
+	var length := RESULT_ARROW_LENGTH * scale
+	var tail := tip - dir * length
+	var neck := tip - dir * 7.0 * scale
 
-	# Crepitìo: cambia forma ~30 volte al secondo, si smorza sui due estremi e
-	# pulsa con la testa in volo.
-	var salt := int(_result_time * 32.0)
-	var wobble := RESULT_BEAM_WOBBLE * (0.55 + 0.45 * sin(progress * TAU * 1.5))
+	if in_flight:
+		draw_line(tail, tail - dir * length * 0.9, Color(1, 1, 1, 0.16 * alpha), 1.5 * scale, true)
+	draw_line(tail, neck, Color(0, 0, 0, 0.55 * alpha), 4.5 * scale, true)
+	draw_line(tail, neck, Color(0.72, 0.55, 0.34, alpha), 2.5 * scale, true)
 
-	var points := PackedVector2Array()
-	for i in RESULT_BEAM_SEGMENTS + 1:
-		var t := float(i) / float(RESULT_BEAM_SEGMENTS)
-		if t > head:
-			break
-		var taper := sin(clampf(t / maxf(head, 0.001), 0.0, 1.0) * PI)
-		var offset := _beam_noise(i, salt) * wobble * taper
-		points.append(from + dir * (length * t) + normal * offset)
-	# Punto esatto della testa, per non fermarsi allo scalino del segmento.
-	var head_pos := from + axis * head
-	if points.size() == 0 or points[points.size() - 1].distance_to(head_pos) > 1.0:
-		points.append(head_pos)
-	if points.size() < 2:
-		return
+	var feather := team.lightened(0.1)
+	feather.a = alpha
+	for side in [-1.0, 1.0]:
+		draw_line(tail + dir * 8.0 * scale, tail - dir * 2.0 * scale + normal * 4.5 * scale * side, feather, 2.0 * scale, true)
 
-	# Tre passate sullo stesso tracciato: alone morbido, corpo, nucleo bianco.
-	var glow := base.lightened(0.15)
-	glow.a = 0.20 * fade
-	draw_polyline(points, glow, 16.0, true)
-	var body := base
-	body.a = 0.75 * fade
-	draw_polyline(points, body, 6.0, true)
-	var core := base.lerp(Color.WHITE, 0.75)
-	core.a = 0.95 * fade
-	draw_polyline(points, core, 2.0, true)
-
-	# Testa luminosa in volo.
-	if progress < RESULT_BEAM_TRAVEL + 0.05:
-		var pulse := 6.0 + 2.0 * sin(_result_time * 40.0)
-		var halo := base
-		halo.a = 0.5 * fade
-		draw_circle(head_pos, pulse + 4.0, halo)
-		draw_circle(head_pos, pulse, Color(1, 1, 1, 0.95 * fade))
-
-	# Scoppio all'impatto sullo sconfitto.
-	if head >= 1.0:
-		var burst := clampf((progress - RESULT_BEAM_TRAVEL) / (1.0 - RESULT_BEAM_TRAVEL), 0.0, 1.0)
-		var ring := base.lerp(Color.WHITE, 0.35)
-		ring.a = (1.0 - burst) * fade
-		draw_arc(to, 5.0 + 32.0 * burst, 0.0, TAU, 40, ring, 3.0 * (1.0 - burst) + 0.5, true)
-		var spoke := base
-		spoke.a = (1.0 - burst) * 0.8 * fade
-		for s in 7:
-			var ang := TAU * float(s) / 7.0 + _beam_noise(s, 99) * 0.4
-			var ray := Vector2(cos(ang), sin(ang))
-			draw_line(to + ray * (6.0 + 10.0 * burst), to + ray * (10.0 + 26.0 * burst), spoke, 2.0)
+	var steel := Color(0.88, 0.9, 0.95, alpha)
+	draw_colored_polygon(PackedVector2Array([
+		tip,
+		neck + normal * 3.5 * scale,
+		neck - normal * 3.5 * scale,
+	]), steel)
 
 
 func _draw_hero_floater() -> void:
 	if _hero_floater.is_empty():
 		return
-	var progress: float = clampf(_result_time / RESULT_BEAM_DURATION, 0.0, 1.0)
+	# Compare quando le prime frecce arrivano, non prima: il numero deve
+	# raccontare il colpo, non anticiparlo.
+	var span := RESULT_VOLLEY_DURATION - RESULT_VOLLEY_FLIGHT
+	var progress: float = clampf((_result_time - RESULT_VOLLEY_FLIGHT) / span, 0.0, 1.0)
+	if _result_time < RESULT_VOLLEY_FLIGHT:
+		return
 	var color := Color(1.0, 0.85, 0.4, 1.0 - progress)
 	var position: Vector2 = _hero_floater["at"] + Vector2(0, -30.0 * progress)
 	draw_string(_font, position, String(_hero_floater["text"]),
